@@ -31,6 +31,14 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
+        'ENGINE':'django.db.backends.sqlite3',
+        'NAME':BASE_DIR / 'retos_db.sqlite3',
+    }
+}
+
+#Comentada por ahora para que Django la ignore mientras realizamos modificaciones
+'''DATABASES = {
+    'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'retosean_django',
         'USER': 'postgres',
@@ -38,7 +46,7 @@ DATABASES = {
         'HOST': 'localhost',
         'PORT': '5432',
     }
-}
+}'''
 
 AUTH_USER_MODEL = 'usuarios.Usuario'
 LANGUAGE_CODE = 'es-co'
