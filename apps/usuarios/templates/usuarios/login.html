@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-5">
+  <div class="row justify-content-center">
+    <div class="col-md-4">
+      <div class="card shadow p-4 border-0">
+        <h2 class="text-center mb-4 fw-bold text-primary">Iniciar Sesión</h2>
+        
+        {% if messages %}
+          {% for message in messages %}
+            <div class="alert alert-danger py-2">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+
+        <form method="post">
+          {% csrf_token %}
+          {{ form.as_p }}
+          <button type="submit" class="btn btn-primary w-100 mt-3 shadow-sm">Entrar al Sistema</button>
+        </form>
+        
+        <p class="mt-4 text-center text-muted small">
+          ¿No tienes cuenta? <a href="{% url 'usuarios:registro' %}" class="text-decoration-none fw-semibold">Regístrate aquí</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

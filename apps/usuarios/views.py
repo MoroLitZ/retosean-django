@@ -45,5 +45,6 @@ def vista_registro(request):
             return redirect(REDIRECCION_POR_ROL.get(user.rol, 'usuarios:perfil'))
     return render(request, 'usuarios/registro.html', {'form': form})
 
+# la vista donde el usuario va a ir directamente despues del login o el registro
 def vista_perfil(request):
     return render(request, 'usuarios/perfil.html')

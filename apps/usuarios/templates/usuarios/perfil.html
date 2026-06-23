@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-5">
+  <div class="row justify-content-center">
+    <div class="col-md-6">
+      <div class="card shadow p-5 text-center border-0">
+        <h2 class="fw-bold">¡Bienvenido al Panel, {{ user.username }}!</h2>
+        <p class="lead text-muted mt-2">Has ingresado correctamente al sistema.</p>
+        
+        <div class="my-4">
+          <span class="fs-6 text-muted">Eres un</span>
+          <div class="mt-1">
+            <span class="badge bg-info text-dark fs-5 px-4 py-2 capitalize">{{ user.get_rol_display }}</span>
+          </div>
+        </div>
+        
+        <div class="card bg-light p-3 border-0 rounded text-start mb-4">
+          <p class="mb-1"><strong>Nombre completo:</strong> {{ user.get_full_name|default:"No registrado" }}</p>
+          <p class="mb-0"><strong>Correo electrónico:</strong> {{ user.email }}</p>
+        </div>
+        
+        <hr>
+        <a href="{% url 'usuarios:logout' %}" class="btn btn-outline-danger mt-2">Cerrar Sesión Segura</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
