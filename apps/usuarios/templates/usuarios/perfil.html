@@ -10,12 +10,12 @@
         <div class="my-4">
           <span class="fs-6 text-muted">Eres un</span>
           <div class="mt-1">
-            <span class="badge bg-info text-dark fs-5 px-4 py-2 capitalize">{{ user.get_rol_display }}</span>
+            <span class="badge bg-info text-dark fs-5 px-4 py-2">{{ rol_usuario }}</span>
           </div>
         </div>
         
         <div class="card bg-light p-3 border-0 rounded text-start mb-4">
-          <p class="mb-1"><strong>Nombre completo:</strong> {{ user.get_full_name|default:"No registrado" }}</p>
+          <p class="mb-1"><strong>Nombre completo:</strong> {{ nombre_completo }}</p>
           <p class="mb-0"><strong>Correo electrónico:</strong> {{ user.email }}</p>
         </div>
         

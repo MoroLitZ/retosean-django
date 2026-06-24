@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect
 from django.contrib.auth import login, logout
 from django.contrib import messages
 from .forms import LoginForm, RegistroUsuarioForm
+from django.contrib.auth.decorators import login_required
 
 # Create your views here.
 
@@ -45,6 +46,18 @@ def vista_registro(request):
             return redirect(REDIRECCION_POR_ROL.get(user.rol, 'usuarios:perfil'))
     return render(request, 'usuarios/registro.html', {'form': form})
 
+@login_required(login_url='usuarios:login') # Se protege la vista para que únicamente los usuarios logeados puedan entrar
+
 # la vista donde el usuario va a ir directamente despues del login o el registro
 def vista_perfil(request):
-    return render(request, 'usuarios/perfil.html')
+    usuario_actual = request.user
+    nombre_completo = usuario_actual.get_full_name().strip()
+    
+    if not nombre_completo:
+        nombre_completo = "No registrado"
+    
+    rol_formateado = usuario_actual.get_rol_display().capitalize()
+
+    context = {'nombre_completo': nombre_completo, 'rol_usuario':rol_formateado}
+
+    return render(request, 'usuarios/perfil.html', context)

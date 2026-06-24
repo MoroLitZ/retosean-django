@@ -1,5 +1,15 @@
 {% extends 'base.html' %}
 {% block content %}
+
+<style>
+  form p .helptext {
+    display: block;
+    margin-top: 4px;
+    color: #6c757d; 
+    font-size: 0.85em; 
+  }
+</style>
+
 <div class="container mt-5">
   <div class="row justify-content-center">
     <div class="col-md-5">
@@ -19,4 +29,50 @@
     </div>
   </div>
 </div>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Buscamos el select del rol por el ID que le pusimos en forms.py
+    const selectRol = document.getElementById('select-rol');
+    
+    function actualizarFormulario() {
+      const rol = selectRol.value;
+      
+      // IDs de los inputs que definimos en el forms.py
+      const camposEstudiante = ['id_carrera', 'id_semestre'];
+      const camposProfesor = ['id_facultad', 'id_especialidad'];
+      const camposEmpresa = ['id_nit', 'id_razon_social', 'id_sector_industrial'];
+
+      // Función para ocultar o mostrar el contenedor <p> de cada input
+      function controlarVisibilidad(listaCampos, mostrar) {
+        listaCampos.forEach(id => {
+          const input = document.getElementById(id);
+          if (input) {
+            // Subimos al elemento <p> que Django genera automáticamente alrededor del input
+            const contenedor = input.closest('p');
+            if (contenedor) {
+              contenedor.style.display = mostrar ? 'block' : 'none';
+            }
+            input.required = mostrar; // Solo obliga a llenarlo si el campo está visible
+          }
+        });
+      }
+
+      // 1. Ocultamos todos los campos especiales por defecto
+      controlarVisibilidad(camposEstudiante, false);
+      controlarVisibilidad(camposProfesor, false);
+      controlarVisibilidad(camposEmpresa, false);
+
+      // 2. Mostramos únicamente los del rol que el usuario seleccionó
+      if (rol === 'ESTUDIANTE') controlarVisibilidad(camposEstudiante, true);
+      if (rol === 'PROFESOR') controlarVisibilidad(camposProfesor, true);
+      if (rol === 'EMPRESA') controlarVisibilidad(camposEmpresa, true);
+    }
+
+    // Escuchamos cada vez que el usuario cambie la opción del desplegable
+    if (selectRol) {
+      selectRol.addEventListener('change', actualizarFormulario);
+      actualizarFormulario(); // Se ejecuta una vez al cargar la página
+    }
+  });
+</script>
 {% endblock %}
