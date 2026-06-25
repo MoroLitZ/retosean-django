@@ -1,78 +1,203 @@
-{% extends 'base.html' %}
-{% block content %}
+{% extends 'base_auth.html' %}
+{% block title %}Crear Cuenta{% endblock %}
 
+{% block extra_css %}
 <style>
-  form p .helptext {
-    display: block;
-    margin-top: 4px;
-    color: #6c757d; 
-    font-size: 0.85em; 
+  body { align-items: flex-start; padding: 2rem 1rem; }
+  .section-divider {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: #9ca3af;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid #f3f4f6;
+    margin-bottom: 1.2rem;
+    margin-top: 0.5rem;
   }
+  .campo-perfil-wrapper { display: none; }
+  .errorlist { list-style: none; padding: 0; margin: 0.25rem 0 0; }
+  .errorlist li { font-size: 0.8rem; color: #dc3545; }
+  .helptext { font-size: 0.78rem; color: #9ca3af; margin-top: 0.25rem; display: block; }
 </style>
+{% endblock %}
 
-<div class="container mt-5">
-  <div class="row justify-content-center">
-    <div class="col-md-5">
-      <div class="card shadow p-4 border-0">
-        <h2 class="text-center mb-4 fw-bold text-success">Crear Cuenta</h2>
-        
-        <form method="post">
-          {% csrf_token %}
-          {{ form.as_p }}
-          <button type="submit" class="btn btn-success w-100 mt-3 shadow-sm">Registrarme</button>
-        </form>
-        
-        <p class="mt-4 text-center text-muted small">
-          ¿Ya tienes cuenta? <a href="{% url 'usuarios:login' %}" class="text-decoration-none fw-semibold">Inicia sesión</a>
+{% block content %}
+<div class="auth-card" style="max-width: 680px;">
+  <div class="p-4 p-md-5">
+
+    <!-- Encabezado -->
+    <div class="d-flex align-items-center gap-3 mb-4">
+      <div>
+        <h2 style="font-size: 1.5rem; font-weight: 800; color: #111827; margin-bottom: 0.2rem;">
+          Crear nueva cuenta
+        </h2>
+        <p style="color: #6b7280; font-size: 0.875rem; margin: 0;">
+          Completa el formulario para unirte a RetosEAN
         </p>
       </div>
+      <div class="ms-auto">
+        <span style="font-size: 1.3rem; font-weight: 800;">
+          <span style="color: var(--orange);">Retos</span><span style="color: #1e3a5f;">EAN</span>
+        </span>
+      </div>
     </div>
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger py-2 mb-3">
+        {% for error in form.non_field_errors %}
+          <div><i class="bi bi-exclamation-circle me-1"></i>{{ error }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <!-- SECCIÓN 1: Datos personales -->
+      <div class="section-divider"><i class="bi bi-person me-1"></i>Datos Personales</div>
+      <div class="row g-3 mb-2">
+        <div class="col-sm-6">
+          <label for="{{ form.first_name.id_for_label }}" class="form-label">Nombre</label>
+          {{ form.first_name }}
+          {% if form.first_name.errors %}<ul class="errorlist">{% for e in form.first_name.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+        <div class="col-sm-6">
+          <label for="{{ form.last_name.id_for_label }}" class="form-label">Apellido</label>
+          {{ form.last_name }}
+          {% if form.last_name.errors %}<ul class="errorlist">{% for e in form.last_name.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+        <div class="col-12">
+          <label for="{{ form.email.id_for_label }}" class="form-label">Correo electrónico</label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+            {{ form.email }}
+          </div>
+          {% if form.email.errors %}<ul class="errorlist">{% for e in form.email.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+      </div>
+
+      <!-- SECCIÓN 2: Credenciales -->
+      <div class="section-divider"><i class="bi bi-shield-lock me-1"></i>Credenciales de Acceso</div>
+      <div class="row g-3 mb-2">
+        <div class="col-12">
+          <label for="{{ form.username.id_for_label }}" class="form-label">Nombre de usuario</label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-at"></i></span>
+            {{ form.username }}
+          </div>
+          {% if form.username.help_text %}<span class="helptext">{{ form.username.help_text }}</span>{% endif %}
+          {% if form.username.errors %}<ul class="errorlist">{% for e in form.username.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+        <div class="col-sm-6">
+          <label for="{{ form.password1.id_for_label }}" class="form-label">Contraseña</label>
+          {{ form.password1 }}
+          {% if form.password1.errors %}<ul class="errorlist">{% for e in form.password1.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+        <div class="col-sm-6">
+          <label for="{{ form.password2.id_for_label }}" class="form-label">Confirmar contraseña</label>
+          {{ form.password2 }}
+          {% if form.password2.errors %}<ul class="errorlist">{% for e in form.password2.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+      </div>
+
+      <!-- SECCIÓN 3: Rol -->
+      <div class="section-divider"><i class="bi bi-person-badge me-1"></i>Rol en la Plataforma</div>
+      <div class="mb-3">
+        <label for="{{ form.rol.id_for_label }}" class="form-label">Selecciona tu rol</label>
+        {{ form.rol }}
+        {% if form.rol.errors %}<ul class="errorlist">{% for e in form.rol.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+
+      <!-- Campos dinámicos: Estudiante -->
+      <div id="campos-estudiante" class="campo-perfil-wrapper">
+        <div class="row g-3 mb-2">
+          <div class="col-sm-8">
+            <label for="{{ form.carrera.id_for_label }}" class="form-label">Carrera</label>
+            {{ form.carrera }}
+            {% if form.carrera.errors %}<ul class="errorlist">{% for e in form.carrera.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+          </div>
+          <div class="col-sm-4">
+            <label for="{{ form.semestre.id_for_label }}" class="form-label">Semestre</label>
+            {{ form.semestre }}
+            {% if form.semestre.errors %}<ul class="errorlist">{% for e in form.semestre.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Campos dinámicos: Profesor -->
+      <div id="campos-profesor" class="campo-perfil-wrapper">
+        <div class="row g-3 mb-2">
+          <div class="col-sm-6">
+            <label for="{{ form.facultad.id_for_label }}" class="form-label">Facultad</label>
+            {{ form.facultad }}
+            {% if form.facultad.errors %}<ul class="errorlist">{% for e in form.facultad.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+          </div>
+          <div class="col-sm-6">
+            <label for="{{ form.especialidad.id_for_label }}" class="form-label">Especialidad</label>
+            {{ form.especialidad }}
+            {% if form.especialidad.errors %}<ul class="errorlist">{% for e in form.especialidad.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Campos dinámicos: Empresa -->
+      <div id="campos-empresa" class="campo-perfil-wrapper">
+        <div class="row g-3 mb-2">
+          <div class="col-sm-4">
+            <label for="{{ form.nit.id_for_label }}" class="form-label">NIT</label>
+            {{ form.nit }}
+            {% if form.nit.errors %}<ul class="errorlist">{% for e in form.nit.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+          </div>
+          <div class="col-sm-8">
+            <label for="{{ form.razon_social.id_for_label }}" class="form-label">Razón Social</label>
+            {{ form.razon_social }}
+            {% if form.razon_social.errors %}<ul class="errorlist">{% for e in form.razon_social.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+          </div>
+          <div class="col-12">
+            <label for="{{ form.sector_industrial.id_for_label }}" class="form-label">Sector Industrial</label>
+            {{ form.sector_industrial }}
+            {% if form.sector_industrial.errors %}<ul class="errorlist">{% for e in form.sector_industrial.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-auth w-100 mt-3">
+        <i class="bi bi-person-plus me-2"></i>Crear mi Cuenta
+      </button>
+    </form>
+
+    <hr style="border-color: #f3f4f6; margin: 1.5rem 0;">
+
+    <p class="text-center mb-0" style="font-size: 0.875rem; color: #6b7280;">
+      ¿Ya tienes una cuenta?
+      <a href="{% url 'usuarios:login' %}" class="text-link-orange ms-1">Inicia sesión aquí</a>
+    </p>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
 <script>
-  document.addEventListener('DOMContentLoaded', function() {
-    // Buscamos el select del rol por el ID que le pusimos en forms.py
-    const selectRol = document.getElementById('select-rol');
-    
-    function actualizarFormulario() {
-      const rol = selectRol.value;
-      
-      // IDs de los inputs que definimos en el forms.py
-      const camposEstudiante = ['id_carrera', 'id_semestre'];
-      const camposProfesor = ['id_facultad', 'id_especialidad'];
-      const camposEmpresa = ['id_nit', 'id_razon_social', 'id_sector_industrial'];
+  const selectRol = document.getElementById('select-rol');
 
-      // Función para ocultar o mostrar el contenedor <p> de cada input
-      function controlarVisibilidad(listaCampos, mostrar) {
-        listaCampos.forEach(id => {
-          const input = document.getElementById(id);
-          if (input) {
-            // Subimos al elemento <p> que Django genera automáticamente alrededor del input
-            const contenedor = input.closest('p');
-            if (contenedor) {
-              contenedor.style.display = mostrar ? 'block' : 'none';
-            }
-            input.required = mostrar; // Solo obliga a llenarlo si el campo está visible
-          }
-        });
-      }
+  const secciones = {
+    'ESTUDIANTE': document.getElementById('campos-estudiante'),
+    'PROFESOR':   document.getElementById('campos-profesor'),
+    'EMPRESA':    document.getElementById('campos-empresa'),
+  };
 
-      // 1. Ocultamos todos los campos especiales por defecto
-      controlarVisibilidad(camposEstudiante, false);
-      controlarVisibilidad(camposProfesor, false);
-      controlarVisibilidad(camposEmpresa, false);
+  function actualizarFormulario() {
+    const rol = selectRol?.value;
+    Object.entries(secciones).forEach(([key, el]) => {
+      if (!el) return;
+      const mostrar = (key === rol);
+      el.style.display = mostrar ? 'block' : 'none';
+      el.querySelectorAll('input, select').forEach(inp => { inp.required = mostrar; });
+    });
+  }
 
-      // 2. Mostramos únicamente los del rol que el usuario seleccionó
-      if (rol === 'ESTUDIANTE') controlarVisibilidad(camposEstudiante, true);
-      if (rol === 'PROFESOR') controlarVisibilidad(camposProfesor, true);
-      if (rol === 'EMPRESA') controlarVisibilidad(camposEmpresa, true);
-    }
-
-    // Escuchamos cada vez que el usuario cambie la opción del desplegable
-    if (selectRol) {
-      selectRol.addEventListener('change', actualizarFormulario);
-      actualizarFormulario(); // Se ejecuta una vez al cargar la página
-    }
-  });
+  selectRol?.addEventListener('change', actualizarFormulario);
+  actualizarFormulario();
 </script>
 {% endblock %}
