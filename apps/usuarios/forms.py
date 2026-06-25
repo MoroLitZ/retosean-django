@@ -58,3 +58,13 @@ class RegistroUsuarioForm(UserCreationForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['username'].help_text = "Máximo 150 caracteres. Solo letras, números y @/./+/-/_"
+        # Aplicar clases Bootstrap a los campos heredados de UserCreationForm
+        base_fields = ['username', 'first_name', 'last_name', 'email', 'password1', 'password2']
+        for name in base_fields:
+            if name in self.fields:
+                self.fields[name].widget.attrs.setdefault('class', 'form-control')
+        self.fields['first_name'].label = 'Nombre'
+        self.fields['last_name'].label  = 'Apellido'
+        self.fields['email'].label      = 'Correo electrónico'
+        self.fields['password1'].label  = 'Contraseña'
+        self.fields['password2'].label  = 'Confirmar contraseña'
