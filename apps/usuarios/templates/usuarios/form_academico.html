@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow p-4 border-0">
+                <div class="mb-3">
+                    <a href="{% url 'usuarios:registro' %}" class="text-decoration-none small text-muted">⬅️ Volver a selección</a>
+                </div>
+                <h3 class="fw-bold text-center mb-4">🎓 Registro Académico</h3>
+                
+                <form method="POST" novalidate>
+                    {% csrf_token %}
+                    
+                    <!-- Campos base (Username, Nombre, Apellido, Email, Rol) -->
+                    {% for field in form %}
+                        {% if field.name != 'carrera' and field.name != 'semestre' and field.name != 'facultad' and field.name != 'especialidad' %}
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">{{ field.label }}</label>
+                                {{ field }}
+                                {% if field.errors %}
+                                    <div class="text-danger small mt-1">{{ field.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+
+                    <!-- 🧑‍🎓 Bloque dinámico Estudiantes -->
+                    <div id="wrapper_estudiante" class="p-3 bg-light rounded border mb-3" style="display: none;">
+                        <h5 class="text-primary mb-3">Datos de Estudiante</h5>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Carrera</label>
+                            {{ form.carrera }}
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Semestre</label>
+                            {{ form.semestre }}
+                        </div>
+                    </div>
+
+                    <!-- 👨‍🏫 Bloque dinámico Profesores -->
+                    <div id="wrapper_profesor" class="p-3 bg-light rounded border mb-3" style="display: none;">
+                        <h5 class="text-primary mb-3">Datos de Profesor</h5>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Facultad</label>
+                            {{ form.facultad }}
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Especialidad</label>
+                            {{ form.especialidad }}
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100 btn-lg mt-3">Registrarme como EAN</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const selectRol = document.getElementById("select-rol");
+        const boxEstudiante = document.getElementById("wrapper_estudiante");
+        const boxProfesor = document.getElementById("wrapper_profesor");
+
+        function alternarCamposAcademicos() {
+            if (!selectRol) return;
+            
+            if (selectRol.value === "ESTUDIANTE") {
+                boxEstudiante.style.display = "block";
+                boxProfesor.style.display = "none";
+            } else if (selectRol.value === "PROFESOR") {
+                boxEstudiante.style.display = "none";
+                boxProfesor.style.display = "block";
+            } else {
+                boxEstudiante.style.display = "none";
+                boxProfesor.style.display = "none";
+            }
+        }
+
+        if (selectRol) {
+            selectRol.addEventListener("change", alternarCamposAcademicos);
+            alternarCamposAcademicos(); // Ejecución inicial
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-5">
+    
+    <!-- ⬅️ Botón de escape para regresar al Perfil Principal de la Empresa -->
+    <div class="mb-4 d-flex justify-content-between align-items-center">
+        <a href="{% url 'usuarios:perfil' %}" class="btn btn-outline-secondary btn-sm shadow-sm fw-semibold">
+            ⬅️ Volver al Panel Principal
+        </a>
+        <span class="badge bg-light text-dark border">Módulo Corporativo</span>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <h2 class="mb-4">Documentos de soporte</h2>
+            
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row mt-3">
+        <!-- Columna del Formulario de Carga -->
+        <div class="col-md-4">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">Cargar / Actualizar Documento</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Tipo de Documento</label>
+                            {{ form.tipo_documento }}
+                            {% if form.tipo_documento.errors %}
+                                <div class="text-danger small mt-1">{{ form.tipo_documento.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Archivo (Solo PDF)</label>
+                            {{ form.archivo }}
+                            {% if form.archivo.errors %}
+                                <div class="text-danger small mt-1">{{ form.archivo.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Fecha de Expedición</label>
+                            {{ form.fecha_expedicion }}
+                            <div class="form-text">Para Cámara de Comercio, máximo 30 días de antigüedad.</div>
+                            {% if form.fecha_expedicion.errors %}
+                                <div class="text-danger font-weight-bold small mt-1">⚠️ {{ form.fecha_expedicion.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <button type="submit" class="btn btn-success w-100 fw-semibold">Subir Documento</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna de la Tabla de Estados -->
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="card-title mb-0">Estado de Documentación de la Empresa</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-secondary">
+                            <tr>
+                                <th>Tipo de Documento</th>
+                                <th>Estado</th>
+                                <th>Fecha Expedición</th>
+                                <th>Archivo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if tiene_documentos %}
+                                {% for doc in documentos %}
+                                <tr>
+                                    <td><strong>{{ doc.tipo }}</strong></td>
+                                    
+                                    <td>
+                                        <span class="badge {{ doc.estado_clase }}">{{ doc.estado_texto }}</span>
+                                        {% if doc.motivo_rechazo %}
+                                            <div class="small text-danger mt-1"><strong>Motivo:</strong> {{ doc.motivo_rechazo }}</div>
+                                        {% endif %}
+                                    </td>
+                                    
+                                    <td>{{ doc.fecha_expedicion }}</td>
+                                    
+                                    <td>
+                                        {% if doc.url_archivo %}
+                                            <a href="{{ doc.url_archivo }}" target="_blank" class="btn btn-sm btn-outline-primary">Ver PDF</a>
+                                        {% else %}
+                                            <span class="text-muted small">No cargado</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-4">No has cargado ningún documento todavía.</td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

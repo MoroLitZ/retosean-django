@@ -3,21 +3,78 @@
 <div class="container mt-5">
   <div class="row justify-content-center">
     <div class="col-md-6">
+      
+      {% if messages %}
+        <div class="mb-4">
+          {% for message in messages %}
+            <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} alert-dismissible fade show text-start shadow-sm" role="alert">
+              ⚠️ {{ message }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
       <div class="card shadow p-5 text-center border-0">
-        <h2 class="fw-bold">¡Bienvenido al Panel, {{ user.username }}!</h2>
-        <p class="lead text-muted mt-2">Has ingresado correctamente al sistema.</p>
         
+        <!-- 💻 Saludo adaptado si es Administrador o Usuario Regular -->
+        {% if user.is_staff or user.is_superuser %}
+          <h2 class="fw-bold text-primary">¡Panel de Administración!</h2>
+          <p class="lead text-muted mt-2">Has ingresado como el usuario <strong>{{ user.username }}</strong>.</p>
+        {% else %}
+          {% if user.rol == 'EMPRESA' %}
+            <h2 class="fw-bold">¡Bienvenido al Panel,<br><span class="text-success">{{ nombre_completo }}</span>!</h2>
+          {% else %}
+            <h2 class="fw-bold">¡Bienvenido al Panel, {{ user.username }}!</h2>
+          {% endif %}
+          <p class="lead text-muted mt-2">Has ingresado correctamente al sistema.</p>
+        {% endif %}
+        
+        <!-- 🏷️ Asignación de Roles e Identificadores Visuales -->
         <div class="my-4">
-          <span class="fs-6 text-muted">Eres un</span>
-          <div class="mt-1">
-            <span class="badge bg-info text-dark fs-5 px-4 py-2">{{ rol_usuario }}</span>
-          </div>
+          {% if user.is_staff or user.is_superuser %}
+            <span class="fs-6 text-muted">Nivel de Acceso:</span>
+            <div class="mt-1">
+              <span class="badge bg-danger text-white fs-5 px-4 py-2">Administrador / Staff</span>
+            </div>
+          {% else %}
+            <span class="fs-6 text-muted">
+              {% if user.rol == 'EMPRESA' %}Eres una{% else %}Eres un{% endif %}
+            </span>
+            <div class="mt-1">
+              <span class="badge bg-info text-dark fs-5 px-4 py-2">{{ rol_usuario }}</span>
+            </div>
+          {% endif %}
         </div>
         
+        <!-- 📇 Información de la Cuenta -->
         <div class="card bg-light p-3 border-0 rounded text-start mb-4">
-          <p class="mb-1"><strong>Nombre completo:</strong> {{ nombre_completo }}</p>
+          <p class="mb-1">
+            <strong>Nombre / Razón Social:</strong> 
+            {% if user.is_staff or user.is_superuser %}
+              {% if user.get_full_name %}{{ user.get_full_name }}{% else %}Administrador Principal{% endif %}
+            {% else %}
+              {{ nombre_completo }}
+            {% endif %}
+          </p>
           <p class="mb-0"><strong>Correo electrónico:</strong> {{ user.email }}</p>
         </div>
+
+        <!-- 🚀 Acciones Dinámicas según el Tipo de Cuenta -->
+        {% if user.is_staff or user.is_superuser %}
+          <div class="d-grid gap-2 mb-3">
+              <a href="/admin/" target="_blank" class="btn btn-dark btn-lg fw-semibold">
+                  ⚙️ Ir al Backend de Django
+              </a>
+              <!-- Aquí puedes agregar a futuro el enlace al panel de revisión de documentos de alumnos -->
+          </div>
+        {% elif user.rol == 'EMPRESA' %}
+            <div class="d-grid gap-2 mb-3">
+                <a href="/usuarios/empresa/documentos/" class="btn btn-primary btn-lg fw-semibold">
+                    📄 Gestionar Documentación Legal
+                </a>
+            </div>
+        {% endif %}
         
         <hr>
         <a href="{% url 'usuarios:logout' %}" class="btn btn-outline-danger mt-2">Cerrar Sesión Segura</a>

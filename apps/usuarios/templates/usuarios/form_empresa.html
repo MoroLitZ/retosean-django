@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow p-4 border-0">
+                <div class="mb-3">
+                    <a href="{% url 'usuarios:registro' %}" class="text-decoration-none small text-muted">⬅️ Volver a selección</a>
+                </div>
+                <h3 class="fw-bold text-center text-success mb-4">🏢 Registro de Empresa</h3>
+                <p class="text-muted text-center small mt-negative mb-4">Crea la cuenta institucional de tu organización para proponer retos comerciales.</p>
+                
+                <form method="POST" novalidate>
+                    {% csrf_token %}
+                    {% for field in form %}
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">{{ field.label }}</label>
+                            {{ field }}
+                            {% if field.errors %}
+                                <div class="text-danger small mt-1">{{ field.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                    <button type="submit" class="btn btn-success w-100 btn-lg mt-3">Registrar Organización</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

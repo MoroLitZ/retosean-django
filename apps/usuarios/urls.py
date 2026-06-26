@@ -8,4 +8,5 @@ urlpatterns = [
     path('logout/',   views.vista_logout,   name='logout'),
     path('registro/', views.vista_registro, name='registro'),
     path('perfil/',   views.vista_perfil,   name='perfil'),
+    path('empresa/documentos/', views.panel_documentos_empresa, name='panel_documentos_empresa'),
 ]
