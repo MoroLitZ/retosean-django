@@ -281,16 +281,16 @@
           </a>
         </li>
         <li class="nav-item">
-          <a href="#" class="nav-link"><i class="bi bi-people"></i> Usuarios</a>
+          <a href="{% url 'usuarios:lista_usuarios' %}" class="nav-link {% if request.resolver_match.url_name == 'lista_usuarios' %}active{% endif %}"><i class="bi bi-people"></i> Usuarios</a>
         </li>
         <li class="nav-item">
-          <a href="#" class="nav-link"><i class="bi bi-building"></i> Empresas</a>
+          <a href="{% url 'usuarios:lista_empresas' %}" class="nav-link {% if request.resolver_match.url_name == 'lista_empresas' %}active{% endif %}"><i class="bi bi-building"></i> Empresas</a>
         </li>
         <li class="nav-item">
-          <a href="#" class="nav-link"><i class="bi bi-trophy"></i> Retos</a>
+          <a href="{% url 'usuarios:lista_retos_admin' %}" class="nav-link {% if request.resolver_match.url_name == 'lista_retos_admin' %}active{% endif %}"><i class="bi bi-trophy"></i> Retos</a>
         </li>
         <li class="nav-item">
-          <a href="#" class="nav-link"><i class="bi bi-bar-chart-line"></i> Reportes</a>
+          <a href="{% url 'usuarios:reportes_admin' %}" class="nav-link {% if request.resolver_match.url_name == 'reportes_admin' %}active{% endif %}"><i class="bi bi-bar-chart-line"></i> Reportes</a>
         </li>
         <li class="nav-item">
           <a href="/admin/" class="nav-link"><i class="bi bi-shield-lock"></i> Panel Admin</a>
@@ -305,19 +305,19 @@
           </a>
         </li>
         <li class="nav-item">
-          <a href="#" class="nav-link"><i class="bi bi-plus-circle"></i> Publicar Reto</a>
+          <a href="{% url 'usuarios:publicar_reto' %}" class="nav-link {% if request.resolver_match.url_name == 'publicar_reto' %}active{% endif %}"><i class="bi bi-plus-circle"></i> Publicar Reto</a>
         </li>
         <li class="nav-item">
-          <a href="#" class="nav-link"><i class="bi bi-trophy"></i> Mis Retos</a>
+          <a href="{% url 'usuarios:mis_retos_empresa' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_retos_empresa' %}active{% endif %}"><i class="bi bi-trophy"></i> Mis Retos</a>
         </li>
         <li class="nav-item">
-          <a href="#" class="nav-link"><i class="bi bi-person-check"></i> Postulaciones</a>
+          <a href="{% url 'usuarios:postulaciones_empresa' %}" class="nav-link {% if request.resolver_match.url_name == 'postulaciones_empresa' %}active{% endif %}"><i class="bi bi-person-check"></i> Postulaciones</a>
         </li>
         <li class="nav-item">
-          <a href="#" class="nav-link"><i class="bi bi-file-earmark-text"></i> Documentos Legales</a>
+          <a href="{% url 'usuarios:documentos_empresa' %}" class="nav-link {% if request.resolver_match.url_name == 'documentos_empresa' %}active{% endif %}"><i class="bi bi-file-earmark-text"></i> Documentos Legales</a>
         </li>
         <li class="nav-item">
-          <a href="#" class="nav-link"><i class="bi bi-bar-chart"></i> Indicadores</a>
+          <a href="{% url 'usuarios:indicadores_empresa' %}" class="nav-link {% if request.resolver_match.url_name == 'indicadores_empresa' %}active{% endif %}"><i class="bi bi-bar-chart"></i> Indicadores</a>
         </li>
 
       {% elif user.rol == 'PROFESOR' %}
@@ -329,19 +329,19 @@
           </a>
         </li>
         <li class="nav-item">
-          <a href="#" class="nav-link"><i class="bi bi-journal-text"></i> Mis Cursos</a>
+          <a href="{% url 'usuarios:mis_cursos' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_cursos' %}active{% endif %}"><i class="bi bi-journal-text"></i> Mis Cursos</a>
         </li>
         <li class="nav-item">
-          <a href="#" class="nav-link"><i class="bi bi-trophy"></i> Retos Vinculados</a>
+          <a href="{% url 'usuarios:retos_vinculados' %}" class="nav-link {% if request.resolver_match.url_name == 'retos_vinculados' %}active{% endif %}"><i class="bi bi-trophy"></i> Retos Vinculados</a>
         </li>
         <li class="nav-item">
-          <a href="#" class="nav-link"><i class="bi bi-people"></i> Mis Estudiantes</a>
+          <a href="{% url 'usuarios:mis_estudiantes' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_estudiantes' %}active{% endif %}"><i class="bi bi-people"></i> Mis Estudiantes</a>
         </li>
         <li class="nav-item">
-          <a href="#" class="nav-link"><i class="bi bi-star-half"></i> Evaluaciones</a>
+          <a href="{% url 'usuarios:evaluaciones' %}" class="nav-link {% if request.resolver_match.url_name == 'evaluaciones' %}active{% endif %}"><i class="bi bi-star-half"></i> Evaluaciones</a>
         </li>
         <li class="nav-item">
-          <a href="#" class="nav-link"><i class="bi bi-folder-check"></i> Entregables</a>
+          <a href="{% url 'usuarios:entregables_profesor' %}" class="nav-link {% if request.resolver_match.url_name == 'entregables_profesor' %}active{% endif %}"><i class="bi bi-folder-check"></i> Entregables</a>
         </li>
 
       {% elif user.rol == 'ESTUDIANTE' %}
@@ -353,16 +353,16 @@
           </a>
         </li>
         <li class="nav-item">
-          <a href="#" class="nav-link"><i class="bi bi-search"></i> Explorar Retos</a>
+          <a href="{% url 'usuarios:explorar_retos' %}" class="nav-link {% if request.resolver_match.url_name == 'explorar_retos' %}active{% endif %}"><i class="bi bi-search"></i> Explorar Retos</a>
         </li>
         <li class="nav-item">
-          <a href="#" class="nav-link"><i class="bi bi-send"></i> Mis Postulaciones</a>
+          <a href="{% url 'usuarios:mis_postulaciones' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_postulaciones' %}active{% endif %}"><i class="bi bi-send"></i> Mis Postulaciones</a>
         </li>
         <li class="nav-item">
-          <a href="#" class="nav-link"><i class="bi bi-folder2-open"></i> Mis Entregables</a>
+          <a href="{% url 'usuarios:mis_entregables' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_entregables' %}active{% endif %}"><i class="bi bi-folder2-open"></i> Mis Entregables</a>
         </li>
         <li class="nav-item">
-          <a href="#" class="nav-link"><i class="bi bi-award"></i> Certificados</a>
+          <a href="{% url 'usuarios:certificados' %}" class="nav-link {% if request.resolver_match.url_name == 'certificados' %}active{% endif %}"><i class="bi bi-award"></i> Certificados</a>
         </li>
       {% endif %}
 

@@ -1,0 +1,165 @@
+{% extends 'base_auth.html' %}
+{% block title %}Registro Académico{% endblock %}
+
+{% block extra_css %}
+<style>
+  body { align-items: flex-start; padding: 2rem 1rem; }
+  .section-divider {
+    font-size: .72rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 1.2px; color: #9ca3af;
+    padding: .4rem 0; border-bottom: 1px solid #f3f4f6;
+    margin-bottom: 1.2rem; margin-top: .5rem;
+  }
+  .role-block { display: none; }
+  .errorlist { list-style: none; padding: 0; margin: .25rem 0 0; }
+  .errorlist li { font-size: .8rem; color: #dc3545; }
+  .helptext { font-size: .78rem; color: #9ca3af; margin-top: .25rem; display: block; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-card" style="max-width: 660px;">
+  <div class="p-4 p-md-5">
+
+    <div class="d-flex align-items-center gap-3 mb-4">
+      <div>
+        <h2 style="font-size:1.5rem;font-weight:800;color:#111827;margin-bottom:.2rem;">Registro Académico</h2>
+        <p style="color:#6b7280;font-size:.875rem;margin:0;">Comunidad EAN — estudiantes y profesores</p>
+      </div>
+      <div class="ms-auto">
+        <span style="font-size:1.2rem;font-weight:800;">
+          <span style="color:var(--orange);">Retos</span><span style="color:#1e3a5f;">EAN</span>
+        </span>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <a href="{% url 'usuarios:registro' %}" style="font-size:.82rem;color:#6b7280;text-decoration:none;">
+        <i class="bi bi-arrow-left me-1"></i>Volver a selección de perfil
+      </a>
+    </div>
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger py-2 mb-3">
+        {% for e in form.non_field_errors %}<div><i class="bi bi-exclamation-circle me-1"></i>{{ e }}</div>{% endfor %}
+      </div>
+    {% endif %}
+
+    <form method="POST" novalidate>
+      {% csrf_token %}
+
+      <div class="section-divider"><i class="bi bi-person me-1"></i>Datos Personales</div>
+      <div class="row g-3 mb-2">
+        <div class="col-sm-6">
+          <label class="form-label">Nombre</label>
+          {{ form.first_name }}
+          {% if form.first_name.errors %}<ul class="errorlist">{% for e in form.first_name.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label">Apellido</label>
+          {{ form.last_name }}
+          {% if form.last_name.errors %}<ul class="errorlist">{% for e in form.last_name.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+        <div class="col-12">
+          <label class="form-label">Correo institucional</label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+            {{ form.email }}
+          </div>
+          <span class="helptext">Debe terminar en @universidadean.edu.co</span>
+          {% if form.email.errors %}<ul class="errorlist">{% for e in form.email.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+      </div>
+
+      <div class="section-divider"><i class="bi bi-shield-lock me-1"></i>Credenciales</div>
+      <div class="row g-3 mb-2">
+        <div class="col-12">
+          <label class="form-label">Usuario</label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-at"></i></span>
+            {{ form.username }}
+          </div>
+          {% if form.username.help_text %}<span class="helptext">{{ form.username.help_text }}</span>{% endif %}
+          {% if form.username.errors %}<ul class="errorlist">{% for e in form.username.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label">Contraseña</label>
+          {{ form.password1 }}
+          {% if form.password1.errors %}<ul class="errorlist">{% for e in form.password1.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label">Confirmar contraseña</label>
+          {{ form.password2 }}
+          {% if form.password2.errors %}<ul class="errorlist">{% for e in form.password2.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+      </div>
+
+      <div class="section-divider"><i class="bi bi-mortarboard me-1"></i>Rol Académico</div>
+      <div class="mb-3">
+        <label class="form-label">Soy...</label>
+        {{ form.rol }}
+        {% if form.rol.errors %}<ul class="errorlist">{% for e in form.rol.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+
+      <!-- Campos Estudiante -->
+      <div id="bloque-estudiante" class="role-block">
+        <div class="row g-3 mb-2">
+          <div class="col-sm-8">
+            <label class="form-label">Carrera</label>
+            {{ form.carrera }}
+            {% if form.carrera.errors %}<ul class="errorlist">{% for e in form.carrera.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label">Semestre</label>
+            {{ form.semestre }}
+            {% if form.semestre.errors %}<ul class="errorlist">{% for e in form.semestre.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Campos Profesor -->
+      <div id="bloque-profesor" class="role-block">
+        <div class="row g-3 mb-2">
+          <div class="col-sm-6">
+            <label class="form-label">Facultad</label>
+            {{ form.facultad }}
+            {% if form.facultad.errors %}<ul class="errorlist">{% for e in form.facultad.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label">Especialidad</label>
+            {{ form.especialidad }}
+            {% if form.especialidad.errors %}<ul class="errorlist">{% for e in form.especialidad.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-auth w-100 mt-3">
+        <i class="bi bi-person-plus me-2"></i>Registrarme como EAN
+      </button>
+    </form>
+
+    <hr style="border-color:#f3f4f6;margin:1.5rem 0;">
+    <p class="text-center mb-0" style="font-size:.875rem;color:#6b7280;">
+      ¿Ya tienes cuenta?
+      <a href="{% url 'usuarios:login' %}" class="text-link-orange ms-1">Inicia sesión</a>
+    </p>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const selectRol     = document.getElementById('select-rol');
+  const bloqueEstud   = document.getElementById('bloque-estudiante');
+  const bloqueProf    = document.getElementById('bloque-profesor');
+
+  function toggleBloques() {
+    const val = selectRol?.value;
+    bloqueEstud.style.display = (val === 'ESTUDIANTE') ? 'block' : 'none';
+    bloqueProf.style.display  = (val === 'PROFESOR')   ? 'block' : 'none';
+  }
+
+  selectRol?.addEventListener('change', toggleBloques);
+  toggleBloques();
+</script>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column align-items-center justify-content-center" style="min-height: 58vh;">
+  <div class="text-center">
+    <div class="mb-4" style="font-size: 4.5rem; color: var(--accent); opacity: 0.35;">
+      <i class="bi {{ icono }}"></i>
+    </div>
+    <h2 class="fw-bold mb-2" style="color: #111827;">{{ titulo }}</h2>
+    <p class="text-muted mb-1">Esta sección está en desarrollo.</p>
+    <p class="text-muted" style="font-size: 0.85rem;">Disponible en próximas versiones del sprint.</p>
+  </div>
+</div>
+{% endblock %}
