@@ -1,10 +1,10 @@
-# Reto EAN - Plataforma de Desafíos Académicos y Hackatones 🚀
+# Reto EAN - Plataforma de Desafíos Académicos y Hackatones
 
 Proyecto de grado desarrollado para la **Universidad EAN** enfocado en conectar el ecosistema empresarial con la comunidad universitaria mediante la publicación, gestión y evaluación de retos tecnológicos y hackatones.
 
 ---
 
-## 👥 Roles del Sistema y Flujo de Trabajo
+## Roles del Sistema y Flujo de Trabajo
 
 La plataforma gestiona tres tipos de usuarios clave con flujos dinámicos e independientes:
 
@@ -14,7 +14,7 @@ La plataforma gestiona tres tipos de usuarios clave con flujos dinámicos e inde
 
 ---
 
-## 🛠️ Requisitos Previos
+## Requisitos Previos
 
 Antes de levantar el proyecto en tu máquina local, asegúrate de cumplir con lo siguiente:
 * **Python 3.10** o superior instalado.
@@ -23,7 +23,7 @@ Antes de levantar el proyecto en tu máquina local, asegúrate de cumplir con lo
 
 ---
 
-## 🚀 Instalación y Configuración Local
+## Instalación y Configuración Local
 
 Sigue este orden de comandos en tu terminal para desplegar el entorno de desarrollo:
 
@@ -54,7 +54,7 @@ python manage.py runserver
 
 ---
 
-## 🌐 Acceso a la Aplicación
+## Acceso a la Aplicación
 
 Con el servidor corriendo localmente, abre tu navegador web de preferencia (se recomienda **Brave**) e ingresa a las siguientes direcciones:
 
@@ -63,7 +63,7 @@ Con el servidor corriendo localmente, abre tu navegador web de preferencia (se r
 
 ---
 
-## 📁 Estructura del Proyecto
+## Estructura del Proyecto
 
 * apps/usuarios/: Módulo encargado del registro dinámico según rol, carga de documentación para empresas y control de perfiles.
 * config/: Directorio raíz de configuración global de Django (settings.py, urls.py).
