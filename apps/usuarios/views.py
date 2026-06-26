@@ -58,13 +58,7 @@ def vista_registro(request):
             return redirect(_url_para_usuario(user))
         return render(request, 'usuarios/form_empresa.html', {'form': form})
 
-    form = RegistroUsuarioForm(request.POST or None)
-    if request.method == 'POST' and form.is_valid():
-        user = form.save()
-        login(request, user)
-        messages.success(request, f'¡Bienvenido a RetosEAN, {user.first_name or user.username}!')
-        return redirect(_url_para_usuario(user))
-    return render(request, 'usuarios/registro.html', {'form': form})
+    return render(request, 'usuarios/registro.html')
 
 
 @login_required(login_url='usuarios:login')

@@ -3,201 +3,123 @@
 
 {% block extra_css %}
 <style>
-  body { align-items: flex-start; padding: 2rem 1rem; }
-  .section-divider {
-    font-size: 0.72rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 1.2px;
-    color: #9ca3af;
-    padding: 0.4rem 0;
-    border-bottom: 1px solid #f3f4f6;
-    margin-bottom: 1.2rem;
-    margin-top: 0.5rem;
+  .tipo-card {
+    background: #fff;
+    border-radius: 14px;
+    border: 2px solid #e5e7eb;
+    padding: 2rem 1.75rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, box-shadow .2s, transform .2s;
+    text-decoration: none;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
   }
-  .campo-perfil-wrapper { display: none; }
-  .errorlist { list-style: none; padding: 0; margin: 0.25rem 0 0; }
-  .errorlist li { font-size: 0.8rem; color: #dc3545; }
-  .helptext { font-size: 0.78rem; color: #9ca3af; margin-top: 0.25rem; display: block; }
+  .tipo-card:hover {
+    border-color: var(--card-accent);
+    box-shadow: 0 8px 24px rgba(0,0,0,.1);
+    transform: translateY(-3px);
+  }
+  .tipo-card .card-icon {
+    width: 64px; height: 64px;
+    border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.8rem;
+    margin: 0 auto 1.2rem;
+  }
+  .tipo-card h4 {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: #111827;
+    margin-bottom: .5rem;
+  }
+  .tipo-card p {
+    font-size: .82rem;
+    color: #6b7280;
+    line-height: 1.55;
+    flex: 1;
+    margin-bottom: 1.5rem;
+  }
+  .tipo-card .btn-tipo {
+    border-radius: 8px;
+    padding: .65rem 1.25rem;
+    font-weight: 700;
+    font-size: .875rem;
+    border: none;
+    color: #fff;
+    background: var(--card-accent);
+    transition: opacity .15s;
+  }
+  .tipo-card:hover .btn-tipo { opacity: .88; }
+  .card-academico { --card-accent: #1e3a5f; }
+  .card-empresa   { --card-accent: #2563eb; }
+  .divider-or {
+    display: flex; align-items: center; gap: .75rem;
+    color: #d1d5db; font-size: .78rem;
+  }
+  .divider-or::before, .divider-or::after {
+    content: ''; flex: 1; border-top: 1px solid #e5e7eb;
+  }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="auth-card" style="max-width: 680px;">
+<div class="auth-card" style="max-width: 720px;">
   <div class="p-4 p-md-5">
 
     <!-- Encabezado -->
-    <div class="d-flex align-items-center gap-3 mb-4">
-      <div>
-        <h2 style="font-size: 1.5rem; font-weight: 800; color: #111827; margin-bottom: 0.2rem;">
-          Crear nueva cuenta
-        </h2>
-        <p style="color: #6b7280; font-size: 0.875rem; margin: 0;">
-          Completa el formulario para unirte a RetosEAN
-        </p>
+    <div class="text-center mb-5">
+      <div style="font-size: 1.6rem; font-weight: 800; letter-spacing: -.5px; margin-bottom: .5rem;">
+        <span style="color: var(--orange);">Retos</span><span style="color: #1e3a5f;">EAN</span>
       </div>
-      <div class="ms-auto">
-        <span style="font-size: 1.3rem; font-weight: 800;">
-          <span style="color: var(--orange);">Retos</span><span style="color: #1e3a5f;">EAN</span>
-        </span>
-      </div>
+      <h2 style="font-size: 1.4rem; font-weight: 800; color: #111827; margin-bottom: .3rem;">
+        Crear nueva cuenta
+      </h2>
+      <p style="color: #6b7280; font-size: .875rem; margin: 0;">
+        Selecciona el tipo de perfil para comenzar
+      </p>
     </div>
 
-    {% if form.non_field_errors %}
-      <div class="alert alert-danger py-2 mb-3">
-        {% for error in form.non_field_errors %}
-          <div><i class="bi bi-exclamation-circle me-1"></i>{{ error }}</div>
-        {% endfor %}
-      </div>
-    {% endif %}
+    <!-- Cards de selección -->
+    <div class="row g-4 mb-4">
 
-    <form method="post" novalidate>
-      {% csrf_token %}
-
-      <!-- SECCIÓN 1: Datos personales -->
-      <div class="section-divider"><i class="bi bi-person me-1"></i>Datos Personales</div>
-      <div class="row g-3 mb-2">
-        <div class="col-sm-6">
-          <label for="{{ form.first_name.id_for_label }}" class="form-label">Nombre</label>
-          {{ form.first_name }}
-          {% if form.first_name.errors %}<ul class="errorlist">{% for e in form.first_name.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-        </div>
-        <div class="col-sm-6">
-          <label for="{{ form.last_name.id_for_label }}" class="form-label">Apellido</label>
-          {{ form.last_name }}
-          {% if form.last_name.errors %}<ul class="errorlist">{% for e in form.last_name.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-        </div>
-        <div class="col-12">
-          <label for="{{ form.email.id_for_label }}" class="form-label">Correo electrónico</label>
-          <div class="input-group">
-            <span class="input-group-text"><i class="bi bi-envelope"></i></span>
-            {{ form.email }}
+      <!-- Académico -->
+      <div class="col-sm-6">
+        <a href="?tipo=academico" class="tipo-card card-academico">
+          <div class="card-icon" style="background: rgba(30,58,95,.1);">
+            <i class="bi bi-mortarboard" style="color: #1e3a5f;"></i>
           </div>
-          {% if form.email.errors %}<ul class="errorlist">{% for e in form.email.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-        </div>
+          <h4>Comunidad EAN</h4>
+          <p>Estudiantes y profesores de la Universidad EAN. Accede con tu correo institucional <strong>@universidadean.edu.co</strong>.</p>
+          <span class="btn-tipo">
+            <i class="bi bi-arrow-right me-1"></i>Soy Académico
+          </span>
+        </a>
       </div>
 
-      <!-- SECCIÓN 2: Credenciales -->
-      <div class="section-divider"><i class="bi bi-shield-lock me-1"></i>Credenciales de Acceso</div>
-      <div class="row g-3 mb-2">
-        <div class="col-12">
-          <label for="{{ form.username.id_for_label }}" class="form-label">Nombre de usuario</label>
-          <div class="input-group">
-            <span class="input-group-text"><i class="bi bi-at"></i></span>
-            {{ form.username }}
+      <!-- Empresa -->
+      <div class="col-sm-6">
+        <a href="?tipo=empresa" class="tipo-card card-empresa">
+          <div class="card-icon" style="background: rgba(37,99,235,.1);">
+            <i class="bi bi-building" style="color: #2563eb;"></i>
           </div>
-          {% if form.username.help_text %}<span class="helptext">{{ form.username.help_text }}</span>{% endif %}
-          {% if form.username.errors %}<ul class="errorlist">{% for e in form.username.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-        </div>
-        <div class="col-sm-6">
-          <label for="{{ form.password1.id_for_label }}" class="form-label">Contraseña</label>
-          {{ form.password1 }}
-          {% if form.password1.errors %}<ul class="errorlist">{% for e in form.password1.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-        </div>
-        <div class="col-sm-6">
-          <label for="{{ form.password2.id_for_label }}" class="form-label">Confirmar contraseña</label>
-          {{ form.password2 }}
-          {% if form.password2.errors %}<ul class="errorlist">{% for e in form.password2.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-        </div>
+          <h4>Empresa / Organización</h4>
+          <p>Aliados comerciales que deseen proponer retos o gestionar su documentación legal en la plataforma.</p>
+          <span class="btn-tipo">
+            <i class="bi bi-arrow-right me-1"></i>Soy Empresa
+          </span>
+        </a>
       </div>
 
-      <!-- SECCIÓN 3: Rol -->
-      <div class="section-divider"><i class="bi bi-person-badge me-1"></i>Rol en la Plataforma</div>
-      <div class="mb-3">
-        <label for="{{ form.rol.id_for_label }}" class="form-label">Selecciona tu rol</label>
-        {{ form.rol }}
-        {% if form.rol.errors %}<ul class="errorlist">{% for e in form.rol.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-      </div>
+    </div>
 
-      <!-- Campos dinámicos: Estudiante -->
-      <div id="campos-estudiante" class="campo-perfil-wrapper">
-        <div class="row g-3 mb-2">
-          <div class="col-sm-8">
-            <label for="{{ form.carrera.id_for_label }}" class="form-label">Carrera</label>
-            {{ form.carrera }}
-            {% if form.carrera.errors %}<ul class="errorlist">{% for e in form.carrera.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-          </div>
-          <div class="col-sm-4">
-            <label for="{{ form.semestre.id_for_label }}" class="form-label">Semestre</label>
-            {{ form.semestre }}
-            {% if form.semestre.errors %}<ul class="errorlist">{% for e in form.semestre.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-          </div>
-        </div>
-      </div>
-
-      <!-- Campos dinámicos: Profesor -->
-      <div id="campos-profesor" class="campo-perfil-wrapper">
-        <div class="row g-3 mb-2">
-          <div class="col-sm-6">
-            <label for="{{ form.facultad.id_for_label }}" class="form-label">Facultad</label>
-            {{ form.facultad }}
-            {% if form.facultad.errors %}<ul class="errorlist">{% for e in form.facultad.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-          </div>
-          <div class="col-sm-6">
-            <label for="{{ form.especialidad.id_for_label }}" class="form-label">Especialidad</label>
-            {{ form.especialidad }}
-            {% if form.especialidad.errors %}<ul class="errorlist">{% for e in form.especialidad.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-          </div>
-        </div>
-      </div>
-
-      <!-- Campos dinámicos: Empresa -->
-      <div id="campos-empresa" class="campo-perfil-wrapper">
-        <div class="row g-3 mb-2">
-          <div class="col-sm-4">
-            <label for="{{ form.nit.id_for_label }}" class="form-label">NIT</label>
-            {{ form.nit }}
-            {% if form.nit.errors %}<ul class="errorlist">{% for e in form.nit.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-          </div>
-          <div class="col-sm-8">
-            <label for="{{ form.razon_social.id_for_label }}" class="form-label">Razón Social</label>
-            {{ form.razon_social }}
-            {% if form.razon_social.errors %}<ul class="errorlist">{% for e in form.razon_social.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-          </div>
-          <div class="col-12">
-            <label for="{{ form.sector_industrial.id_for_label }}" class="form-label">Sector Industrial</label>
-            {{ form.sector_industrial }}
-            {% if form.sector_industrial.errors %}<ul class="errorlist">{% for e in form.sector_industrial.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-          </div>
-        </div>
-      </div>
-
-      <button type="submit" class="btn btn-auth w-100 mt-3">
-        <i class="bi bi-person-plus me-2"></i>Crear mi Cuenta
-      </button>
-    </form>
-
-    <hr style="border-color: #f3f4f6; margin: 1.5rem 0;">
-
-    <p class="text-center mb-0" style="font-size: 0.875rem; color: #6b7280;">
-      ¿Ya tienes una cuenta?
-      <a href="{% url 'usuarios:login' %}" class="text-link-orange ms-1">Inicia sesión aquí</a>
+    <!-- Divider y login -->
+    <div class="divider-or mb-3">ya tienes cuenta</div>
+    <p class="text-center mb-0" style="font-size: .875rem; color: #6b7280;">
+      <a href="{% url 'usuarios:login' %}" class="text-link-orange">Inicia sesión aquí</a>
     </p>
+
   </div>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-  const selectRol = document.getElementById('select-rol');
-
-  const secciones = {
-    'ESTUDIANTE': document.getElementById('campos-estudiante'),
-    'PROFESOR':   document.getElementById('campos-profesor'),
-    'EMPRESA':    document.getElementById('campos-empresa'),
-  };
-
-  function actualizarFormulario() {
-    const rol = selectRol?.value;
-    Object.entries(secciones).forEach(([key, el]) => {
-      if (!el) return;
-      const mostrar = (key === rol);
-      el.style.display = mostrar ? 'block' : 'none';
-      el.querySelectorAll('input, select').forEach(inp => { inp.required = mostrar; });
-    });
-  }
-
-  selectRol?.addEventListener('change', actualizarFormulario);
-  actualizarFormulario();
-</script>
 {% endblock %}
