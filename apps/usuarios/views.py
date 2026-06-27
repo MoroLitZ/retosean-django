@@ -47,7 +47,7 @@ def vista_registro(request):
             user = form.save()
             login(request, user)
             messages.success(request, f'¡Bienvenido a RetosEAN, {user.first_name or user.username}!')
-            return redirect(_url_para_usuario.get(user))
+            return redirect(_url_para_usuario(user))
         return render(request, 'usuarios/form_academico.html', {'form': form})
 
     elif tipo_registro == 'empresa':
