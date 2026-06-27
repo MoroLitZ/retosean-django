@@ -28,7 +28,7 @@ Antes de levantar el proyecto en tu máquina local, asegúrate de cumplir con lo
 Sigue este orden de comandos en tu terminal para desplegar el entorno de desarrollo:
 
 ### 1. Clonar el repositorio y acceder al directorio
-git clone URL_DE_TU_REPOSITORIO_AQUÍ
+git clone https://github.com/MoroLitZ/retosean-django
 cd retosean-django
 
 ### 2. Configurar el Entorno Virtual (Virtual Env)
