@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+  <h1 class="h3">Cambiar estado</h1>
+  <p>{{ reto }} · estado actual: <strong>{{ reto.get_estado_display }}</strong></p>
+  <form method="post" class="row g-3">
+    {% csrf_token %}
+    {% for field in form %}
+    <div class="col-12">
+      <label class="form-label">{{ field.label }}</label>
+      {{ field }}
+      {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+    </div>
+    {% endfor %}
+    <div class="col-12">
+      <button class="btn btn-primary">Actualizar estado</button>
+      <a href="{% url 'retos:detalle' reto.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

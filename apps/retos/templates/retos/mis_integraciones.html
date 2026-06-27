@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+
+{% block title %}Mis integraciones{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3">Mis integraciones academicas</h1>
+    <a href="{% url 'retos:crear_integracion' %}" class="btn btn-primary">Integrar reto</a>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-striped align-middle">
+      <thead><tr><th>Reto</th><th>Programa</th><th>Facultad</th><th>Estado</th><th>Actualizado</th><th></th></tr></thead>
+      <tbody>
+        {% for integracion in integraciones %}
+        <tr>
+          <td>{{ integracion.reto }}</td>
+          <td>{{ integracion.programa_academico|default:'-' }}</td>
+          <td>{{ integracion.facultad|default:'-' }}</td>
+          <td>{{ integracion.get_estado_display }}</td>
+          <td>{{ integracion.actualizado_en|date:'Y-m-d H:i' }}</td>
+          <td class="text-end">
+            <a href="{% url 'retos:detalle_integracion' integracion.pk %}" class="btn btn-sm btn-outline-secondary">Ver</a>
+            {% if integracion.puede_editar_profesor %}
+            <a href="{% url 'retos:editar_integracion' integracion.pk %}" class="btn btn-sm btn-outline-primary">Editar</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center text-muted">Aun no hay integraciones academicas.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
