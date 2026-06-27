@@ -1,28 +1,132 @@
-{% extends 'base.html' %}
-{% block content %}
-<div class="container mt-5">
-  <div class="row justify-content-center">
-    <div class="col-md-4">
-      <div class="card shadow p-4 border-0">
-        <h2 class="text-center mb-4 fw-bold text-primary">Iniciar Sesión</h2>
-        
-        {% if messages %}
-          {% for message in messages %}
-            <div class="alert alert-danger py-2">{{ message }}</div>
-          {% endfor %}
-        {% endif %}
+{% extends 'base_auth.html' %}
+{% block title %}Iniciar Sesión{% endblock %}
 
-        <form method="post">
-          {% csrf_token %}
-          {{ form.as_p }}
-          <button type="submit" class="btn btn-primary w-100 mt-3 shadow-sm">Entrar al Sistema</button>
-        </form>
-        
-        <p class="mt-4 text-center text-muted small">
-          ¿No tienes cuenta? <a href="{% url 'usuarios:registro' %}" class="text-decoration-none fw-semibold">Regístrate aquí</a>
+{% block content %}
+<div class="auth-card">
+  <div class="row g-0">
+
+    <!-- Panel izquierdo: identidad de marca -->
+    <div class="col-md-5 auth-panel-left">
+      <div>
+        <div class="brand-logo mb-3">
+          <span class="brand-retos">Retos</span><span class="brand-ean">EAN</span>
+        </div>
+        <p style="color: rgba(255,255,255,0.55); font-size: 0.875rem; line-height: 1.6;">
+          Plataforma académica que conecta empresas, profesores y estudiantes a través de retos del mundo real.
+        </p>
+      </div>
+
+      <div>
+        <div class="auth-feature-item">
+          <div class="auth-feature-icon" style="background: rgba(232,119,34,0.15);">
+            <i class="bi bi-building" style="color: var(--orange);"></i>
+          </div>
+          <div>
+            <div class="auth-feature-title">Empresas</div>
+            <div class="auth-feature-sub">Publica retos reales de negocio</div>
+          </div>
+        </div>
+        <div class="auth-feature-item">
+          <div class="auth-feature-icon" style="background: rgba(34, 197, 94, 0.15);">
+            <i class="bi bi-journal-text" style="color: #22c55e;"></i>
+          </div>
+          <div>
+            <div class="auth-feature-title">Profesores</div>
+            <div class="auth-feature-sub">Vincula cursos con la industria</div>
+          </div>
+        </div>
+        <div class="auth-feature-item">
+          <div class="auth-feature-icon" style="background: rgba(99, 179, 237, 0.15);">
+            <i class="bi bi-mortarboard" style="color: #63b3ed;"></i>
+          </div>
+          <div>
+            <div class="auth-feature-title">Estudiantes</div>
+            <div class="auth-feature-sub">Resuelve retos y gana experiencia</div>
+          </div>
+        </div>
+
+        <p style="color: rgba(255,255,255,0.28); font-size: 0.72rem; margin-top: 1.5rem; margin-bottom: 0;">
+          © 2026 Universidad EAN · Bogotá, Colombia
         </p>
       </div>
     </div>
+
+    <!-- Panel derecho: formulario -->
+    <div class="col-md-7 auth-panel-right">
+      <div class="mb-4">
+        <h2 style="font-size: 1.6rem; font-weight: 800; color: #111827; margin-bottom: 0.3rem;">
+          Bienvenido de vuelta
+        </h2>
+        <p style="color: #6b7280; font-size: 0.875rem; margin: 0;">
+          Ingresa tus credenciales para acceder al sistema
+        </p>
+      </div>
+
+      {% if messages %}
+        {% for message in messages %}
+          <div class="alert alert-danger d-flex align-items-center gap-2 py-2 mb-3" role="alert">
+            <i class="bi bi-exclamation-circle-fill"></i>
+            <span>{{ message }}</span>
+          </div>
+        {% endfor %}
+      {% endif %}
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+
+        <div class="mb-3">
+          <label for="{{ form.username.id_for_label }}" class="form-label">{{ form.username.label }}</label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-person"></i></span>
+            {{ form.username }}
+          </div>
+          {% if form.username.errors %}
+            <div class="text-danger" style="font-size: 0.8rem; margin-top: 0.3rem;">{{ form.username.errors.0 }}</div>
+          {% endif %}
+        </div>
+
+        <div class="mb-4">
+          <label for="{{ form.password.id_for_label }}" class="form-label">{{ form.password.label }}</label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-lock"></i></span>
+            {{ form.password }}
+            <button class="btn input-group-text" type="button" id="togglePassword" title="Mostrar/ocultar"
+              style="background:#f9fafb; border: 1.5px solid #d1d5db; border-left: none; cursor: pointer;">
+              <i class="bi bi-eye" id="toggleIcon"></i>
+            </button>
+          </div>
+          {% if form.password.errors %}
+            <div class="text-danger" style="font-size: 0.8rem; margin-top: 0.3rem;">{{ form.password.errors.0 }}</div>
+          {% endif %}
+        </div>
+
+        <button type="submit" class="btn btn-auth w-100">
+          <i class="bi bi-box-arrow-in-right me-2"></i>Ingresar al Sistema
+        </button>
+      </form>
+
+      <hr style="border-color: #f3f4f6; margin: 1.75rem 0;">
+
+      <p class="text-center mb-0" style="font-size: 0.875rem; color: #6b7280;">
+        ¿No tienes una cuenta?
+        <a href="{% url 'usuarios:registro' %}" class="text-link-orange ms-1">Regístrate aquí</a>
+      </p>
+    </div>
+
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const toggleBtn  = document.getElementById('togglePassword');
+  const toggleIcon = document.getElementById('toggleIcon');
+  const pwdInput   = document.getElementById('{{ form.password.id_for_label }}');
+
+  toggleBtn?.addEventListener('click', () => {
+    const isPassword = pwdInput.type === 'password';
+    pwdInput.type    = isPassword ? 'text' : 'password';
+    toggleIcon.className = isPassword ? 'bi bi-eye-slash' : 'bi bi-eye';
+  });
+</script>
 {% endblock %}

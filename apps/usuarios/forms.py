@@ -55,9 +55,15 @@ class RegistroAcademicoForm(UserCreationForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['username'].help_text = "Máximo 150 caracteres. Solo letras, números y @/./+/-/_"
-        for name, field in self.fields.items():
-            if name != 'rol':
-                field.widget.attrs.update({'class': 'form-control'})
+        base_fields = ['username', 'first_name', 'last_name', 'email', 'password1', 'password2']
+        for name in base_fields:
+            if name in self.fields:
+                self.fields[name].widget.attrs.setdefault('class', 'form-control')
+                self.fields['first_name'].label = 'Nombre'
+                self.fields['last_name'].label  = 'Apellido'
+                self.fields['email'].label      = 'Correo electrónico'
+                self.fields['password1'].label  = 'Contraseña'
+                self.fields['password2'].label  = 'Confirmar contraseña'
 
 
 class RegistroEmpresaForm(UserCreationForm):
@@ -84,6 +90,7 @@ class RegistroEmpresaForm(UserCreationForm):
             
             user.empresa = nueva_empresa
             user.save()
+            
         return user
 
     def __init__(self, *args, **kwargs):
@@ -91,6 +98,8 @@ class RegistroEmpresaForm(UserCreationForm):
         self.fields['username'].help_text = "Identificador único de la empresa en la plataforma (Ej: pepsico_ean)"
         self.fields['username'].label = "Usuario Corporativo (ID)"
         self.fields['email'].label = "Correo Electrónico Corporativo"
+        self.fields['password1'].label = 'Contraseña'
+        self.fields['password2'].label = 'Confirmar contraseña'
         
         for field in self.fields.values():
             field.widget.attrs.update({'class': 'form-control'})
@@ -99,7 +108,6 @@ class RegistroEmpresaForm(UserCreationForm):
 class CargarDocumentoForm(forms.ModelForm):
     class Meta:
         model = DocumentoEmpresa
- 
         fields = ['tipo_documento', 'archivo', 'fecha_expedicion']
         widgets = {
             'tipo_documento': forms.Select(attrs={'class': 'form-control'}),
