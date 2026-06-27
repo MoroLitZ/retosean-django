@@ -2,11 +2,23 @@ from django import forms
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from .models import Usuario, PerfilEstudiante, PerfilProfesor, Empresa, DocumentoEmpresa
 from django.utils import timezone
+from django.contrib.auth import get_user_model
 
 class LoginForm(AuthenticationForm):
     username = forms.CharField(label='Usuario o correo', widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'usuario'}))
     password = forms.CharField(label='Contraseña', widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': '••••••••'}))
-
+    
+    # tomamos el username del registro, y al pasarlo en el login, no importa si estuvo en mayusculas o en minusculas
+    def clean_username(self):
+        username = self.cleaned_data.get('username')
+        if username:
+            User = get_user_model()
+            try:
+                user_obj = User.objects.get(username__iexact=username)
+                return user_obj.username  
+            except User.DoesNotExist:
+                return username  
+        return username
 
 class RegistroAcademicoForm(UserCreationForm):
     rol = forms.ChoiceField(
@@ -92,6 +104,14 @@ class RegistroEmpresaForm(UserCreationForm):
             user.save()
             
         return user
+    
+    def clean_nit(self):
+        nit = self.cleaned_data.get('nit')
+        
+        # Validamos contra el modelo Empresa directamente
+        if Empresa.objects.filter(nit=nit).exists():
+            raise forms.ValidationError("Este NIT ya se encuentra registrado para otra empresa.")
+        return nit
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

@@ -54,12 +54,33 @@ python manage.py runserver
 
 ---
 
+## Reglas del Flujo de Trabajo (Base de Datos y Git)
+
+Para evitar conflictos de historial (NodeNotFoundError) o archivos de migración huérfanos entre los desarrolladores, el equipo debe seguir estrictamente estas pautas:
+
+1. **Antes de empezar a trabajar (Hacer siempre Git Pull):**
+   Cada vez que descargues la última versión de la rama principal, aplica de inmediato las migraciones que tus compañeros hayan subido:
+   git pull origin main
+   python manage.py migrate
+
+2. **Al modificar Modelos (models.py):**
+   Si agregas, editas o eliminas un campo en los modelos de una aplicación, debes generar los archivos de migración locales antes de hacer el commit y subirlos junto con el código:
+   python manage.py makemigrations
+   git add apps/usuarios/migrations/
+
+3. **¿Qué hacer si hay un conflicto de historial al hacer Pull?**
+   Si Django arroja un error indicando que dos personas crearon una migración con el mismo número (por ejemplo, dos versiones de la 0003), soluciónalo unificando el árbol con el comando de fusión:
+   python manage.py makemigrations --merge
+   python manage.py migrate
+
+---
+
 ## Acceso a la Aplicación
 
-Con el servidor corriendo localmente, abre tu navegador web de preferencia (se recomienda **Brave**) e ingresa a las siguientes direcciones:
+Con el servidor corriendo localmente, abre tu navegador web de preferencia e ingresa a las siguientes direcciones:
 
-* **Plataforma Principal (Inicio de Sesión):** http://127.0.0.1:8000/usuarios/login/
-* **Panel de Administración Global:** http://127.0.0.1:8000/admin/
+* **Plataforma Principal (Inicio de Sesión):** [http://127.0.0.1:8000/usuarios/login/](http://127.0.0.1:8000/usuarios/login/)
+* **Panel de Administración Global:** [http://127.0.0.1:8000/admin/](http://127.0.0.1:8000/admin/)
 
 ---
 
