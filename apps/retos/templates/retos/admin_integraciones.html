@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+  <h1 class="h3 mb-3">Integraciones academicas</h1>
+  <form method="get" class="row g-2 mb-3">
+    <div class="col-md-4">
+      <select name="estado" class="form-select">
+        <option value="">Todos los estados</option>
+        {% for valor, etiqueta in estados %}
+        <option value="{{ valor }}" {% if estado == valor %}selected{% endif %}>{{ etiqueta }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2"><button class="btn btn-outline-primary w-100">Filtrar</button></div>
+  </form>
+  <div class="table-responsive">
+    <table class="table table-striped align-middle">
+      <thead><tr><th>Reto</th><th>Profesor</th><th>Programa</th><th>Estado</th><th></th></tr></thead>
+      <tbody>
+        {% for integracion in integraciones %}
+        <tr>
+          <td>{{ integracion.reto }}</td>
+          <td>{{ integracion.profesor.get_full_name|default:integracion.profesor.username }}</td>
+          <td>{{ integracion.programa_academico|default:'-' }}</td>
+          <td>{{ integracion.get_estado_display }}</td>
+          <td class="text-end">
+            <a href="{% url 'retos:detalle_integracion' integracion.pk %}" class="btn btn-sm btn-outline-secondary">Ver</a>
+            <a href="{% url 'retos:admin_revisar_integracion' integracion.pk %}" class="btn btn-sm btn-primary">Revisar</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center text-muted">No hay integraciones para mostrar.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

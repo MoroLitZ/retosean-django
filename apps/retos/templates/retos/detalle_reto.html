@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ reto }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+    <div>
+      <h1 class="h3">{{ reto.titulo|default:'Borrador sin titulo' }}</h1>
+      <p class="text-muted mb-0">{{ reto.get_tipo_display }} · {{ reto.get_estado_display }}{% if reto.consecutivo %} · #{{ reto.consecutivo }}{% endif %}</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      {% if user.rol == 'EMPRESA' and reto.puede_editar_empresa %}
+      <a href="{% url 'retos:editar' reto.pk %}" class="btn btn-outline-primary">Editar</a>
+      <a href="{% url 'retos:enviar_revision' reto.pk %}" class="btn btn-primary">Enviar a revision</a>
+      <a href="{% url 'retos:eliminar' reto.pk %}" class="btn btn-outline-danger">Eliminar</a>
+      {% endif %}
+      {% if user.is_superuser or user.rol == 'ADMIN' %}
+      <a href="{% url 'retos:admin_revisar' reto.pk %}" class="btn btn-primary">Revisar</a>
+      <a href="{% url 'retos:admin_cambiar_estado' reto.pk %}" class="btn btn-outline-primary">Cambiar estado</a>
+      {% endif %}
+      {% if user.is_superuser or user.rol == 'ADMIN' or user.rol == 'PROFESOR' %}
+      <a href="{% url 'retos:seguimientos' reto.pk %}" class="btn btn-outline-secondary">Seguimiento</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if reto.comentarios_revision %}
+  <div class="alert alert-info">{{ reto.comentarios_revision }}</div>
+  {% endif %}
+
+  <div class="row g-3">
+    <div class="col-md-8">
+      <div class="card">
+        <div class="card-body">
+          <h2 class="h5">Descripcion</h2>
+          <p>{{ reto.descripcion|linebreaksbr|default:'-' }}</p>
+          <h2 class="h5">Criterios de evaluacion</h2>
+          <p>{{ reto.criterios_evaluacion|linebreaksbr|default:'-' }}</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card">
+        <div class="card-body">
+          <p><strong>Empresa:</strong> {{ reto.empresa.get_full_name|default:reto.empresa.username }}</p>
+          <p><strong>Area:</strong> {{ reto.area|default:'-' }}</p>
+          <p><strong>Nivel:</strong> {{ reto.nivel_academico|default:'-' }}</p>
+          <p><strong>Inicio:</strong> {{ reto.fecha_inicio_tentativa|default:'-' }}</p>
+          <p><strong>Fin:</strong> {{ reto.fecha_fin_tentativa|default:'-' }}</p>
+          <p><strong>Limite postulacion:</strong> {{ reto.fecha_limite_postulacion|default:'-' }}</p>
+          <p><strong>Premios:</strong> {{ reto.premios|linebreaksbr|default:'-' }}</p>
+          {% if reto.documento_soporte %}
+          <a href="{{ reto.documento_soporte.url }}" class="btn btn-sm btn-outline-secondary">Documento soporte</a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="h5 mt-4">Historial de estados</h2>
+  <div class="table-responsive">
+    <table class="table table-sm">
+      <thead><tr><th>Fecha</th><th>Estado anterior</th><th>Estado nuevo</th><th>Usuario</th><th>Comentario</th></tr></thead>
+      <tbody>
+        {% for item in reto.historial_estados.all %}
+        <tr>
+          <td>{{ item.fecha|date:'Y-m-d H:i' }}</td>
+          <td>{{ item.estado_anterior|default:'-' }}</td>
+          <td>{{ item.get_estado_nuevo_display }}</td>
+          <td>{{ item.realizado_por|default:'-' }}</td>
+          <td>{{ item.comentario|default:'-' }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-muted">Sin cambios registrados.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
