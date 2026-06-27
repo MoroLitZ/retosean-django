@@ -1,84 +1,152 @@
 {% extends 'base.html' %}
+{% block title %}Mi Perfil{% endblock %}
+{% block page_title %}Mi Perfil{% endblock %}
+
 {% block content %}
-<div class="container mt-5">
-  <div class="row justify-content-center">
-    <div class="col-md-6">
+<div class="container-fluid px-0" style="max-width: 860px;">
+  
+  <!-- ⚠️ Bloque de Mensajes / Alertas Flashes (Lógica HEAD) -->
+  {% if messages %}
+    <div class="row mb-4">
+      <div class="col-12">
+        {% for message in messages %}
+          <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} alert-dismissible fade show text-start shadow-sm mb-2" role="alert">
+            ⚠️ {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="row g-4">
+    <!-- Columna Izquierda: Tarjeta de Identificación Rápida -->
+    <div class="col-md-4">
+      <div class="card-panel p-4 text-center">
+        <!-- Avatar generado dinámicamente -->
+        <div class="mx-auto mb-3 d-flex align-items-center justify-content-center"
+             style="width: 80px; height: 80px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 1.8rem; font-weight: 800; letter-spacing: -1px;">
+          {% if user.first_name %}{{ user.first_name|first|upper }}{{ user.last_name|first|upper }}{% else %}A{% endif %}
+        </div>
+        
+        <!-- Saludo condicional adaptado según el rol -->
+        <h5 style="font-weight: 800; color: #111827; margin-bottom: 0.2rem;">
+          {% if user.is_staff or user.is_superuser %}
+            Administrador Principal
+          {% else %}
+            {{ nombre_completo }}
+          {% endif %}
+        </h5>
+        <p style="color: #6b7280; font-size: 0.875rem; margin-bottom: 1rem;">@{{ user.username }}</p>
+        
+        <!-- Badge de rol dinámico -->
+        <div class="mb-3">
+          {% if user.is_staff or user.is_superuser %}
+            <span class="badge bg-danger text-white px-3 py-2" style="border-radius: 6px; font-size: 0.8rem;">
+              <i class="bi bi-shield-lock me-1"></i> Admin / Staff
+            </span>
+          {% else %}
+            <span class="badge px-3 py-2" style="background: var(--accent); border-radius: 6px; font-size: 0.8rem;">
+              <i class="bi bi-person-badge me-1"></i> {{ rol_usuario }}
+            </span>
+          {% endif %}
+        </div>
+        
+        <div>
+          <a href="{% url 'usuarios:logout' %}" class="btn btn-outline-danger btn-sm w-100">
+            <i class="bi bi-box-arrow-left me-1"></i> Cerrar Sesión Segura
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Columna Derecha: Detalles del perfil y Acciones Dinámicas -->
+    <div class="col-md-8">
       
-      {% if messages %}
-        <div class="mb-4">
-          {% for message in messages %}
-            <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} alert-dismissible fade show text-start shadow-sm" role="alert">
-              ⚠️ {{ message }}
-              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      <!-- Panel de Información Personal -->
+      <div class="card-panel mb-3">
+        <div class="card-panel-header">
+          <span><i class="bi bi-person me-2 text-muted"></i>Información Personal</span>
+          <a href="#" class="btn btn-sm btn-outline-secondary" style="font-size: 0.78rem;">
+            <i class="bi bi-pencil me-1"></i>Editar
+          </a>
+        </div>
+        <div class="p-4">
+          <div class="row g-3">
+            <div class="col-sm-6">
+              <label style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #9ca3af;">Nombre o Razón Social</label>
+              <p style="font-size: 0.9rem; color: #111827; margin: 0.2rem 0 0; font-weight: 500;">
+                {% if user.is_staff or user.is_superuser %}
+                  {% if user.get_full_name %}{{ user.get_full_name }}{% else %}Administrador Principal{% endif %}
+                {% else %}
+                  {{ nombre_completo }}
+                {% endif %}
+              </p>
             </div>
-          {% endfor %}
+            <div class="col-sm-6">
+              <label style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #9ca3af;">Nombre de usuario</label>
+              <p style="font-size: 0.9rem; color: #111827; margin: 0.2rem 0 0; font-weight: 500;">{{ user.username }}</p>
+            </div>
+            <div class="col-sm-6">
+              <label style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #9ca3af;">Correo electrónico</label>
+              <p style="font-size: 0.9rem; color: #111827; margin: 0.2rem 0 0; font-weight: 500;">{{ user.email|default:"No registrado" }}</p>
+            </div>
+            <div class="col-sm-6">
+              <label style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #9ca3af;">Rol en la plataforma</label>
+              <p style="font-size: 0.9rem; color: #111827; margin: 0.2rem 0 0; font-weight: 500;">
+                {% if user.is_staff or user.is_superuser %}Administrador{% else %}{{ rol_usuario }}{% endif %}
+              </p>
+            </div>
+            <div class="col-sm-6">
+              <label style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #9ca3af;">Miembro desde</label>
+              <p style="font-size: 0.9rem; color: #111827; margin: 0.2rem 0 0; font-weight: 500;">{{ user.date_joined|date:"d/m/Y" }}</p>
+            </div>
+            <div class="col-sm-6">
+              <label style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #9ca3af;">Estado de Cuenta</label>
+              <p style="margin: 0.2rem 0 0;">
+                <span class="badge bg-success">Activo</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 🚀 Panel de Acciones Dinámicas por Rol (Lógica de negocio de HEAD) -->
+      {% if user.is_staff or user.is_superuser or user.rol == 'EMPRESA' %}
+        <div class="card-panel mb-3">
+          <div class="card-panel-header"><i class="bi bi-rocket-takeoff me-2 text-muted"></i>Acciones de Panel</div>
+          <div class="p-4">
+            {% if user.is_staff or user.is_superuser %}
+              <div class="d-grid">
+                <a href="/admin/" target="_blank" class="btn btn-dark btn-md fw-semibold text-start">
+                  <i class="bi bi-sliders me-2"></i> Ir al Backend de Django
+                </a>
+              </div>
+            {% elif user.rol == 'EMPRESA' %}
+              <div class="d-grid">
+                <a href="/usuarios/empresa/documentos/" class="btn btn-primary btn-md fw-semibold text-start">
+                  <i class="bi bi-file-earmark-text me-2"></i> Gestionar Documentación Legal
+                </a>
+              </div>
+            {% endif %}
+          </div>
         </div>
       {% endif %}
 
-      <div class="card shadow p-5 text-center border-0">
-        
-        <!-- 💻 Saludo adaptado si es Administrador o Usuario Regular -->
-        {% if user.is_staff or user.is_superuser %}
-          <h2 class="fw-bold text-primary">¡Panel de Administración!</h2>
-          <p class="lead text-muted mt-2">Has ingresado como el usuario <strong>{{ user.username }}</strong>.</p>
-        {% else %}
-          {% if user.rol == 'EMPRESA' %}
-            <h2 class="fw-bold">¡Bienvenido al Panel,<br><span class="text-success">{{ nombre_completo }}</span>!</h2>
-          {% else %}
-            <h2 class="fw-bold">¡Bienvenido al Panel, {{ user.username }}!</h2>
-          {% endif %}
-          <p class="lead text-muted mt-2">Has ingresado correctamente al sistema.</p>
-        {% endif %}
-        
-        <!-- 🏷️ Asignación de Roles e Identificadores Visuales -->
-        <div class="my-4">
-          {% if user.is_staff or user.is_superuser %}
-            <span class="fs-6 text-muted">Nivel de Acceso:</span>
-            <div class="mt-1">
-              <span class="badge bg-danger text-white fs-5 px-4 py-2">Administrador / Staff</span>
+      <!-- Panel de Seguridad -->
+      <div class="card-panel">
+        <div class="card-panel-header"><i class="bi bi-shield-lock me-2 text-muted"></i>Seguridad</div>
+        <div class="p-4">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <p style="font-weight: 600; color: #374151; font-size: 0.875rem; margin: 0;">Contraseña</p>
+              <p style="font-size: 0.8rem; color: #9ca3af; margin: 0.1rem 0 0;">••••••••••••</p>
             </div>
-          {% else %}
-            <span class="fs-6 text-muted">
-              {% if user.rol == 'EMPRESA' %}Eres una{% else %}Eres un{% endif %}
-            </span>
-            <div class="mt-1">
-              <span class="badge bg-info text-dark fs-5 px-4 py-2">{{ rol_usuario }}</span>
-            </div>
-          {% endif %}
-        </div>
-        
-        <!-- 📇 Información de la Cuenta -->
-        <div class="card bg-light p-3 border-0 rounded text-start mb-4">
-          <p class="mb-1">
-            <strong>Nombre / Razón Social:</strong> 
-            {% if user.is_staff or user.is_superuser %}
-              {% if user.get_full_name %}{{ user.get_full_name }}{% else %}Administrador Principal{% endif %}
-            {% else %}
-              {{ nombre_completo }}
-            {% endif %}
-          </p>
-          <p class="mb-0"><strong>Correo electrónico:</strong> {{ user.email }}</p>
-        </div>
-
-        <!-- 🚀 Acciones Dinámicas según el Tipo de Cuenta -->
-        {% if user.is_staff or user.is_superuser %}
-          <div class="d-grid gap-2 mb-3">
-              <a href="/admin/" target="_blank" class="btn btn-dark btn-lg fw-semibold">
-                  ⚙️ Ir al Backend de Django
-              </a>
-              <!-- Aquí puedes agregar a futuro el enlace al panel de revisión de documentos de alumnos -->
+            <a href="#" class="btn btn-sm btn-outline-secondary" style="font-size: 0.78rem;">Cambiar</a>
           </div>
-        {% elif user.rol == 'EMPRESA' %}
-            <div class="d-grid gap-2 mb-3">
-                <a href="/usuarios/empresa/documentos/" class="btn btn-primary btn-lg fw-semibold">
-                    📄 Gestionar Documentación Legal
-                </a>
-            </div>
-        {% endif %}
-        
-        <hr>
-        <a href="{% url 'usuarios:logout' %}" class="btn btn-outline-danger mt-2">Cerrar Sesión Segura</a>
+        </div>
       </div>
+
     </div>
   </div>
 </div>

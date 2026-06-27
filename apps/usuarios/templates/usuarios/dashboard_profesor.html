@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard Profesor{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<!-- Encabezado -->
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h2 class="page-title">Bienvenido, {{ user.get_full_name|default:user.username }}</h2>
+    <p class="page-subtitle">Gestiona tus cursos y retos vinculados</p>
+  </div>
+  <span class="badge px-3 py-2" style="background:#198754; font-size: 0.8rem; border-radius: 8px;">
+    <i class="bi bi-journal-text me-1"></i> Profesor
+  </span>
+</div>
+
+<!-- Estadísticas -->
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-xl-3">
+    <div class="card-stat">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="stat-icon-box" style="background: #dcfce7;"><i class="bi bi-journal-text" style="color:#16a34a;"></i></div>
+        <span class="badge bg-light text-muted">Activos</span>
+      </div>
+      <div style="font-size: 2rem; font-weight: 800; color: #111827; line-height: 1;">0</div>
+      <div style="font-size: 0.8rem; color: #6b7280; margin-top: 0.3rem;">Cursos activos</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card-stat">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="stat-icon-box" style="background: #fef3c7;"><i class="bi bi-trophy-fill" style="color:#d97706;"></i></div>
+        <span class="badge bg-light text-muted">Vinculados</span>
+      </div>
+      <div style="font-size: 2rem; font-weight: 800; color: #111827; line-height: 1;">0</div>
+      <div style="font-size: 0.8rem; color: #6b7280; margin-top: 0.3rem;">Retos asignados</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card-stat">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="stat-icon-box" style="background: #dbeafe;"><i class="bi bi-people-fill" style="color:#1d4ed8;"></i></div>
+        <span class="badge bg-light text-muted">Total</span>
+      </div>
+      <div style="font-size: 2rem; font-weight: 800; color: #111827; line-height: 1;">0</div>
+      <div style="font-size: 0.8rem; color: #6b7280; margin-top: 0.3rem;">Mis estudiantes</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card-stat">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="stat-icon-box" style="background: #fee2e2;"><i class="bi bi-star-fill" style="color:#dc2626;"></i></div>
+        <span class="badge bg-light text-muted">Pendientes</span>
+      </div>
+      <div style="font-size: 2rem; font-weight: 800; color: #111827; line-height: 1;">0</div>
+      <div style="font-size: 0.8rem; color: #6b7280; margin-top: 0.3rem;">Evaluaciones por hacer</div>
+    </div>
+  </div>
+</div>
+
+<!-- Paneles -->
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card-panel">
+      <div class="card-panel-header">
+        <span><i class="bi bi-trophy me-2 text-muted"></i>Retos Vinculados a mis Cursos</span>
+        <a href="#" class="btn btn-sm btn-outline-secondary" style="font-size: 0.78rem;">Ver todos</a>
+      </div>
+      <div class="p-4 text-center text-muted py-5">
+        <i class="bi bi-trophy" style="font-size: 2.5rem; opacity: 0.3;"></i>
+        <p class="mt-2 mb-1" style="font-size: 0.875rem;">No tienes retos vinculados aún</p>
+        <p style="font-size: 0.8rem; color: #9ca3af;">Los retos aparecerán aquí cuando sean asignados a tus cursos</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card-panel mb-3">
+      <div class="card-panel-header"><i class="bi bi-folder-check me-2 text-muted"></i>Entregables Recientes</div>
+      <div class="p-3 text-center text-muted py-4">
+        <i class="bi bi-folder2" style="font-size: 2rem; opacity: 0.3;"></i>
+        <p class="mt-1 mb-0" style="font-size: 0.8rem;">Sin entregables recientes</p>
+      </div>
+    </div>
+    <div class="card-panel">
+      <div class="card-panel-header"><i class="bi bi-lightning me-2 text-muted"></i>Acciones Rápidas</div>
+      <div class="p-3 d-grid gap-2">
+        <a href="#" class="btn btn-sm" style="background: #f3f4f6; text-align: left; font-size: 0.85rem;">
+          <i class="bi bi-journal-plus me-2 text-muted"></i>Registrar curso
+        </a>
+        <a href="#" class="btn btn-sm" style="background: #f3f4f6; text-align: left; font-size: 0.85rem;">
+          <i class="bi bi-people me-2 text-muted"></i>Ver mis estudiantes
+        </a>
+        <a href="#" class="btn btn-sm" style="background: #f3f4f6; text-align: left; font-size: 0.85rem;">
+          <i class="bi bi-star me-2 text-muted"></i>Ir a evaluaciones
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
