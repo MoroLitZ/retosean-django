@@ -21,9 +21,10 @@
 <div class="auth-card" style="max-width: 660px;">
   <div class="p-4 p-md-5">
 
+    <!-- Encabezado Institucional -->
     <div class="d-flex align-items-center gap-3 mb-4">
       <div>
-        <h2 style="font-size:1.5rem;font-weight:800;color:#111827;margin-bottom:.2rem;">Registro Académico</h2>
+        <h2 style="font-size:1.5rem;font-weight:800;color:#111827;margin-bottom:.2rem;">🎓 Registro Académico</h2>
         <p style="color:#6b7280;font-size:.875rem;margin:0;">Comunidad EAN — estudiantes y profesores</p>
       </div>
       <div class="ms-auto">
@@ -33,107 +34,140 @@
       </div>
     </div>
 
+    <!-- Botón de Escape -->
     <div class="mb-3">
       <a href="{% url 'usuarios:registro' %}" style="font-size:.82rem;color:#6b7280;text-decoration:none;">
         <i class="bi bi-arrow-left me-1"></i>Volver a selección de perfil
       </a>
     </div>
 
+    <!-- Errores Globales -->
     {% if form.non_field_errors %}
       <div class="alert alert-danger py-2 mb-3">
-        {% for e in form.non_field_errors %}<div><i class="bi bi-exclamation-circle me-1"></i>{{ e }}</div>{% endfor %}
+        {% for e in form.non_field_errors %}
+          <div><i class="bi bi-exclamation-circle me-1"></i>{{ e }}</div>
+        {% endfor %}
       </div>
     {% endif %}
 
     <form method="POST" novalidate>
       {% csrf_token %}
 
+      <!-- SECCIÓN 1: Datos Personales -->
       <div class="section-divider"><i class="bi bi-person me-1"></i>Datos Personales</div>
       <div class="row g-3 mb-2">
         <div class="col-sm-6">
-          <label class="form-label">Nombre</label>
+          <label class="form-label fw-semibold">Nombre</label>
           {{ form.first_name }}
-          {% if form.first_name.errors %}<ul class="errorlist">{% for e in form.first_name.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+          {% if form.first_name.errors %}
+            <ul class="errorlist">{% for e in form.first_name.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+          {% endif %}
         </div>
         <div class="col-sm-6">
-          <label class="form-label">Apellido</label>
+          <label class="form-label fw-semibold">Apellido</label>
           {{ form.last_name }}
-          {% if form.last_name.errors %}<ul class="errorlist">{% for e in form.last_name.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+          {% if form.last_name.errors %}
+            <ul class="errorlist">{% for e in form.last_name.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+          {% endif %}
         </div>
         <div class="col-12">
-          <label class="form-label">Correo institucional</label>
+          <label class="form-label fw-semibold">Correo institucional</label>
           <div class="input-group">
             <span class="input-group-text"><i class="bi bi-envelope"></i></span>
             {{ form.email }}
           </div>
           <span class="helptext">Debe terminar en @universidadean.edu.co</span>
-          {% if form.email.errors %}<ul class="errorlist">{% for e in form.email.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+          {% if form.email.errors %}
+            <ul class="errorlist">{% for e in form.email.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+          {% endif %}
         </div>
       </div>
 
+      <!-- SECCIÓN 2: Credenciales de Plataforma -->
       <div class="section-divider"><i class="bi bi-shield-lock me-1"></i>Credenciales</div>
       <div class="row g-3 mb-2">
         <div class="col-12">
-          <label class="form-label">Usuario</label>
+          <label class="form-label fw-semibold">Usuario</label>
           <div class="input-group">
             <span class="input-group-text"><i class="bi bi-at"></i></span>
             {{ form.username }}
           </div>
-          {% if form.username.help_text %}<span class="helptext">{{ form.username.help_text }}</span>{% endif %}
-          {% if form.username.errors %}<ul class="errorlist">{% for e in form.username.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+          {% if form.username.help_text %}
+            <span class="helptext">{{ form.username.help_text }}</span>
+          {% endif %}
+          {% if form.username.errors %}
+            <ul class="errorlist">{% for e in form.username.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+          {% endif %}
         </div>
         <div class="col-sm-6">
-          <label class="form-label">Contraseña</label>
+          <label class="form-label fw-semibold">Contraseña</label>
           {{ form.password1 }}
-          {% if form.password1.errors %}<ul class="errorlist">{% for e in form.password1.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+          {% if form.password1.errors %}
+            <ul class="errorlist">{% for e in form.password1.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+          {% endif %}
         </div>
         <div class="col-sm-6">
-          <label class="form-label">Confirmar contraseña</label>
+          <label class="form-label fw-semibold">Confirmar contraseña</label>
           {{ form.password2 }}
-          {% if form.password2.errors %}<ul class="errorlist">{% for e in form.password2.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+          {% if form.password2.errors %}
+            <ul class="errorlist">{% for e in form.password2.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+          {% endif %}
         </div>
       </div>
 
+      <!-- SECCIÓN 3: Segmentación por Rol Académico -->
       <div class="section-divider"><i class="bi bi-mortarboard me-1"></i>Rol Académico</div>
       <div class="mb-3">
-        <label class="form-label">Soy...</label>
+        <label class="form-label fw-semibold">Soy...</label>
         {{ form.rol }}
-        {% if form.rol.errors %}<ul class="errorlist">{% for e in form.rol.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+        {% if form.rol.errors %}
+          <ul class="errorlist">{% for e in form.rol.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+        {% endif %}
       </div>
 
-      <!-- Campos Estudiante -->
-      <div id="bloque-estudiante" class="role-block">
-        <div class="row g-3 mb-2">
+      <!-- 🧑‍🎓 Campos Dinámicos: Estudiante -->
+      <div id="bloque-estudiante" class="role-block p-3 bg-light rounded border mb-3">
+        <h5 class="text-primary mb-3" style="font-size: 0.95rem; font-weight: 700;"><i class="bi bi-journal-bookmark me-1"></i> Datos de Estudiante</h5>
+        <div class="row g-3">
           <div class="col-sm-8">
-            <label class="form-label">Carrera</label>
+            <label class="form-label fw-semibold">Carrera</label>
             {{ form.carrera }}
-            {% if form.carrera.errors %}<ul class="errorlist">{% for e in form.carrera.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+            {% if form.carrera.errors %}
+              <ul class="errorlist">{% for e in form.carrera.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
           </div>
           <div class="col-sm-4">
-            <label class="form-label">Semestre</label>
+            <label class="form-label fw-semibold">Semestre</label>
             {{ form.semestre }}
-            {% if form.semestre.errors %}<ul class="errorlist">{% for e in form.semestre.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+            {% if form.semestre.errors %}
+              <ul class="errorlist">{% for e in form.semestre.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
           </div>
         </div>
       </div>
 
-      <!-- Campos Profesor -->
-      <div id="bloque-profesor" class="role-block">
-        <div class="row g-3 mb-2">
+      <!-- 👨‍🏫 Campos Dinámicos: Profesor -->
+      <div id="bloque-profesor" class="role-block p-3 bg-light rounded border mb-3">
+        <h5 class="text-primary mb-3" style="font-size: 0.95rem; font-weight: 700;"><i class="bi bi-briefcase me-1"></i> Datos de Profesor</h5>
+        <div class="row g-3">
           <div class="col-sm-6">
-            <label class="form-label">Facultad</label>
+            <label class="form-label fw-semibold">Facultad</label>
             {{ form.facultad }}
-            {% if form.facultad.errors %}<ul class="errorlist">{% for e in form.facultad.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+            {% if form.facultad.errors %}
+              <ul class="errorlist">{% for e in form.facultad.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
           </div>
           <div class="col-sm-6">
-            <label class="form-label">Especialidad</label>
+            <label class="form-label fw-semibold">Especialidad</label>
             {{ form.especialidad }}
-            {% if form.especialidad.errors %}<ul class="errorlist">{% for e in form.especialidad.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+            {% if form.especialidad.errors %}
+              <ul class="errorlist">{% for e in form.especialidad.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
           </div>
         </div>
       </div>
 
-      <button type="submit" class="btn btn-auth w-100 mt-3">
+      <button type="submit" class="btn btn-auth w-100 btn-lg mt-3">
         <i class="bi bi-person-plus me-2"></i>Registrarme como EAN
       </button>
     </form>
@@ -141,7 +175,7 @@
     <hr style="border-color:#f3f4f6;margin:1.5rem 0;">
     <p class="text-center mb-0" style="font-size:.875rem;color:#6b7280;">
       ¿Ya tienes cuenta?
-      <a href="{% url 'usuarios:login' %}" class="text-link-orange ms-1">Inicia sesión</a>
+      <a href="{% url 'usuarios:login' %}" class="text-link-orange ms-1 fw-semibold">Inicia sesión</a>
     </p>
   </div>
 </div>
@@ -149,17 +183,30 @@
 
 {% block extra_js %}
 <script>
-  const selectRol     = document.getElementById('select-rol');
-  const bloqueEstud   = document.getElementById('bloque-estudiante');
-  const bloqueProf    = document.getElementById('bloque-profesor');
+  document.addEventListener("DOMContentLoaded", function() {
+    // Buscar por ID o por atributo Name si Django autogenera el campo sin el id esperado
+    const selectRol     = document.getElementById('select-rol') || document.querySelector('select[name="rol"]');
+    const bloqueEstud   = document.getElementById('bloque-estudiante');
+    const bloqueProf    = document.getElementById('bloque-profesor');
 
-  function toggleBloques() {
-    const val = selectRol?.value;
-    bloqueEstud.style.display = (val === 'ESTUDIANTE') ? 'block' : 'none';
-    bloqueProf.style.display  = (val === 'PROFESOR')   ? 'block' : 'none';
-  }
+    function toggleBloques() {
+      const val = selectRol?.value;
+      if (val === 'ESTUDIANTE') {
+        bloqueEstud.style.display = 'block';
+        bloqueProf.style.display  = 'none';
+      } else if (val === 'PROFESOR') {
+        bloqueEstud.style.display = 'none';
+        bloqueProf.style.display  = 'block';
+      } else {
+        bloqueEstud.style.display = 'none';
+        bloqueProf.style.display  = 'none';
+      }
+    }
 
-  selectRol?.addEventListener('change', toggleBloques);
-  toggleBloques();
+    if (selectRol) {
+      selectRol.addEventListener('change', toggleBloques);
+      toggleBloques(); // Inicialización en carga por si vienen datos del backend (post-error)
+    }
+  });
 </script>
 {% endblock %}

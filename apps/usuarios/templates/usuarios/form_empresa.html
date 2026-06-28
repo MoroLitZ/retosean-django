@@ -19,7 +19,7 @@
 <div class="auth-card" style="max-width: 820px;">
   <div class="row g-0">
 
-    <!-- Panel izquierdo -->
+    <!-- Panel Izquierdo: Informativo e Institucional -->
     <div class="col-md-5 auth-panel-left">
       <div>
         <div class="brand-logo mb-2">
@@ -61,7 +61,7 @@
       <p style="color:rgba(255,255,255,.3);font-size:.72rem;">© 2026 Universidad EAN</p>
     </div>
 
-    <!-- Panel derecho -->
+    <!-- Panel Derecho: Formulario de Interacción -->
     <div class="col-md-7 auth-panel-right">
 
       <div class="mb-3">
@@ -70,69 +70,90 @@
         </a>
       </div>
 
-      <h2 style="font-size:1.4rem;font-weight:800;color:#111827;margin-bottom:.25rem;">Registro de Empresa</h2>
-      <p style="color:#6b7280;font-size:.875rem;margin-bottom:1.5rem;">Crea la cuenta institucional de tu organización.</p>
+      <h2 style="font-size:1.4rem;font-weight:800;color:#111827;margin-bottom:.25rem;">🏢 Registro de Empresa</h2>
+      <p style="color:#6b7280;font-size:.875rem;margin-bottom:1.5rem;">Crea la cuenta institucional de tu organización para proponer retos comerciales.</p>
 
+      <!-- Errores Globales del Formulario -->
       {% if form.non_field_errors %}
         <div class="alert alert-danger py-2 mb-3">
-          {% for e in form.non_field_errors %}<div><i class="bi bi-exclamation-circle me-1"></i>{{ e }}</div>{% endfor %}
+          {% for e in form.non_field_errors %}
+            <div><i class="bi bi-exclamation-circle me-1"></i>{{ e }}</div>
+          {% endfor %}
         </div>
       {% endif %}
 
       <form method="POST" novalidate>
         {% csrf_token %}
 
+        <!-- SECCIÓN 1: Datos Organizacionales -->
         <div class="section-divider"><i class="bi bi-building me-1"></i>Datos de la Empresa</div>
         <div class="row g-3 mb-2">
           <div class="col-sm-4">
-            <label class="form-label">NIT</label>
+            <label class="form-label fw-semibold">NIT</label>
             {{ form.nit }}
-            {% if form.nit.errors %}<ul class="errorlist">{% for e in form.nit.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+            {% if form.nit.errors %}
+              <ul class="errorlist">{% for e in form.nit.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
           </div>
           <div class="col-sm-8">
-            <label class="form-label">Razón Social</label>
+            <label class="form-label fw-semibold">Razón Social</label>
             {{ form.razon_social }}
-            {% if form.razon_social.errors %}<ul class="errorlist">{% for e in form.razon_social.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+            {% if form.razon_social.errors %}
+              <ul class="errorlist">{% for e in form.razon_social.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
           </div>
           <div class="col-12">
-            <label class="form-label">Sector Industrial</label>
+            <label class="form-label fw-semibold">Sector Industrial</label>
             {{ form.sector_industrial }}
-            {% if form.sector_industrial.errors %}<ul class="errorlist">{% for e in form.sector_industrial.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+            {% if form.sector_industrial.errors %}
+              <ul class="errorlist">{% for e in form.sector_industrial.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
           </div>
         </div>
 
+        <!-- SECCIÓN 2: Credenciales de Acceso -->
         <div class="section-divider"><i class="bi bi-shield-lock me-1"></i>Acceso a la Plataforma</div>
         <div class="row g-3 mb-2">
           <div class="col-12">
-            <label class="form-label">Usuario Corporativo (ID)</label>
+            <label class="form-label fw-semibold">Usuario Corporativo (ID)</label>
             <div class="input-group">
               <span class="input-group-text"><i class="bi bi-at"></i></span>
               {{ form.username }}
             </div>
-            {% if form.username.help_text %}<span class="helptext">{{ form.username.help_text }}</span>{% endif %}
-            {% if form.username.errors %}<ul class="errorlist">{% for e in form.username.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+            {% if form.username.help_text %}
+              <span class="helptext">{{ form.username.help_text }}</span>
+            {% endif %}
+            {% if form.username.errors %}
+              <ul class="errorlist">{% for e in form.username.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
           </div>
           <div class="col-12">
-            <label class="form-label">Correo Corporativo</label>
+            <label class="form-label fw-semibold">Correo Corporativo</label>
             <div class="input-group">
               <span class="input-group-text"><i class="bi bi-envelope"></i></span>
               {{ form.email }}
             </div>
-            {% if form.email.errors %}<ul class="errorlist">{% for e in form.email.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+            {% if form.email.errors %}
+              <ul class="errorlist">{% for e in form.email.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
           </div>
           <div class="col-sm-6">
-            <label class="form-label">Contraseña</label>
+            <label class="form-label fw-semibold">Contraseña</label>
             {{ form.password1 }}
-            {% if form.password1.errors %}<ul class="errorlist">{% for e in form.password1.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+            {% if form.password1.errors %}
+              <ul class="errorlist">{% for e in form.password1.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
           </div>
           <div class="col-sm-6">
-            <label class="form-label">Confirmar contraseña</label>
+            <label class="form-label fw-semibold">Confirmar contraseña</label>
             {{ form.password2 }}
-            {% if form.password2.errors %}<ul class="errorlist">{% for e in form.password2.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+            {% if form.password2.errors %}
+              <ul class="errorlist">{% for e in form.password2.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
           </div>
         </div>
 
-        <button type="submit" class="btn btn-auth w-100 mt-3">
+        <button type="submit" class="btn btn-auth w-100 btn-lg mt-3">
           <i class="bi bi-building-add me-2"></i>Registrar Organización
         </button>
       </form>
@@ -140,7 +161,7 @@
       <hr style="border-color:#f3f4f6;margin:1.5rem 0;">
       <p class="text-center mb-0" style="font-size:.875rem;color:#6b7280;">
         ¿Ya tienes cuenta?
-        <a href="{% url 'usuarios:login' %}" class="text-link-orange ms-1">Inicia sesión</a>
+        <a href="{% url 'usuarios:login' %}" class="text-link-orange ms-1 fw-semibold">Inicia sesión</a>
       </p>
 
     </div>

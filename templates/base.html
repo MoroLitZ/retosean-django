@@ -287,7 +287,10 @@
           <a href="{% url 'usuarios:lista_empresas' %}" class="nav-link {% if request.resolver_match.url_name == 'lista_empresas' %}active{% endif %}"><i class="bi bi-building"></i> Empresas</a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:lista_retos_admin' %}" class="nav-link {% if request.resolver_match.url_name == 'lista_retos_admin' %}active{% endif %}"><i class="bi bi-trophy"></i> Retos</a>
+          <a href="{% url 'retos:admin_panel' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'admin_panel' %}active{% endif %}"><i class="bi bi-trophy"></i> Retos</a>
+        </li>
+        <li class="nav-item">
+          <a href="{% url 'retos:admin_integraciones' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'admin_integraciones' %}active{% endif %}"><i class="bi bi-diagram-3"></i> Integraciones</a>
         </li>
         <li class="nav-item">
           <a href="{% url 'usuarios:reportes_admin' %}" class="nav-link {% if request.resolver_match.url_name == 'reportes_admin' %}active{% endif %}"><i class="bi bi-bar-chart-line"></i> Reportes</a>
@@ -305,10 +308,10 @@
           </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:publicar_reto' %}" class="nav-link {% if request.resolver_match.url_name == 'publicar_reto' %}active{% endif %}"><i class="bi bi-plus-circle"></i> Publicar Reto</a>
+          <a href="{% url 'retos:crear' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'crear' %}active{% endif %}"><i class="bi bi-plus-circle"></i> Publicar Reto</a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:mis_retos_empresa' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_retos_empresa' %}active{% endif %}"><i class="bi bi-trophy"></i> Mis Retos</a>
+          <a href="{% url 'retos:mis_retos' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'mis_retos' %}active{% endif %}"><i class="bi bi-trophy"></i> Mis Retos</a>
         </li>
         <li class="nav-item">
           <a href="{% url 'usuarios:postulaciones_empresa' %}" class="nav-link {% if request.resolver_match.url_name == 'postulaciones_empresa' %}active{% endif %}"><i class="bi bi-person-check"></i> Postulaciones</a>
@@ -332,7 +335,10 @@
           <a href="{% url 'usuarios:mis_cursos' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_cursos' %}active{% endif %}"><i class="bi bi-journal-text"></i> Mis Cursos</a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:retos_vinculados' %}" class="nav-link {% if request.resolver_match.url_name == 'retos_vinculados' %}active{% endif %}"><i class="bi bi-trophy"></i> Retos Vinculados</a>
+          <a href="{% url 'retos:mis_integraciones' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'mis_integraciones' %}active{% endif %}"><i class="bi bi-trophy"></i> Retos Vinculados</a>
+        </li>
+        <li class="nav-item">
+          <a href="{% url 'retos:crear_integracion' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'crear_integracion' %}active{% endif %}"><i class="bi bi-diagram-3"></i> Integrar Reto</a>
         </li>
         <li class="nav-item">
           <a href="{% url 'usuarios:mis_estudiantes' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_estudiantes' %}active{% endif %}"><i class="bi bi-people"></i> Mis Estudiantes</a>
