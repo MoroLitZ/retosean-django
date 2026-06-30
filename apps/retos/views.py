@@ -56,6 +56,8 @@ def _puede_ver_reto(user, reto):
         reto.esta_aprobado_o_activo or reto.integraciones.filter(profesor=user).exists()
     ):
         return True
+    if user.rol == 'ESTUDIANTE' and reto.esta_aprobado_o_activo:
+        return True
     return False
 
 
@@ -135,7 +137,7 @@ def eliminar_reto(request, pk):
     return render(request, 'retos/confirmar_eliminar.html', {'reto': reto})
 
 
-@rol_requerido('EMPRESA', 'ADMIN', 'PROFESOR')
+@rol_requerido('EMPRESA', 'ADMIN', 'PROFESOR', 'ESTUDIANTE')
 def detalle_reto(request, pk):
     reto = get_object_or_404(Reto.objects.select_related('empresa'), pk=pk)
     if not _puede_ver_reto(request.user, reto):

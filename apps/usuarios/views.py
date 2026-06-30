@@ -1,9 +1,11 @@
-from django.shortcuts import render, redirect
-from django.contrib.auth import login, logout
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth import login, logout, get_user_model
 from django.contrib import messages
-from .forms import LoginForm, RegistroEmpresaForm, RegistroAcademicoForm, CargarDocumentoForm
+from .forms import LoginForm, RegistroEmpresaForm, RegistroAcademicoForm, CargarDocumentoForm, EntregableForm
 from django.contrib.auth.decorators import login_required
-from .models import DocumentoEmpresa, Empresa
+from .models import DocumentoEmpresa, Empresa, Usuario, PostulacionReto, Entregable
+from apps.retos.models import Reto
+from apps.retos.views import rol_requerido
 
 
 def _url_para_usuario(user):
@@ -65,8 +67,6 @@ def vista_registro(request):
 @login_required(login_url='usuarios:login') # Se protege la vista para que únicamente los usuarios logeados puedan entrar
 # la vista donde el usuario va a ir directamente despues del login o el registro
 def vista_perfil(request):
-    usuario = request.user
-    nombre_completo = usuario.get_full_name().strip() or 'Sin nombre registrado'
     usuario = request.user
     nombre_completo = usuario.get_full_name().strip() or 'Sin nombre registrado'
     context = {
@@ -148,6 +148,39 @@ def panel_documentos_empresa(request):
     return render(request, 'usuarios/panel_documentos.html', context)
 
 
+@rol_requerido('ESTUDIANTE')
+def postular_a_reto(request, reto_id):
+    reto = get_object_or_404(Reto, pk=reto_id, estado='aprobado')
+    
+    postulacion, creada = PostulacionReto.objects.get_or_create(
+        reto=reto,
+        estudiante=request.user
+    )
+    
+    if postulacion.estado != 'ACEPTADA':
+        postulacion.estado = 'ACEPTADA'
+        postulacion.save()
+    
+    if creada:
+        messages.success(request, f'¡Te has postulado con éxito al reto "{reto.titulo}"!')
+    else:
+        messages.info(request, 'Ya te encuentras postulado a este reto.')
+        
+    return redirect('retos:detalle', pk=reto.id)
+
+
+@rol_requerido('ESTUDIANTE')
+def panel_entregables(request):
+    postulaciones_aceptadas = PostulacionReto.objects.filter(
+        estudiante=request.user,
+        estado='ACEPTADA'
+    ).select_related('reto')
+
+    return render(request, 'usuarios/mis_entregables.html', {
+        'postulaciones': postulaciones_aceptadas
+    })
+
+
 @login_required(login_url='usuarios:login')
 def dashboard_admin(request):
     if not request.user.is_superuser:
@@ -177,8 +210,168 @@ def dashboard_estudiante(request):
 
 
 
+## Se can añadiendo funciones para que los accesos de la sidebar vayan tomando forma
+
+# admin
+@login_required(login_url='usuarios:login')
+def lista_usuarios(request):
+    if not request.user.is_superuser:
+        return redirect(_url_para_usuario(request.user))
+    
+    # Consulta real a la tabla de usuarios de Postgres
+    usuarios = Usuario.objects.all().order_by('-date_joined')
+    return render(request, 'usuarios/admin/lista_usuarios.html', {
+        'usuarios': usuarios,
+        'titulo': 'Gestión de Usuarios'
+    })
 
 
+@login_required(login_url='usuarios:login')
+def lista_empresas(request):
+    if not request.user.is_superuser:
+        return redirect(_url_para_usuario(request.user))
+    
+    empresas = Empresa.objects.all().order_by('razon_social')
+    return render(request, 'usuarios/admin/lista_empresas.html', {
+        'empresas': empresas,
+        'titulo': 'Empresas Aliadas'
+    })
+    
+
+@login_required(login_url='usuarios:login')
+def reportes_admin(request):
+    if not request.user.is_superuser:
+        return redirect(_url_para_usuario(request.user))
+        
+    context = {
+        'titulo': 'Reportes y Estadísticas',
+        'total_usuarios': Usuario.objects.count(),
+        'total_empresas': Empresa.objects.count(),
+        'total_retos': Reto.objects.count() if 'Reto' in globals() else 0,
+    }
+    return render(request, 'usuarios/admin/reportes.html', context)
+
+
+# estudiantes
+@login_required(login_url='usuarios:login')
+def explorar_retos(request):
+    if hasattr(request.user, 'rol') and request.user.rol.upper() != 'ESTUDIANTE' and not request.user.is_superuser:
+        return redirect(_url_para_usuario(request.user))
+        
+    # Cambiamos '-fecha_creacion' por '-creado_en'
+    retos_disponibles = Reto.objects.all().order_by('-creado_en') if 'Reto' in globals() else []
+    return render(request, 'usuarios/estudiante/explorar_retos.html', {
+        'retos': retos_disponibles, 'titulo': 'Explorar Retos Disponibles'
+    })
+
+
+@login_required(login_url='usuarios:login')
+def mis_postulaciones(request):
+    if request.user.rol != 'ESTUDIANTE':
+        return redirect(_url_para_usuario(request.user))
+        
+    postulaciones_usuario = PostulacionReto.objects.filter(estudiante=request.user).select_related('reto')
+    
+    return render(request, 'usuarios/estudiante/mis_postulaciones.html', {
+        'postulaciones': postulaciones_usuario,
+        'titulo': 'Mis Inscripciones a Retos'
+    })
+
+
+@login_required(login_url='usuarios:login')
+def mis_entregables(request, reto_id=None):
+    if request.user.rol != 'ESTUDIANTE':
+        return redirect(_url_para_usuario(request.user))
+    
+    if reto_id:
+        reto = get_object_or_404(Reto, pk=reto_id, estado='aprobado')
+        tiene_acceso = PostulacionReto.objects.filter(reto=reto, estudiante=request.user).exists()
+        
+        if not tiene_acceso:
+            messages.error(request, 'No puedes gestionar entregables si no te has postulado a este reto.')
+            return redirect('retos:detalle', pk=reto.id)
+            
+        entregables_subidos = Entregable.objects.filter(reto=reto, estudiante=request.user).order_by('-fecha_entrega') # o el campo de fecha que tengas
+    else:
+        reto = None
+        entregables_subidos = []
+
+    if request.method == 'POST' and reto:
+        form = EntregableForm(request.POST, request.FILES)
+        if form.is_valid():
+            nuevo_entregable = form.save(commit=False)
+            nuevo_entregable.estudiante = request.user
+            nuevo_entregable.reto = reto
+            nuevo_entregable.estado = 'ENVIADO'
+            nuevo_entregable.save()
+            messages.success(request, '¡El entregable seleccionado ha sido cargado con éxito!')
+            return redirect('usuarios:mis_entregables', reto_id=reto.id)
+    else:
+        form = EntregableForm() if reto else None
+        
+    todas_mis_postulaciones = PostulacionReto.objects.filter(estudiante=request.user).select_related('reto')
+        
+    return render(request, 'usuarios/estudiante/mis_entregables.html', {
+        'titulo': 'Mis Entregables de Proyecto',
+        'reto': reto,
+        'form': form,
+        'entregables_subidos': entregables_subidos,
+        'postulaciones': todas_mis_postulaciones
+    })
+
+
+@login_required(login_url='usuarios:login')
+def certificados(request):
+    if request.user.rol != 'ESTUDIANTE':
+        return redirect(_url_para_usuario(request.user))
+        
+    return render(request, 'usuarios/estudiante/certificados.html', {
+        'titulo': 'Mis Certificados Obtenidos'
+    })
+    
+
+# empresas
+@login_required(login_url='usuarios:login')
+def postulaciones_empresa(request):
+    if request.user.rol != 'EMPRESA':
+        return redirect(_url_para_usuario(request.user))
+        
+    try:
+        empresa_perfil = request.user.empresa
+    except Empresa.DoesNotExist:
+        messages.error(request, "Primero debes completar el perfil de tu empresa.")
+        return redirect('usuarios:empresa_dashboard')
+    
+    try:
+        retos_empresa = Reto.objects.filter(empresa=request.user)
+        list(retos_empresa[:1])
+    except Exception:
+        retos_empresa = Reto.objects.filter(usuario=request.user)
+
+    entregables_recibidos = Entregable.objects.filter(
+        reto__in=retos_empresa
+    ).select_related('reto', 'estudiante').order_by('-id')
+
+    return render(request, 'usuarios/empresa/revision_entregables.html', {
+        'titulo': 'Revisión de Entregables del Proyecto',
+        'entregables': entregables_recibidos
+    })
+
+
+# profesores
+@login_required(login_url='usuarios:login')
+def entregables_profesor(request):
+    if request.user.rol != 'PROFESOR':
+        return redirect(_url_para_usuario(request.user))
+        
+    entregables_academia = Entregable.objects.all().select_related('reto', 'estudiante').order_by('-id')
+    todos_los_retos = Reto.objects.all().select_related('empresa').order_by('-id')
+    
+    return render(request, 'usuarios/profesor/entregables.html', {
+        'titulo': 'Panel de Control Académico',
+        'entregables': entregables_academia,
+        'retos': todos_los_retos
+    })
 # ── Vistas stub (en construcción) ──────────────────────────────────
 
 def _stub(titulo, icono, rol=None):
@@ -194,16 +387,10 @@ def _stub(titulo, icono, rol=None):
     return login_required(view, login_url='usuarios:login')
 
 
-# Admin
-lista_usuarios    = _stub('Usuarios',         'bi-people',           rol='SUPERUSER')
-lista_empresas    = _stub('Empresas',         'bi-building',         rol='SUPERUSER')
-lista_retos_admin = _stub('Retos',            'bi-trophy',           rol='SUPERUSER')
-reportes_admin    = _stub('Reportes',         'bi-bar-chart-line',   rol='SUPERUSER')
 
 # Empresa
 publicar_reto         = _stub('Publicar Reto',     'bi-plus-circle',       rol='EMPRESA')
 mis_retos_empresa     = _stub('Mis Retos',         'bi-trophy',            rol='EMPRESA')
-postulaciones_empresa = _stub('Postulaciones',     'bi-person-check',      rol='EMPRESA')
 indicadores_empresa   = _stub('Indicadores',       'bi-bar-chart',         rol='EMPRESA')
 
 # Profesor
@@ -211,11 +398,4 @@ mis_cursos           = _stub('Mis Cursos',       'bi-journal-text', rol='PROFESO
 retos_vinculados     = _stub('Retos Vinculados', 'bi-trophy',       rol='PROFESOR')
 mis_estudiantes      = _stub('Mis Estudiantes',  'bi-people',       rol='PROFESOR')
 evaluaciones         = _stub('Evaluaciones',     'bi-star-half',    rol='PROFESOR')
-entregables_profesor = _stub('Entregables',      'bi-folder-check', rol='PROFESOR')
-
-# Estudiante
-explorar_retos    = _stub('Explorar Retos',    'bi-search',       rol='ESTUDIANTE')
-mis_postulaciones = _stub('Mis Postulaciones', 'bi-send',         rol='ESTUDIANTE')
-mis_entregables   = _stub('Mis Entregables',   'bi-folder2-open', rol='ESTUDIANTE')
-certificados      = _stub('Certificados',      'bi-award',        rol='ESTUDIANTE')
 

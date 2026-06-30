@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="card-panel">
+    <div class="card-panel-header">
+        <span>Mis Postulaciones a Retos</span>
+    </div>
+    <div class="p-4">
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Reto</th>
+                        <th>Fecha de Postulación</th>
+                        <th>Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in postulaciones %}
+                    <tr>
+                        <td><strong>{{ p.reto.titulo }}</strong></td>
+                        <td>{{ p.fecha_postulacion|date:"Y-m-d H:i" }}</td>
+                        <td>
+                            {% if p.estado == 'PENDIENTE' %}
+                                <span class="badge bg-warning text-dark">Pendiente de Aprobación</span>
+                            {% elif p.estado == 'ACEPTADA' %}
+                                <span class="badge bg-success">Aceptada (Asignado)</span>
+                            {% else %}
+                                <span class="badge bg-danger">Rechazada</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="3" class="text-center text-muted p-4">
+                            No te has postulado a ningún reto todavía.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
