@@ -4,7 +4,7 @@ from django.contrib import messages
 from .forms import LoginForm, RegistroEmpresaForm, RegistroAcademicoForm, CargarDocumentoForm, EntregableForm
 from django.contrib.auth.decorators import login_required
 from .models import DocumentoEmpresa, Empresa, Usuario, PostulacionReto, Entregable
-from apps.retos.models import Reto
+from apps.retos.models import Reto, IntegracionAcademica
 from apps.retos.views import rol_requerido
 
 
@@ -151,21 +151,18 @@ def panel_documentos_empresa(request):
 @rol_requerido('ESTUDIANTE')
 def postular_a_reto(request, reto_id):
     reto = get_object_or_404(Reto, pk=reto_id, estado='aprobado')
-    
+
     postulacion, creada = PostulacionReto.objects.get_or_create(
         reto=reto,
-        estudiante=request.user
+        estudiante=request.user,
+        defaults={'estado': 'PENDIENTE'},
     )
-    
-    if postulacion.estado != 'ACEPTADA':
-        postulacion.estado = 'ACEPTADA'
-        postulacion.save()
-    
+
     if creada:
-        messages.success(request, f'¡Te has postulado con éxito al reto "{reto.titulo}"!')
+        messages.success(request, f'¡Tu postulación al reto "{reto.titulo}" fue enviada! Espera la aprobación de la empresa.')
     else:
-        messages.info(request, 'Ya te encuentras postulado a este reto.')
-        
+        messages.info(request, 'Ya tienes una postulación enviada para este reto.')
+
     return redirect('retos:detalle', pk=reto.id)
 
 
@@ -335,27 +332,60 @@ def certificados(request):
 def postulaciones_empresa(request):
     if request.user.rol != 'EMPRESA':
         return redirect(_url_para_usuario(request.user))
-        
+
     try:
-        empresa_perfil = request.user.empresa
+        request.user.empresa
     except Empresa.DoesNotExist:
         messages.error(request, "Primero debes completar el perfil de tu empresa.")
         return redirect('usuarios:empresa_dashboard')
-    
-    try:
-        retos_empresa = Reto.objects.filter(empresa=request.user)
-        list(retos_empresa[:1])
-    except Exception:
-        retos_empresa = Reto.objects.filter(usuario=request.user)
+
+    retos_empresa = Reto.objects.filter(empresa=request.user)
+    estado_filtro = request.GET.get('estado', 'PENDIENTE')
+    estados_validos = {'PENDIENTE', 'ACEPTADA', 'RECHAZADA'}
+
+    postulaciones = PostulacionReto.objects.filter(
+        reto__in=retos_empresa
+    ).select_related('reto', 'estudiante').order_by('-fecha_postulacion')
+
+    if estado_filtro in estados_validos:
+        postulaciones = postulaciones.filter(estado=estado_filtro)
 
     entregables_recibidos = Entregable.objects.filter(
         reto__in=retos_empresa
     ).select_related('reto', 'estudiante').order_by('-id')
 
-    return render(request, 'usuarios/empresa/revision_entregables.html', {
-        'titulo': 'Revisión de Entregables del Proyecto',
-        'entregables': entregables_recibidos
+    return render(request, 'usuarios/empresa/postulaciones.html', {
+        'titulo': 'Gestión de Postulaciones y Entregables',
+        'postulaciones': postulaciones,
+        'entregables': entregables_recibidos,
+        'estado_filtro': estado_filtro,
+        'estados': PostulacionReto.ESTADOS_POSTULACION,
     })
+
+
+@login_required(login_url='usuarios:login')
+def gestionar_postulacion(request, postulacion_id):
+    if request.user.rol != 'EMPRESA':
+        return redirect(_url_para_usuario(request.user))
+
+    postulacion = get_object_or_404(
+        PostulacionReto,
+        pk=postulacion_id,
+        reto__empresa=request.user,
+    )
+
+    if request.method == 'POST':
+        accion = request.POST.get('accion')
+        if accion == 'aceptar':
+            postulacion.estado = 'ACEPTADA'
+            postulacion.save()
+            messages.success(request, f'Postulación de {postulacion.estudiante.get_full_name() or postulacion.estudiante.username} aceptada.')
+        elif accion == 'rechazar':
+            postulacion.estado = 'RECHAZADA'
+            postulacion.save()
+            messages.warning(request, f'Postulación de {postulacion.estudiante.get_full_name() or postulacion.estudiante.username} rechazada.')
+
+    return redirect('usuarios:postulaciones_empresa')
 
 
 # profesores
@@ -363,10 +393,19 @@ def postulaciones_empresa(request):
 def entregables_profesor(request):
     if request.user.rol != 'PROFESOR':
         return redirect(_url_para_usuario(request.user))
-        
-    entregables_academia = Entregable.objects.all().select_related('reto', 'estudiante').order_by('-id')
-    todos_los_retos = Reto.objects.all().select_related('empresa').order_by('-id')
-    
+
+    retos_integrados = IntegracionAcademica.objects.filter(
+        profesor=request.user
+    ).values_list('reto_id', flat=True)
+
+    entregables_academia = Entregable.objects.filter(
+        reto_id__in=retos_integrados
+    ).select_related('reto', 'estudiante').order_by('-id')
+
+    todos_los_retos = Reto.objects.filter(
+        id__in=retos_integrados
+    ).select_related('empresa').order_by('-id')
+
     return render(request, 'usuarios/profesor/entregables.html', {
         'titulo': 'Panel de Control Académico',
         'entregables': entregables_academia,
@@ -374,28 +413,112 @@ def entregables_profesor(request):
     })
 # ── Vistas stub (en construcción) ──────────────────────────────────
 
-def _stub(titulo, icono, rol=None):
-    def view(request):
-        if rol == 'SUPERUSER' and not request.user.is_superuser:
-            return redirect(_url_para_usuario(request.user))
-        if rol and rol != 'SUPERUSER' and request.user.rol != rol:
-            return redirect(_url_para_usuario(request.user))
-        return render(request, 'usuarios/en_construccion.html', {
-            'titulo': titulo, 'icono': icono
-        })
-    view.__name__ = titulo.lower().replace(' ', '_')
-    return login_required(view, login_url='usuarios:login')
+# Empresa — stubs que apuntan a vistas reales
+@login_required(login_url='usuarios:login')
+def publicar_reto(request):
+    return redirect('retos:crear')
 
 
+@login_required(login_url='usuarios:login')
+def mis_retos_empresa(request):
+    return redirect('retos:mis_retos')
 
-# Empresa
-publicar_reto         = _stub('Publicar Reto',     'bi-plus-circle',       rol='EMPRESA')
-mis_retos_empresa     = _stub('Mis Retos',         'bi-trophy',            rol='EMPRESA')
-indicadores_empresa   = _stub('Indicadores',       'bi-bar-chart',         rol='EMPRESA')
+
+@login_required(login_url='usuarios:login')
+def indicadores_empresa(request):
+    if request.user.rol != 'EMPRESA':
+        return redirect(_url_para_usuario(request.user))
+
+    retos = Reto.objects.filter(empresa=request.user)
+    context = {
+        'titulo': 'Indicadores de Gestión',
+        'total_retos': retos.count(),
+        'retos_activos': retos.filter(estado__in=['aprobado', 'en_curso']).count(),
+        'retos_finalizados': retos.filter(estado='finalizado').count(),
+        'retos_en_revision': retos.filter(estado='en_revision').count(),
+        'total_postulaciones': PostulacionReto.objects.filter(reto__in=retos).count(),
+        'postulaciones_pendientes': PostulacionReto.objects.filter(reto__in=retos, estado='PENDIENTE').count(),
+        'postulaciones_aceptadas': PostulacionReto.objects.filter(reto__in=retos, estado='ACEPTADA').count(),
+        'total_entregables': Entregable.objects.filter(reto__in=retos).count(),
+        'entregables_pendientes': Entregable.objects.filter(reto__in=retos, estado='ENVIADO').count(),
+        'retos_recientes': retos.order_by('-creado_en')[:5],
+    }
+    return render(request, 'usuarios/empresa/indicadores.html', context)
+
 
 # Profesor
-mis_cursos           = _stub('Mis Cursos',       'bi-journal-text', rol='PROFESOR')
-retos_vinculados     = _stub('Retos Vinculados', 'bi-trophy',       rol='PROFESOR')
-mis_estudiantes      = _stub('Mis Estudiantes',  'bi-people',       rol='PROFESOR')
-evaluaciones         = _stub('Evaluaciones',     'bi-star-half',    rol='PROFESOR')
+@login_required(login_url='usuarios:login')
+def mis_cursos(request):
+    if request.user.rol != 'PROFESOR':
+        return redirect(_url_para_usuario(request.user))
+
+    integraciones = IntegracionAcademica.objects.filter(
+        profesor=request.user
+    ).select_related('reto').order_by('-creado_en')
+
+    return render(request, 'usuarios/profesor/mis_cursos.html', {
+        'titulo': 'Mis Cursos y Retos Vinculados',
+        'integraciones': integraciones,
+    })
+
+
+@login_required(login_url='usuarios:login')
+def retos_vinculados(request):
+    return redirect('retos:mis_integraciones')
+
+
+@login_required(login_url='usuarios:login')
+def mis_estudiantes(request):
+    if request.user.rol != 'PROFESOR':
+        return redirect(_url_para_usuario(request.user))
+
+    retos_integrados = IntegracionAcademica.objects.filter(
+        profesor=request.user
+    ).values_list('reto_id', flat=True)
+
+    postulaciones_aceptadas = PostulacionReto.objects.filter(
+        reto_id__in=retos_integrados,
+        estado='ACEPTADA',
+    ).select_related('estudiante', 'reto').order_by('reto', 'estudiante__last_name')
+
+    return render(request, 'usuarios/profesor/mis_estudiantes.html', {
+        'titulo': 'Mis Estudiantes',
+        'postulaciones': postulaciones_aceptadas,
+    })
+
+
+@login_required(login_url='usuarios:login')
+def evaluaciones(request):
+    if request.user.rol != 'PROFESOR':
+        return redirect(_url_para_usuario(request.user))
+
+    retos_integrados = IntegracionAcademica.objects.filter(
+        profesor=request.user
+    ).values_list('reto_id', flat=True)
+
+    entregables = Entregable.objects.filter(
+        reto_id__in=retos_integrados
+    ).select_related('reto', 'estudiante').order_by('estado', '-fecha_entrega')
+
+    if request.method == 'POST':
+        entregable_id = request.POST.get('entregable_id')
+        nota = request.POST.get('nota')
+        comentario = request.POST.get('comentario', '')
+
+        if entregable_id and nota:
+            try:
+                entregable = Entregable.objects.get(pk=entregable_id, reto_id__in=retos_integrados)
+                entregable.nota = nota
+                entregable.comentario_profesor = comentario
+                entregable.estado = 'CALIFICADO'
+                entregable.save(update_fields=['nota', 'comentario_profesor', 'estado', 'actualizado_en'])
+                messages.success(request, 'Calificación registrada exitosamente.')
+            except Entregable.DoesNotExist:
+                messages.error(request, 'No tienes permisos para calificar este entregable.')
+        return redirect('usuarios:evaluaciones')
+
+    return render(request, 'usuarios/profesor/evaluaciones.html', {
+        'titulo': 'Evaluaciones y Calificaciones',
+        'entregables': entregables,
+    })
 
