@@ -1,0 +1,151 @@
+{% extends 'base.html' %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <h2 class="page-title">Indicadores de Gestión</h2>
+  <p class="page-subtitle">Resumen estadístico de tu actividad en la plataforma</p>
+</div>
+
+<!-- Tarjetas de estadísticas -->
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-xl-3">
+    <div class="card-stat">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="stat-icon-box" style="background:#dbeafe;"><i class="bi bi-trophy-fill" style="color:#1d4ed8;"></i></div>
+        <span class="badge bg-light text-secondary">Retos</span>
+      </div>
+      <div style="font-size:2rem;font-weight:800;color:#111827;line-height:1;">{{ total_retos }}</div>
+      <div style="font-size:0.8rem;color:#6b7280;margin-top:0.3rem;">Total publicados</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card-stat">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="stat-icon-box" style="background:#dcfce7;"><i class="bi bi-play-circle-fill" style="color:#16a34a;"></i></div>
+        <span class="badge bg-light text-secondary">Activos</span>
+      </div>
+      <div style="font-size:2rem;font-weight:800;color:#111827;line-height:1;">{{ retos_activos }}</div>
+      <div style="font-size:0.8rem;color:#6b7280;margin-top:0.3rem;">Aprobados o en curso</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card-stat">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="stat-icon-box" style="background:#fef9c3;"><i class="bi bi-hourglass-split" style="color:#ca8a04;"></i></div>
+        <span class="badge bg-light text-secondary">Revisión</span>
+      </div>
+      <div style="font-size:2rem;font-weight:800;color:#111827;line-height:1;">{{ retos_en_revision }}</div>
+      <div style="font-size:0.8rem;color:#6b7280;margin-top:0.3rem;">Esperando aprobación</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card-stat">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="stat-icon-box" style="background:#f3e8ff;"><i class="bi bi-check2-all" style="color:#7c3aed;"></i></div>
+        <span class="badge bg-light text-secondary">Cerrados</span>
+      </div>
+      <div style="font-size:2rem;font-weight:800;color:#111827;line-height:1;">{{ retos_finalizados }}</div>
+      <div style="font-size:0.8rem;color:#6b7280;margin-top:0.3rem;">Finalizados</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-xl-4">
+    <div class="card-stat">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="stat-icon-box" style="background:#fce7f3;"><i class="bi bi-send-fill" style="color:#be185d;"></i></div>
+        <span class="badge bg-light text-secondary">Total</span>
+      </div>
+      <div style="font-size:2rem;font-weight:800;color:#111827;line-height:1;">{{ total_postulaciones }}</div>
+      <div style="font-size:0.8rem;color:#6b7280;margin-top:0.3rem;">Postulaciones recibidas</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-4">
+    <div class="card-stat">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="stat-icon-box" style="background:#fef3c7;"><i class="bi bi-clock-fill" style="color:#d97706;"></i></div>
+        <span class="badge bg-warning text-dark">Pendientes</span>
+      </div>
+      <div style="font-size:2rem;font-weight:800;color:#111827;line-height:1;">{{ postulaciones_pendientes }}</div>
+      <div style="font-size:0.8rem;color:#6b7280;margin-top:0.3rem;">Por revisar</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-4">
+    <div class="card-stat">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="stat-icon-box" style="background:#d1fae5;"><i class="bi bi-person-check-fill" style="color:#059669;"></i></div>
+        <span class="badge bg-success text-white">Aceptadas</span>
+      </div>
+      <div style="font-size:2rem;font-weight:800;color:#111827;line-height:1;">{{ postulaciones_aceptadas }}</div>
+      <div style="font-size:0.8rem;color:#6b7280;margin-top:0.3rem;">Estudiantes asignados</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- Entregables -->
+  <div class="col-lg-4">
+    <div class="card-stat">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="stat-icon-box" style="background:#e0e7ff;"><i class="bi bi-folder2-open" style="color:#4338ca;"></i></div>
+        <span class="badge bg-light text-secondary">Entregables</span>
+      </div>
+      <div class="d-flex align-items-end gap-3">
+        <div>
+          <div style="font-size:2rem;font-weight:800;color:#111827;line-height:1;">{{ total_entregables }}</div>
+          <div style="font-size:0.8rem;color:#6b7280;margin-top:0.3rem;">Total recibidos</div>
+        </div>
+        <div>
+          <div style="font-size:1.4rem;font-weight:700;color:#d97706;line-height:1;">{{ entregables_pendientes }}</div>
+          <div style="font-size:0.75rem;color:#6b7280;margin-top:0.3rem;">Pendientes revisión</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Retos recientes -->
+  <div class="col-lg-8">
+    <div class="card-panel">
+      <div class="card-panel-header">
+        <span><i class="bi bi-trophy me-2 text-muted"></i>Retos recientes</span>
+        <a href="{% url 'retos:mis_retos' %}" class="btn btn-sm btn-outline-secondary" style="font-size:0.78rem;">Ver todos</a>
+      </div>
+      {% if retos_recientes %}
+      <div class="p-0">
+        <table class="table table-hover align-middle mb-0">
+          <tbody>
+            {% for reto in retos_recientes %}
+            <tr>
+              <td class="ps-4 py-3">
+                <a href="{% url 'retos:detalle' pk=reto.pk %}" class="text-decoration-none fw-semibold text-dark">
+                  {{ reto.titulo|truncatechars:50 }}
+                </a>
+              </td>
+              <td>
+                <span class="badge
+                  {% if reto.estado == 'aprobado' or reto.estado == 'en_curso' %}bg-success
+                  {% elif reto.estado == 'en_revision' %}bg-warning text-dark
+                  {% elif reto.estado == 'rechazado' %}bg-danger
+                  {% elif reto.estado == 'finalizado' %}bg-secondary
+                  {% else %}bg-light text-dark border{% endif %}">
+                  {{ reto.get_estado_display }}
+                </span>
+              </td>
+              <td class="text-muted small pe-4">{{ reto.creado_en|date:"d/m/Y" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center py-4 text-muted">
+        <p class="mb-0 small">Aún no has publicado ningún reto.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

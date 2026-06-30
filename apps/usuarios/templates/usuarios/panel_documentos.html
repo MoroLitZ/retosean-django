@@ -1,0 +1,186 @@
+{% extends 'base.html' %}
+{% block title %}Documentos Legales{% endblock %}
+{% block page_title %}Documentos Legales{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-0">
+  
+  <!-- ⬅️ Botón de escape para regresar al Perfil Principal (Lógica de HEAD) -->
+  <div class="mb-4 d-flex justify-content-between align-items-center">
+    <a href="{% url 'usuarios:perfil' %}" class="btn btn-outline-secondary btn-sm shadow-sm fw-semibold">
+      <i class="bi bi-arrow-left-short me-1"></i> Volver al Panel Principal
+    </a>
+    <span class="badge bg-light text-dark border">Módulo Corporativo</span>
+  </div>
+
+  <!-- Encabezado Estético -->
+  <div class="mb-4">
+    <h1 class="page-title" style="font-size: 1.6rem; font-weight: 800; color: #111827; margin-bottom: 0.2rem;">
+      <i class="bi bi-file-earmark-check me-2" style="color: var(--accent);"></i>Documentos de Soporte
+    </h1>
+    <p class="page-subtitle" style="color: #6b7280; font-size: 0.9rem; margin: 0;">
+      Gestiona la documentación legal requerida para publicar retos en la plataforma.
+    </p>
+  </div>
+
+  <!-- ⚠️ Bloque de Mensajes / Notificaciones del Sistema (Lógica de HEAD) -->
+  {% if messages %}
+    <div class="row mb-4">
+      <div class="col-12">
+        {% for message in messages %}
+          <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} alert-dismissible fade show text-start shadow-sm mb-2" role="alert">
+            <i class="bi bi-exclamation-circle me-2"></i>{{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Tarjetas de Resumen de Estado -->
+  <div class="row g-3 mb-4">
+    {% with total=documentos|length %}
+    <div class="col-sm-6 col-lg-3">
+      <div class="card-stat d-flex align-items-center gap-3 p-3" style="background: #fff; border-radius: 12px; border: 1px solid #e5e7eb;">
+        <div class="stat-icon-box" style="background: rgba(var(--accent-rgb),.12); width: 48px; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem;">
+          <i class="bi bi-file-earmark-text" style="color: var(--accent);"></i>
+        </div>
+        <div>
+          <div style="font-size: 1.5rem; font-weight: 800; color: #111827; line-height: 1;">{{ total }}</div>
+          <div style="font-size: 0.78rem; color: #6b7280;">Documentos cargados</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+      <div class="card-stat d-flex align-items-center gap-3 p-3" style="background: #fff; border-radius: 12px; border: 1px solid #e5e7eb;">
+        <div class="stat-icon-box" style="background: rgba(22,163,74,.1); width: 48px; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem;">
+          <i class="bi bi-patch-check" style="color: #16a34a;"></i>
+        </div>
+        <div>
+          <div style="font-size: 1.5rem; font-weight: 800; color: #111827; line-height: 1;">4</div>
+          <div style="font-size: 0.78rem; color: #6b7280;">Documentos requeridos</div>
+        </div>
+      </div>
+    </div>
+    {% endwith %}
+  </div>
+
+  <div class="row g-4">
+
+    <!-- Columna Izquierda: Formulario de Carga -->
+    <div class="col-lg-4">
+      <div class="card-panel h-100">
+        <div class="card-panel-header">
+          <span><i class="bi bi-cloud-upload me-2" style="color: var(--accent);"></i>Cargar / Actualizar</span>
+        </div>
+        <div class="p-4">
+          <form method="POST" enctype="multipart/form-data">
+            {% csrf_token %}
+
+            <div class="mb-3">
+              <label class="form-label" style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#374151;">
+                Tipo de Documento
+              </label>
+              {{ form.tipo_documento }}
+              {% if form.tipo_documento.errors %}
+                <div class="text-danger small mt-1"><i class="bi bi-x-circle me-1"></i>{{ form.tipo_documento.errors.0 }}</div>
+              {% endif %}
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#374151;">
+                Archivo PDF (Solo PDF)
+              </label>
+              {{ form.archivo }}
+              {% if form.archivo.errors %}
+                <div class="text-danger small mt-1"><i class="bi bi-x-circle me-1"></i>{{ form.archivo.errors.0 }}</div>
+              {% endif %}
+            </div>
+
+            <div class="mb-4">
+              <label class="form-label" style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#374151;">
+                Fecha de Expedición
+              </label>
+              {{ form.fecha_expedicion }}
+              <div class="form-text" style="font-size:.75rem; color: #6b7280;">Para Cámara de Comercio, máximo 30 días de antigüedad.</div>
+              {% if form.fecha_expedicion.errors %}
+                <div class="text-danger small mt-1 font-weight-bold">
+                  <i class="bi bi-exclamation-triangle me-1"></i>{{ form.fecha_expedicion.errors.0 }}
+                </div>
+              {% endif %}
+            </div>
+
+            <button type="submit" class="btn w-100 fw-semibold" style="background:var(--accent);color:#fff;border-radius:8px;padding:.65rem;">
+              <i class="bi bi-upload me-2"></i>Subir Documento
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Columna Derecha: Tabla de Estados -->
+    <div class="col-lg-8">
+      <div class="card-panel">
+        <div class="card-panel-header d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-list-check me-2" style="color: var(--accent);"></i>Estado de Documentación</span>
+          {% if perfil %}<span style="font-size:.78rem;color:#6b7280;font-weight:400;">{{ perfil.razon_social }}</span>{% endif %}
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0" style="font-size:.875rem;">
+            <thead style="background:#f9fafb;">
+              <tr>
+                <th style="padding:.9rem 1.25rem;font-size:.72rem;text-transform:uppercase;letter-spacing:.6px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb;">Documento</th>
+                <th style="padding:.9rem 1.25rem;font-size:.72rem;text-transform:uppercase;letter-spacing:.6px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb;">Estado</th>
+                <th style="padding:.9rem 1.25rem;font-size:.72rem;text-transform:uppercase;letter-spacing:.6px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb;">Expedición</th>
+                <th style="padding:.9rem 1.25rem;font-size:.72rem;text-transform:uppercase;letter-spacing:.6px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb;">Archivo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if tiene_documentos %}
+                {% for doc in documentos %}
+                <tr>
+                  <td style="padding:.85rem 1.25rem;border-bottom:1px solid #f3f4f6;">
+                    <span style="font-weight:600;color:#111827;">{{ doc.tipo }}</span>
+                  </td>
+                  <td style="padding:.85rem 1.25rem;border-bottom:1px solid #f3f4f6;">
+                    <span class="badge {{ doc.estado_clase }}" style="font-size:.75rem;padding:.35em .65em;border-radius:6px;">
+                      {{ doc.estado_texto }}
+                    </span>
+                    {% if doc.motivo_rechazo %}
+                      <div class="small text-danger mt-1">
+                        <i class="bi bi-info-circle me-1"></i><strong>Motivo:</strong> {{ doc.motivo_rechazo }}
+                      </div>
+                    {% endif %}
+                  </td>
+                  <td style="padding:.85rem 1.25rem;border-bottom:1px solid #f3f4f6;color:#6b7280;">
+                    {{ doc.fecha_expedicion }}
+                  </td>
+                  <td style="padding:.85rem 1.25rem;border-bottom:1px solid #f3f4f6;">
+                    {% if doc.url_archivo %}
+                      <a href="{{ doc.url_archivo }}" target="_blank"
+                         class="btn btn-sm" style="border:1.5px solid var(--accent);color:var(--accent);border-radius:6px;font-size:.78rem;">
+                        <i class="bi bi-file-pdf me-1"></i>Ver PDF
+                      </a>
+                    {% else %}
+                      <span style="color:#d1d5db;font-size:.8rem;">No cargado</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              {% else %}
+                <tr>
+                  <td colspan="4" style="padding:3rem;text-align:center;color:#9ca3af;">
+                    <i class="bi bi-inbox" style="font-size:2rem;display:block;margin-bottom:.5rem;"></i>
+                    No has cargado ningún documento todavía.
+                  </td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

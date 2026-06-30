@@ -1,0 +1,170 @@
+{% extends 'base_auth.html' %}
+{% block title %}Registro de Empresa{% endblock %}
+
+{% block extra_css %}
+<style>
+  .section-divider {
+    font-size: .72rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 1.2px; color: #9ca3af;
+    padding: .4rem 0; border-bottom: 1px solid #f3f4f6;
+    margin-bottom: 1.2rem; margin-top: .5rem;
+  }
+  .errorlist { list-style: none; padding: 0; margin: .25rem 0 0; }
+  .errorlist li { font-size: .8rem; color: #dc3545; }
+  .helptext { font-size: .78rem; color: #9ca3af; margin-top: .25rem; display: block; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-card" style="max-width: 820px;">
+  <div class="row g-0">
+
+    <!-- Panel Izquierdo: Informativo e Institucional -->
+    <div class="col-md-5 auth-panel-left">
+      <div>
+        <div class="brand-logo mb-2">
+          <span class="brand-retos">Retos</span><span class="brand-ean">EAN</span>
+        </div>
+        <p style="color:rgba(255,255,255,.55);font-size:.82rem;margin-top:.4rem;">Plataforma Académica</p>
+      </div>
+
+      <div>
+        <div class="auth-feature-item">
+          <div class="auth-feature-icon" style="background:rgba(37,99,235,.2);">
+            <i class="bi bi-building" style="color:#60a5fa;"></i>
+          </div>
+          <div>
+            <div class="auth-feature-title">Perfil Corporativo</div>
+            <div class="auth-feature-sub">Representa a tu organización en la plataforma</div>
+          </div>
+        </div>
+        <div class="auth-feature-item">
+          <div class="auth-feature-icon" style="background:rgba(37,99,235,.2);">
+            <i class="bi bi-trophy" style="color:#60a5fa;"></i>
+          </div>
+          <div>
+            <div class="auth-feature-title">Publica Retos</div>
+            <div class="auth-feature-sub">Conecta con estudiantes y profesores EAN</div>
+          </div>
+        </div>
+        <div class="auth-feature-item">
+          <div class="auth-feature-icon" style="background:rgba(37,99,235,.2);">
+            <i class="bi bi-file-earmark-check" style="color:#60a5fa;"></i>
+          </div>
+          <div>
+            <div class="auth-feature-title">Documentación Legal</div>
+            <div class="auth-feature-sub">Proceso de verificación rápido y seguro</div>
+          </div>
+        </div>
+      </div>
+
+      <p style="color:rgba(255,255,255,.3);font-size:.72rem;">© 2026 Universidad EAN</p>
+    </div>
+
+    <!-- Panel Derecho: Formulario de Interacción -->
+    <div class="col-md-7 auth-panel-right">
+
+      <div class="mb-3">
+        <a href="{% url 'usuarios:registro' %}" style="font-size:.82rem;color:#6b7280;text-decoration:none;">
+          <i class="bi bi-arrow-left me-1"></i>Volver a selección de perfil
+        </a>
+      </div>
+
+      <h2 style="font-size:1.4rem;font-weight:800;color:#111827;margin-bottom:.25rem;">🏢 Registro de Empresa</h2>
+      <p style="color:#6b7280;font-size:.875rem;margin-bottom:1.5rem;">Crea la cuenta institucional de tu organización para proponer retos comerciales.</p>
+
+      <!-- Errores Globales del Formulario -->
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger py-2 mb-3">
+          {% for e in form.non_field_errors %}
+            <div><i class="bi bi-exclamation-circle me-1"></i>{{ e }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <form method="POST" novalidate>
+        {% csrf_token %}
+
+        <!-- SECCIÓN 1: Datos Organizacionales -->
+        <div class="section-divider"><i class="bi bi-building me-1"></i>Datos de la Empresa</div>
+        <div class="row g-3 mb-2">
+          <div class="col-sm-4">
+            <label class="form-label fw-semibold">NIT</label>
+            {{ form.nit }}
+            {% if form.nit.errors %}
+              <ul class="errorlist">{% for e in form.nit.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
+          </div>
+          <div class="col-sm-8">
+            <label class="form-label fw-semibold">Razón Social</label>
+            {{ form.razon_social }}
+            {% if form.razon_social.errors %}
+              <ul class="errorlist">{% for e in form.razon_social.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Sector Industrial</label>
+            {{ form.sector_industrial }}
+            {% if form.sector_industrial.errors %}
+              <ul class="errorlist">{% for e in form.sector_industrial.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- SECCIÓN 2: Credenciales de Acceso -->
+        <div class="section-divider"><i class="bi bi-shield-lock me-1"></i>Acceso a la Plataforma</div>
+        <div class="row g-3 mb-2">
+          <div class="col-12">
+            <label class="form-label fw-semibold">Usuario Corporativo (ID)</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="bi bi-at"></i></span>
+              {{ form.username }}
+            </div>
+            {% if form.username.help_text %}
+              <span class="helptext">{{ form.username.help_text }}</span>
+            {% endif %}
+            {% if form.username.errors %}
+              <ul class="errorlist">{% for e in form.username.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Correo Corporativo</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+              {{ form.email }}
+            </div>
+            {% if form.email.errors %}
+              <ul class="errorlist">{% for e in form.email.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold">Contraseña</label>
+            {{ form.password1 }}
+            {% if form.password1.errors %}
+              <ul class="errorlist">{% for e in form.password1.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold">Confirmar contraseña</label>
+            {{ form.password2 }}
+            {% if form.password2.errors %}
+              <ul class="errorlist">{% for e in form.password2.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-auth w-100 btn-lg mt-3">
+          <i class="bi bi-building-add me-2"></i>Registrar Organización
+        </button>
+      </form>
+
+      <hr style="border-color:#f3f4f6;margin:1.5rem 0;">
+      <p class="text-center mb-0" style="font-size:.875rem;color:#6b7280;">
+        ¿Ya tienes cuenta?
+        <a href="{% url 'usuarios:login' %}" class="text-link-orange ms-1 fw-semibold">Inicia sesión</a>
+      </p>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

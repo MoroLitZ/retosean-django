@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard Empresa{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<!-- Encabezado -->
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h2 class="page-title">Bienvenido, {{ user.get_full_name|default:user.username }}</h2>
+    <p class="page-subtitle">Gestiona tus retos y postulaciones desde aquí</p>
+  </div>
+  <a href="#" class="btn" style="background: var(--accent); color: #fff; border-radius: 8px; font-weight: 600; font-size: 0.875rem;">
+    <i class="bi bi-plus-lg me-1"></i> Publicar Reto
+  </a>
+</div>
+
+<!-- Estadísticas -->
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-xl-3">
+    <div class="card-stat">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="stat-icon-box" style="background: #dbeafe;"><i class="bi bi-trophy-fill" style="color:#1d4ed8;"></i></div>
+        <span class="badge bg-light text-success">Activos</span>
+      </div>
+      <div style="font-size: 2rem; font-weight: 800; color: #111827; line-height: 1;">0</div>
+      <div style="font-size: 0.8rem; color: #6b7280; margin-top: 0.3rem;">Retos publicados</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card-stat">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="stat-icon-box" style="background: #fef3c7;"><i class="bi bi-send-fill" style="color:#d97706;"></i></div>
+        <span class="badge bg-light text-muted">Nuevas</span>
+      </div>
+      <div style="font-size: 2rem; font-weight: 800; color: #111827; line-height: 1;">0</div>
+      <div style="font-size: 0.8rem; color: #6b7280; margin-top: 0.3rem;">Postulaciones recibidas</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card-stat">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="stat-icon-box" style="background: #ede9fe;"><i class="bi bi-hourglass-split" style="color:#6f42c1;"></i></div>
+        <span class="badge bg-light text-muted">Pendientes</span>
+      </div>
+      <div style="font-size: 2rem; font-weight: 800; color: #111827; line-height: 1;">0</div>
+      <div style="font-size: 0.8rem; color: #6b7280; margin-top: 0.3rem;">En evaluación</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card-stat">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="stat-icon-box" style="background: #dcfce7;"><i class="bi bi-check-circle-fill" style="color:#16a34a;"></i></div>
+        <span class="badge bg-light text-muted">Totales</span>
+      </div>
+      <div style="font-size: 2rem; font-weight: 800; color: #111827; line-height: 1;">0</div>
+      <div style="font-size: 0.8rem; color: #6b7280; margin-top: 0.3rem;">Retos cerrados</div>
+    </div>
+  </div>
+</div>
+
+<!-- Paneles -->
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card-panel">
+      <div class="card-panel-header">
+        <span><i class="bi bi-trophy me-2 text-muted"></i>Mis Retos</span>
+        <a href="#" class="btn btn-sm btn-outline-secondary" style="font-size: 0.78rem;">Ver todos</a>
+      </div>
+      <div class="p-4 text-center text-muted py-5">
+        <i class="bi bi-trophy" style="font-size: 2.5rem; opacity: 0.3;"></i>
+        <p class="mt-2 mb-1" style="font-size: 0.875rem;">Aún no has publicado ningún reto</p>
+        <a href="#" class="btn btn-sm mt-1" style="background: var(--accent); color: #fff; border-radius: 6px; font-size: 0.8rem;">
+          Publicar primer reto
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card-panel mb-3">
+      <div class="card-panel-header"><i class="bi bi-person-check me-2 text-muted"></i>Últimas Postulaciones</div>
+      <div class="p-3 text-center text-muted py-4">
+        <i class="bi bi-people" style="font-size: 2rem; opacity: 0.3;"></i>
+        <p class="mt-1 mb-0" style="font-size: 0.8rem;">Sin postulaciones aún</p>
+      </div>
+    </div>
+    <div class="card-panel">
+      <div class="card-panel-header"><i class="bi bi-file-earmark-text me-2 text-muted"></i>Documentos</div>
+      <div class="p-3 d-grid gap-2">
+        <a href="#" class="btn btn-sm" style="background: #f3f4f6; text-align: left; font-size: 0.85rem;">
+          <i class="bi bi-upload me-2 text-muted"></i>Subir convenio marco
+        </a>
+        <a href="#" class="btn btn-sm" style="background: #f3f4f6; text-align: left; font-size: 0.85rem;">
+          <i class="bi bi-file-earmark-pdf me-2 text-muted"></i>Ver mis documentos
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
