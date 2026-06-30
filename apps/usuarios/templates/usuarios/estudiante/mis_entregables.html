@@ -1,0 +1,132 @@
+{% extends 'base.html' %}
+
+{% block title %}Mis Entregables de Proyecto{% endblock %}
+{% block page_title %}Mis Entregables de Proyecto{% endblock %}
+
+{% block content %}
+<div class="card-panel">
+    <div class="card-panel-header d-flex justify-content-between align-items-center">
+        <span>Envío de Evidencias y Avances</span>
+        {% if reto %}
+            <a href="{% url 'usuarios:mis_entregables' %}" class="btn btn-sm btn-outline-light">
+                <i class="bi bi-arrow-left"></i> Volver a mis retos
+            </a>
+        {% endif %}
+    </div>
+    <div class="p-4">
+        
+        {% if reto %}
+
+        <div class="row">
+                <div class="col-md-5 mb-4">
+                    <div class="p-3 bg-light rounded shadow-sm border-start border-primary border-3">
+                        <span class="text-muted text-uppercase small fw-bold">Reto Seleccionado</span>
+                        <h4 class="fw-bold text-dark mt-1 mb-2">{{ reto.titulo }}</h4>
+                        <p class="text-muted small mb-0">{{ reto.descripcion }}</p>
+                    </div>
+
+                    {% if entregable %}
+                        <div class="card mt-3 bg-light border-0 shadow-sm">
+                            <div class="card-body">
+                                <h6 class="fw-bold text-dark mb-3"><i class="bi bi-info-circle-fill text-info"></i> Estado de tu Entrega</h6>
+                                <p class="mb-2"><strong>Estado:</strong> 
+                                    <span class="badge {% if entregable.estado == 'ENVIADO' %}bg-info text-dark{% elif entregable.estado == 'REVISADO' %}bg-success{% else %}bg-secondary{% endif %}">
+                                        {{ entregable.estado }}
+                                    </span>
+                                </p>
+                                {% if entregable.archivo %}
+                                    <p class="mb-0 text-truncate">
+                                        <strong>Archivo actual:</strong> <br>
+                                        <a href="{{ entregable.archivo.url }}" target="_blank" class="text-primary small">
+                                            <i class="bi bi-file-earmark-arrow-down"></i> Ver documento cargado
+                                        </a>
+                                    </p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <div class="col-md-7">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body p-4">
+                            <h5 class="fw-bold text-dark mb-3"><i class="bi bi-cloud-arrow-up text-primary"></i> Subir o actualizar entregable</h5>
+                            
+
+                            <form method="POST" enctype="multipart/form-data" class="needs-validation">
+                                {% csrf_token %}
+                                
+                                {% if form.non_field_errors %}
+                                    <div class="alert alert-danger">
+                                        {{ form.non_field_errors }}
+                                    </div>
+                                {% endif %}
+
+                                {% for field in form %}
+                                    <div class="mb-3">
+                                        <label for="{{ field.id_for_label }}" class="form-label fw-semibold text-secondary small">{{ field.label }}</label>
+                                        {{ field }}
+                                        {% if field.help_text %}
+                                            <div class="form-text small text-muted">{{ field.help_text }}</div>
+                                        {% endif %}
+                                        {% if field.errors %}
+                                            <div class="text-danger small mt-1">{{ field.errors }}</div>
+                                        {% endif %}
+                                    </div>
+                                {% endfor %}
+
+                                <div class="mt-4 d-grid">
+                                    <button type="submit" class="btn btn-primary py-2 fw-bold">
+                                        <i class="bi bi-check-circle-fill"></i> Guardar y Enviar Entregable
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        {% elif postulaciones %}
+
+        <p class="page-subtitle mb-4">Selecciona el reto asignado para cargar tus entregables, archivos de soporte o evidencias de avance.</p>
+            
+            <div class="row g-3">
+                {% for postulacion in postulaciones %}
+                <div class="col-md-6">
+                    <div class="card h-100 border-start border-primary border-3 shadow-sm">
+                        <div class="card-body d-flex flex-column justify-content-between">
+                            <div>
+                                <h5 class="fw-bold text-dark mb-1">{{ postulacion.reto.titulo }}</h5>
+                                <p class="text-muted small mb-3">{{ postulacion.reto.descripcion|truncatechars:100 }}</p>
+                                <span class="badge bg-success">Inscrito</span>
+                            </div>
+                            <div class="mt-4">
+                                <a href="{% url 'usuarios:mis_entregables' postulacion.reto.id %}" class="btn btn-primary w-100">
+                                    <i class="bi bi-cloud-arrow-up-fill"></i> Gestionar Entregables
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+        {% else %}
+
+        <div class="text-center p-5">
+                <div class="mb-3">
+                    <i class="bi bi-folder-symlink display-1 text-muted" style="font-size: 4rem;"></i>
+                </div>
+                <h4 class="fw-bold text-dark">Zona de Entregables</h4>
+                <p class="text-muted mx-auto" style="max-width: 500px;">
+                    Esta sección te permitirá cargar las evidencias solicitadas por tus docentes para evaluar tu desempeño en el reto asignado. Estará disponible en cuanto te postules a tu primer reto.
+                </p>
+                <a href="{% url 'usuarios:explorar_retos' %}" class="btn btn-outline-primary mt-2">
+                    <i class="bi bi-search"></i> Explorar Retos Disponibles
+                </a>
+            </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endblock %}

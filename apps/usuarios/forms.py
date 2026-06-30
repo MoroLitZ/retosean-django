@@ -1,6 +1,6 @@
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
-from .models import Usuario, PerfilEstudiante, PerfilProfesor, Empresa, DocumentoEmpresa
+from .models import Usuario, PerfilEstudiante, PerfilProfesor, Empresa, DocumentoEmpresa, Entregable
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 
@@ -157,3 +157,24 @@ class CargarDocumentoForm(forms.ModelForm):
                 self.add_error('fecha_expedicion', 'La fecha de expedición no puede ser una fecha futura.')
 
         return cleaned_data
+    
+
+class EntregableForm(forms.ModelForm):
+    class Meta:
+        model = Entregable
+        fields = ['archivo', 'comentario_estudiante']
+        widgets = {
+            'archivo': forms.FileInput(attrs={
+                'class': 'form-control',
+                'accept': '.pdf,.zip,.rar,.docx'
+            }),
+            'comentario_estudiante': forms.Textarea(attrs={
+                'class': 'form-control', 
+                'rows': 3, 
+                'placeholder': 'Escribe aquí observaciones o comentarios sobre tu entrega (opcional)...'
+            }),
+        }
+        labels = {
+            'archivo': 'Selecciona tu archivo de evidencia',
+            'comentario_estudiante': 'Comentarios adicionales',
+        }

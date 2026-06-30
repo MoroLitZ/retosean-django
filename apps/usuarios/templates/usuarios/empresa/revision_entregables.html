@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titulo }}{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="card-panel">
+    <div class="card-panel-header d-flex justify-content-between align-items-center">
+        <span>Seguimiento de Avances de Estudiantes</span>
+        <span class="badge bg-primary">Modo Empresa</span>
+    </div>
+    <div class="p-4">
+        <p class="text-muted mb-4">A continuación se listan los documentos, archivos y evidencias que los estudiantes han cargado para los retos propuestos por tu organización.</p>
+
+        {% if entregables %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle border shadow-sm rounded">
+                    <thead class="table-dark">
+                        <tr>
+                            <th scope="col" class="ps-3">Estudiante</th>
+                            <th scope="col">Reto Asociado</th>
+                            <th scope="col">Tipo de Avance</th>
+                            <th scope="col">Estado</th>
+                            <th scope="col" class="text-center">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for e in entregables %}
+                        <tr>
+                            <td class="ps-3 fw-bold text-dark">
+                                {{ e.estudiante.get_full_name|default:e.estudiante.username }}
+                            </td>
+                            <td>
+                                <span class="d-inline-block text-truncate fw-semibold text-secondary" style="max-width: 250px;">
+                                    {{ e.reto.titulo }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="text-muted small">
+
+                                    Evidencia de Proyecto
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge {% if e.estado == 'ENVIADO' %}bg-info text-dark{% elif e.estado == 'REVISADO' %}bg-success{% else %}bg-secondary{% endif %}">
+                                    {{ e.estado }}
+                                </span>
+                            </td>
+                            <td class="text-center">
+                                {% if e.archivo %}
+                                    <a href="{{ e.archivo.url }}" target="_blank" class="btn btn-sm btn-outline-primary px-3">
+                                        <i class="bi bi-cloud-download-fill"></i> Descargar
+                                    </a>
+                                {% else %}
+                                    <span class="text-muted small">Sin archivo</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="text-center p-5 bg-light rounded border">
+                <i class="bi bi-archive display-4 text-muted"></i>
+                <h5 class="mt-3 fw-bold text-secondary">No hay entregables aún</h5>
+                <p class="text-muted small">Los estudiantes asignados a tus retos no han subido archivos todavía.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
