@@ -8,3 +8,5 @@ media/
 staticfiles/
 *.log
 .DS_Store
+
+retos_db.sqlite3

@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block title %}Mis retos{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3">Mis retos</h1>
+    <a href="{% url 'retos:crear' %}" class="btn btn-primary">Crear reto</a>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-striped align-middle">
+      <thead>
+        <tr>
+          <th>Titulo</th>
+          <th>Tipo</th>
+          <th>Estado</th>
+          <th>Area</th>
+          <th>Actualizado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for reto in retos %}
+        <tr>
+          <td>{{ reto.titulo|default:'Borrador sin titulo' }}</td>
+          <td>{{ reto.get_tipo_display }}</td>
+          <td>{{ reto.get_estado_display }}</td>
+          <td>{{ reto.area|default:'-' }}</td>
+          <td>{{ reto.actualizado_en|date:'Y-m-d H:i' }}</td>
+          <td class="text-end">
+            <a href="{% url 'retos:detalle' reto.pk %}" class="btn btn-sm btn-outline-secondary">Ver</a>
+            {% if reto.puede_editar_empresa %}
+            <a href="{% url 'retos:editar' reto.pk %}" class="btn btn-sm btn-outline-primary">Editar</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center text-muted">Aun no hay retos registrados.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

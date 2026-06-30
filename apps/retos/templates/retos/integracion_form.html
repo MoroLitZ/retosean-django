@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h1 class="h3 mb-3">{{ titulo }}</h1>
+  <form method="post" class="row g-3">
+    {% csrf_token %}
+    {% for field in form %}
+    <div class="col-md-{% if field.name == 'alcance' or field.name == 'cronograma_sesiones' or field.name == 'equipo_profesores' or field.name == 'equipo_estudiantes' or field.name == 'expertos_invitados' or field.name == 'requerimientos_empresa' or field.name == 'requerimientos_internos' %}12{% else %}6{% endif %}">
+      <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field }}
+      {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+    </div>
+    {% endfor %}
+    <div class="col-12 d-flex gap-2">
+      <button type="submit" name="accion" value="guardar" class="btn btn-secondary">Guardar borrador</button>
+      <button type="submit" name="accion" value="enviar" class="btn btn-primary">Enviar a revision</button>
+      <a href="{% url 'retos:mis_integraciones' %}" class="btn btn-outline-secondary">Volver</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

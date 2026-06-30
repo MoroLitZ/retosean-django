@@ -1,0 +1,90 @@
+# Reto EAN - Plataforma de Desafíos Académicos y Hackatones
+
+Proyecto de grado desarrollado para la **Universidad EAN** enfocado en conectar el ecosistema empresarial con la comunidad universitaria mediante la publicación, gestión y evaluación de retos tecnológicos y hackatones.
+
+---
+
+## Roles del Sistema y Flujo de Trabajo
+
+La plataforma gestiona tres tipos de usuarios clave con flujos dinámicos e independientes:
+
+* **Empresas:** Entidades encargadas de proponer, estructurar y publicar retos o hackatones basados en problemáticas reales del sector tecnológico.
+* **Profesores:** Actúan como mentores y evaluadores, realizando el seguimiento, revisión y calificación de las propuestas o soluciones entregadas por los alumnos.
+* **Estudiantes:** Usuarios finales que exploran el catálogo de retos activos, se postulan a las hackatones y cargan sus proyectos o soluciones directamente en la plataforma.
+
+---
+
+## Requisitos Previos
+
+Antes de levantar el proyecto en tu máquina local, asegúrate de cumplir con lo siguiente:
+* **Python 3.10** o superior instalado.
+* **Git** configurado en tu sistema.
+* Entorno **WSL (Windows Subsystem for Linux)** si te encuentras desarrollando en Windows.
+
+---
+
+## Instalación y Configuración Local
+
+Sigue este orden de comandos en tu terminal para desplegar el entorno de desarrollo:
+
+### 1. Clonar el repositorio y acceder al directorio
+git clone https://github.com/MoroLitZ/retosean-django
+cd retosean-django
+
+### 2. Configurar el Entorno Virtual (Virtual Env)
+Para aislar las dependencias de Python del resto de tu sistema, crea y activa el entorno:
+python3 -m venv venv
+source venv/bin/activate
+
+### 3. Instalar las dependencias oficiales
+Utiliza el archivo de requerimientos generado para instalar el framework Django y todos sus componentes adicionales con un solo comando:
+pip install -r requirements.txt
+
+### 4. Preparar la Base de Datos (Migraciones)
+Aplica la estructura del modelo relacional de usuarios y roles a tu base de datos local:
+python manage.py migrate
+
+### 5. Crear una cuenta de Administrador (Opcional)
+Si necesitas acceder al panel de administración general de Django (/admin) para gestionar registros manualmente, crea un superusuario:
+python manage.py createsuperuser
+
+### 6. Encender el Servidor de Desarrollo
+Una vez todo esté configurado, ejecuta el backend de Django:
+python manage.py runserver
+
+---
+
+## Reglas del Flujo de Trabajo (Base de Datos y Git)
+
+Para evitar conflictos de historial (NodeNotFoundError) o archivos de migración huérfanos entre los desarrolladores, el equipo debe seguir estrictamente estas pautas:
+
+1. **Antes de empezar a trabajar (Hacer siempre Git Pull):**
+   Cada vez que descargues la última versión de la rama principal, aplica de inmediato las migraciones que tus compañeros hayan subido:
+   git pull origin main
+   python manage.py migrate
+
+2. **Al modificar Modelos (models.py):**
+   Si agregas, editas o eliminas un campo en los modelos de una aplicación, debes generar los archivos de migración locales antes de hacer el commit y subirlos junto con el código:
+   python manage.py makemigrations
+   git add apps/usuarios/migrations/
+
+3. **¿Qué hacer si hay un conflicto de historial al hacer Pull?**
+   Si Django arroja un error indicando que dos personas crearon una migración con el mismo número (por ejemplo, dos versiones de la 0003), soluciónalo unificando el árbol con el comando de fusión:
+   python manage.py makemigrations --merge
+   python manage.py migrate
+
+---
+
+## Acceso a la Aplicación
+
+Con el servidor corriendo localmente, abre tu navegador web de preferencia e ingresa a las siguientes direcciones:
+
+* **Plataforma Principal (Inicio de Sesión):** [http://127.0.0.1:8000/usuarios/login/](http://127.0.0.1:8000/usuarios/login/)
+* **Panel de Administración Global:** [http://127.0.0.1:8000/admin/](http://127.0.0.1:8000/admin/)
+
+---
+
+## Estructura del Proyecto
+
+* apps/usuarios/: Módulo encargado del registro dinámico según rol, carga de documentación para empresas y control de perfiles.
+* config/: Directorio raíz de configuración global de Django (settings.py, urls.py).
