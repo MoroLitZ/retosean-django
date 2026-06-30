@@ -24,6 +24,7 @@ urlpatterns = [
     path('empresa/publicar-reto/',  views.publicar_reto,              name='publicar_reto'),
     path('empresa/mis-retos/',      views.mis_retos_empresa,          name='mis_retos_empresa'),
     path('empresa/postulaciones/',  views.postulaciones_empresa,      name='postulaciones_empresa'),
+    path('empresa/postulaciones/<int:postulacion_id>/gestionar/', views.gestionar_postulacion, name='gestionar_postulacion'),
     path('empresa/documentos/',     views.panel_documentos_empresa,   name='documentos_empresa'),
     path('empresa/indicadores/',    views.indicadores_empresa,        name='indicadores_empresa'),
 

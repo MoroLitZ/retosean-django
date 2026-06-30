@@ -3,50 +3,61 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Dashboard{% endblock %} — RetosEAN</title>
+  <title>{% block title %}Dashboard{% endblock %} — Retosean</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@700;800;900&family=Open+Sans:ital,wght@0,300;0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <style>
-    /* ── Paleta institucional EAN ── */
+    /* ── Paleta EAN — Manual de Marca ── */
     :root {
-      --sidebar-bg:    #111321;
-      --accent:        #e87722;
-      --accent-light:  rgba(232, 119, 34, 0.13);
-      --accent-rgb:    232, 119, 34;
+      --ean-green:     #3bac52;
+      --ean-green-dk:  #2d8a40;
+      --ean-blue:      #005e85;
+      --ean-teal:      #00c0b3;
+      --ean-black:     #0a0a0a;
+
+      --sidebar-bg:    #0a0a0a;
+      --accent:        #3bac52;
+      --accent-light:  rgba(59, 172, 82, 0.13);
+      --accent-rgb:    59, 172, 82;
       --sidebar-width: 262px;
       --sidebar-hover: rgba(255, 255, 255, 0.07);
       --topbar-h:      62px;
     }
 
-    /* ── Variantes por rol (sidebar tono + accent) ── */
+    /* ── Variantes por rol ── */
     body.role-admin {
-      --sidebar-bg:   #0f1019;
-      --accent:       #e87722;
-      --accent-light: rgba(232, 119, 34, 0.15);
-      --accent-rgb:   232, 119, 34;
+      --sidebar-bg:   #0a0a0a;
+      --accent:       #6b7280;
+      --accent-light: rgba(107, 114, 128, 0.15);
+      --accent-rgb:   107, 114, 128;
     }
     body.role-empresa {
-      --sidebar-bg:   #0e1622;
-      --accent:       #e87722;
-      --accent-light: rgba(232, 119, 34, 0.13);
-      --accent-rgb:   232, 119, 34;
+      --sidebar-bg:   #0a0a0a;
+      --accent:       #3bac52;
+      --accent-light: rgba(59, 172, 82, 0.13);
+      --accent-rgb:   59, 172, 82;
     }
     body.role-profesor {
-      --sidebar-bg:   #111321;
-      --accent:       #e87722;
-      --accent-light: rgba(232, 119, 34, 0.13);
-      --accent-rgb:   232, 119, 34;
+      --sidebar-bg:   #080c11;
+      --accent:       #005e85;
+      --accent-light: rgba(0, 94, 133, 0.13);
+      --accent-rgb:   0, 94, 133;
     }
     body.role-estudiante {
-      --sidebar-bg:   #111321;
-      --accent:       #e87722;
-      --accent-light: rgba(232, 119, 34, 0.13);
-      --accent-rgb:   232, 119, 34;
+      --sidebar-bg:   #0a0a0a;
+      --accent:       #3bac52;
+      --accent-light: rgba(59, 172, 82, 0.13);
+      --accent-rgb:   59, 172, 82;
     }
+
     *, *::before, *::after { box-sizing: border-box; }
+
     body {
-      background: #f0f4f8;
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #f4f6f4;
+      font-family: 'Open Sans', system-ui, -apple-system, sans-serif;
+      font-size: 0.92rem;
+      color: #0a0a0a;
       margin: 0;
     }
 
@@ -62,68 +73,102 @@
       flex-direction: column;
       transition: transform 0.28s cubic-bezier(.4,0,.2,1);
     }
+
     .sidebar-brand {
       padding: 1.2rem 1.5rem;
-      background: rgba(0, 0, 0, 0.22);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+      background: rgba(0, 0, 0, 0.3);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
       flex-shrink: 0;
     }
-    .sidebar-brand .brand-name {
-      font-size: 1.25rem;
-      font-weight: 800;
-      letter-spacing: -0.3px;
+    .sidebar-brand .brand-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
       line-height: 1;
     }
-    .sidebar-brand .brand-retos { color: var(--accent); }
-    .sidebar-brand .brand-ean   { color: #fff; }
-    .sidebar-brand .brand-sub {
-      font-size: 0.68rem;
-      color: rgba(255, 255, 255, 0.38);
-      margin-top: 0.2rem;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
+    /* Bloque de puntos (simulación del grid ean) */
+    .brand-dots {
+      display: grid;
+      grid-template-columns: repeat(3, 5px);
+      gap: 2.5px;
+      flex-shrink: 0;
     }
+    .brand-dots span {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+    .brand-dots span:nth-child(2),
+    .brand-dots span:nth-child(6) { background: rgba(255,255,255,0.25); }
+
+    .brand-wordmark {
+      font-family: 'Poppins', 'Montserrat', sans-serif;
+      font-weight: 900;
+      font-size: 1.25rem;
+      letter-spacing: -0.5px;
+      line-height: 1;
+    }
+    .brand-wordmark .brand-retos { color: #fff; }
+    .brand-wordmark .brand-ean   { color: var(--accent); }
+
+    .sidebar-brand .brand-sub {
+      font-size: 0.65rem;
+      color: rgba(255, 255, 255, 0.35);
+      margin-top: 0.35rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      font-family: 'Open Sans', sans-serif;
+      font-weight: 300;
+    }
+
     .nav-section-label {
       padding: 1.1rem 1.5rem 0.35rem;
-      font-size: 0.67rem;
+      font-size: 0.64rem;
       font-weight: 700;
-      color: rgba(255, 255, 255, 0.35);
+      color: rgba(255, 255, 255, 0.3);
       text-transform: uppercase;
-      letter-spacing: 1.4px;
+      letter-spacing: 1.6px;
+      font-family: 'Open Sans', sans-serif;
     }
     #sidebar .nav-link {
       display: flex;
       align-items: center;
       gap: 0.65rem;
-      padding: 0.62rem 1.5rem;
-      color: rgba(255, 255, 255, 0.7);
-      font-size: 0.875rem;
-      font-weight: 500;
+      padding: 0.6rem 1.5rem;
+      color: rgba(255, 255, 255, 0.65);
+      font-size: 0.855rem;
+      font-weight: 400;
       border-left: 3px solid transparent;
-      transition: background 0.18s, color 0.18s, border-color 0.18s;
+      transition: background 0.17s, color 0.17s, border-color 0.17s;
       border-radius: 0;
+      font-family: 'Open Sans', sans-serif;
     }
     #sidebar .nav-link i {
       font-size: 1rem;
       width: 18px;
       text-align: center;
       flex-shrink: 0;
+      opacity: 0.8;
     }
     #sidebar .nav-link:hover {
       background: var(--sidebar-hover);
       color: #fff;
     }
+    #sidebar .nav-link:hover i { opacity: 1; }
     #sidebar .nav-link.active {
       background: var(--accent-light);
       color: #fff;
       border-left-color: var(--accent);
       font-weight: 600;
     }
+    #sidebar .nav-link.active i { opacity: 1; }
+
     .sidebar-user {
       margin-top: auto;
       padding: 1rem 1.4rem;
-      background: rgba(0, 0, 0, 0.2);
-      border-top: 1px solid rgba(255, 255, 255, 0.07);
+      background: rgba(0, 0, 0, 0.25);
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
       flex-shrink: 0;
     }
     .user-avatar {
@@ -132,15 +177,28 @@
       background: var(--accent);
       color: #fff;
       font-weight: 700;
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       display: flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
       letter-spacing: -0.5px;
+      font-family: 'Poppins', sans-serif;
     }
-    .user-name  { color: #fff; font-weight: 600; font-size: 0.82rem; line-height: 1.2; }
-    .user-role  { color: var(--accent); font-size: 0.72rem; margin-top: 1px; }
+    .user-name  {
+      color: #fff;
+      font-weight: 600;
+      font-size: 0.82rem;
+      line-height: 1.2;
+      font-family: 'Open Sans', sans-serif;
+    }
+    .user-role  {
+      color: var(--accent);
+      font-size: 0.7rem;
+      margin-top: 1px;
+      font-family: 'Open Sans', sans-serif;
+      font-weight: 300;
+    }
 
     /* ── Topbar ── */
     #topbar {
@@ -156,19 +214,22 @@
       align-items: center;
       padding: 0 1.75rem;
       gap: 1rem;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
       border-top: 3px solid var(--accent);
     }
     #topbar .page-heading {
-      font-size: 1rem;
+      font-size: 0.95rem;
       font-weight: 700;
-      color: #111827;
+      color: #0a0a0a;
       margin: 0;
       flex: 1;
+      font-family: 'Open Sans', sans-serif;
     }
     #topbar .topbar-email {
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       color: #9ca3af;
+      font-family: 'Open Sans', sans-serif;
+      font-weight: 300;
     }
     .btn-sidebar-toggle {
       display: none;
@@ -182,13 +243,28 @@
       line-height: 1;
     }
 
-    /* ── Main ── */
+    /* ── Main content ── */
     #main-content {
       margin-left: var(--sidebar-width);
       padding-top: var(--topbar-h);
       min-height: 100vh;
     }
     .content-wrapper { padding: 2rem; }
+
+    /* ── Tipografía de títulos de página ── */
+    .page-title {
+      font-family: 'Poppins', 'Montserrat', sans-serif;
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: #0a0a0a;
+      margin-bottom: 0.2rem;
+    }
+    .page-subtitle {
+      font-size: 0.845rem;
+      color: #6b7280;
+      font-family: 'Open Sans', sans-serif;
+      font-weight: 300;
+    }
 
     /* ── Cards ── */
     .card-stat {
@@ -199,14 +275,14 @@
       box-shadow: 0 1px 4px rgba(0,0,0,0.04);
       transition: box-shadow 0.2s;
     }
-    .card-stat:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    .card-stat:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.08); }
     .stat-icon-box {
-      width: 48px; height: 48px;
+      width: 46px; height: 46px;
       border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.3rem;
+      font-size: 1.25rem;
     }
     .card-panel {
       background: #fff;
@@ -219,27 +295,34 @@
       padding: 1rem 1.5rem;
       border-bottom: 1px solid #f3f4f6;
       font-weight: 700;
-      font-size: 0.9rem;
-      color: #111827;
+      font-size: 0.875rem;
+      color: #0a0a0a;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      font-family: 'Open Sans', sans-serif;
     }
-    .page-title {
-      font-size: 1.5rem;
-      font-weight: 800;
-      color: #111827;
-      margin-bottom: 0.25rem;
+
+    /* ── Botones con color EAN ── */
+    .btn-ean {
+      background: var(--ean-green);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-family: 'Open Sans', sans-serif;
+      font-weight: 600;
+      transition: background 0.18s, transform 0.12s;
     }
-    .page-subtitle {
-      font-size: 0.875rem;
-      color: #6b7280;
+    .btn-ean:hover {
+      background: var(--ean-green-dk);
+      color: #fff;
+      transform: translateY(-1px);
     }
 
     /* ── Responsive ── */
     @media (max-width: 768px) {
       #sidebar { transform: translateX(-100%); }
-      #sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.3); }
+      #sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.4); }
       #topbar { left: 0; }
       #main-content { margin-left: 0; }
       .btn-sidebar-toggle { display: flex; align-items: center; }
@@ -257,14 +340,21 @@
 </head>
 <body class="{% if user.is_authenticated %}{% if user.is_superuser %}role-admin{% elif user.rol == 'EMPRESA' %}role-empresa{% elif user.rol == 'PROFESOR' %}role-profesor{% elif user.rol == 'ESTUDIANTE' %}role-estudiante{% endif %}{% endif %}">
 
-<!-- Mobile sidebar overlay -->
+<!-- Mobile overlay -->
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
 <!-- ══ SIDEBAR ══ -->
 <nav id="sidebar">
   <div class="sidebar-brand">
-    <div class="brand-name">
-      <span class="brand-retos">Retos</span><span class="brand-ean">EAN</span>
+    <div class="brand-logo">
+      <div class="brand-dots">
+        <span></span><span></span><span></span>
+        <span></span><span></span><span></span>
+        <span></span><span></span><span></span>
+      </div>
+      <div class="brand-wordmark">
+        <span class="brand-retos">retos</span><span class="brand-ean">ean</span>
+      </div>
     </div>
     <div class="brand-sub">Plataforma Académica</div>
   </div>
@@ -281,22 +371,34 @@
           </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:lista_usuarios' %}" class="nav-link {% if request.resolver_match.url_name == 'lista_usuarios' %}active{% endif %}"><i class="bi bi-people"></i> Usuarios</a>
+          <a href="{% url 'usuarios:lista_usuarios' %}" class="nav-link {% if request.resolver_match.url_name == 'lista_usuarios' %}active{% endif %}">
+            <i class="bi bi-people"></i> Usuarios
+          </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:lista_empresas' %}" class="nav-link {% if request.resolver_match.url_name == 'lista_empresas' %}active{% endif %}"><i class="bi bi-building"></i> Empresas</a>
+          <a href="{% url 'usuarios:lista_empresas' %}" class="nav-link {% if request.resolver_match.url_name == 'lista_empresas' %}active{% endif %}">
+            <i class="bi bi-building"></i> Empresas
+          </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'retos:admin_panel' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'admin_panel' %}active{% endif %}"><i class="bi bi-trophy"></i> Retos</a>
+          <a href="{% url 'retos:admin_panel' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'admin_panel' %}active{% endif %}">
+            <i class="bi bi-trophy"></i> Retos
+          </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'retos:admin_integraciones' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'admin_integraciones' %}active{% endif %}"><i class="bi bi-diagram-3"></i> Integraciones</a>
+          <a href="{% url 'retos:admin_integraciones' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'admin_integraciones' %}active{% endif %}">
+            <i class="bi bi-diagram-3"></i> Integraciones
+          </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:reportes_admin' %}" class="nav-link {% if request.resolver_match.url_name == 'reportes_admin' %}active{% endif %}"><i class="bi bi-bar-chart-line"></i> Reportes</a>
+          <a href="{% url 'usuarios:reportes_admin' %}" class="nav-link {% if request.resolver_match.url_name == 'reportes_admin' %}active{% endif %}">
+            <i class="bi bi-bar-chart-line"></i> Reportes
+          </a>
         </li>
         <li class="nav-item">
-          <a href="/admin/" class="nav-link"><i class="bi bi-shield-lock"></i> Panel Admin</a>
+          <a href="/admin/" class="nav-link">
+            <i class="bi bi-shield-lock"></i> Panel Admin
+          </a>
         </li>
 
       {% elif user.rol == 'EMPRESA' %}
@@ -308,19 +410,29 @@
           </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'retos:crear' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'crear' %}active{% endif %}"><i class="bi bi-plus-circle"></i> Publicar Reto</a>
+          <a href="{% url 'retos:crear' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'crear' %}active{% endif %}">
+            <i class="bi bi-plus-circle"></i> Publicar Reto
+          </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'retos:mis_retos' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'mis_retos' %}active{% endif %}"><i class="bi bi-trophy"></i> Mis Retos</a>
+          <a href="{% url 'retos:mis_retos' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'mis_retos' %}active{% endif %}">
+            <i class="bi bi-trophy"></i> Mis Retos
+          </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:postulaciones_empresa' %}" class="nav-link {% if request.resolver_match.url_name == 'postulaciones_empresa' %}active{% endif %}"><i class="bi bi-person-check"></i> Postulaciones</a>
+          <a href="{% url 'usuarios:postulaciones_empresa' %}" class="nav-link {% if request.resolver_match.url_name == 'postulaciones_empresa' %}active{% endif %}">
+            <i class="bi bi-person-check"></i> Postulaciones
+          </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:documentos_empresa' %}" class="nav-link {% if request.resolver_match.url_name == 'documentos_empresa' %}active{% endif %}"><i class="bi bi-file-earmark-text"></i> Documentos Legales</a>
+          <a href="{% url 'usuarios:documentos_empresa' %}" class="nav-link {% if request.resolver_match.url_name == 'documentos_empresa' %}active{% endif %}">
+            <i class="bi bi-file-earmark-text"></i> Documentos Legales
+          </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:indicadores_empresa' %}" class="nav-link {% if request.resolver_match.url_name == 'indicadores_empresa' %}active{% endif %}"><i class="bi bi-bar-chart"></i> Indicadores</a>
+          <a href="{% url 'usuarios:indicadores_empresa' %}" class="nav-link {% if request.resolver_match.url_name == 'indicadores_empresa' %}active{% endif %}">
+            <i class="bi bi-bar-chart"></i> Indicadores
+          </a>
         </li>
 
       {% elif user.rol == 'PROFESOR' %}
@@ -332,22 +444,34 @@
           </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:mis_cursos' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_cursos' %}active{% endif %}"><i class="bi bi-journal-text"></i> Mis Cursos</a>
+          <a href="{% url 'usuarios:mis_cursos' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_cursos' %}active{% endif %}">
+            <i class="bi bi-journal-text"></i> Mis Cursos
+          </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'retos:mis_integraciones' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'mis_integraciones' %}active{% endif %}"><i class="bi bi-trophy"></i> Retos Vinculados</a>
+          <a href="{% url 'retos:mis_integraciones' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'mis_integraciones' %}active{% endif %}">
+            <i class="bi bi-trophy"></i> Retos Vinculados
+          </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'retos:crear_integracion' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'crear_integracion' %}active{% endif %}"><i class="bi bi-diagram-3"></i> Integrar Reto</a>
+          <a href="{% url 'retos:crear_integracion' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'crear_integracion' %}active{% endif %}">
+            <i class="bi bi-diagram-3"></i> Integrar Reto
+          </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:mis_estudiantes' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_estudiantes' %}active{% endif %}"><i class="bi bi-people"></i> Mis Estudiantes</a>
+          <a href="{% url 'usuarios:mis_estudiantes' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_estudiantes' %}active{% endif %}">
+            <i class="bi bi-people"></i> Mis Estudiantes
+          </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:evaluaciones' %}" class="nav-link {% if request.resolver_match.url_name == 'evaluaciones' %}active{% endif %}"><i class="bi bi-star-half"></i> Evaluaciones</a>
+          <a href="{% url 'usuarios:evaluaciones' %}" class="nav-link {% if request.resolver_match.url_name == 'evaluaciones' %}active{% endif %}">
+            <i class="bi bi-star-half"></i> Evaluaciones
+          </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:entregables_profesor' %}" class="nav-link {% if request.resolver_match.url_name == 'entregables_profesor' %}active{% endif %}"><i class="bi bi-folder-check"></i> Entregables</a>
+          <a href="{% url 'usuarios:entregables_profesor' %}" class="nav-link {% if request.resolver_match.url_name == 'entregables_profesor' %}active{% endif %}">
+            <i class="bi bi-folder-check"></i> Entregables
+          </a>
         </li>
 
       {% elif user.rol == 'ESTUDIANTE' %}
@@ -359,16 +483,24 @@
           </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:explorar_retos' %}" class="nav-link {% if request.resolver_match.url_name == 'explorar_retos' %}active{% endif %}"><i class="bi bi-search"></i> Explorar Retos</a>
+          <a href="{% url 'usuarios:explorar_retos' %}" class="nav-link {% if request.resolver_match.url_name == 'explorar_retos' %}active{% endif %}">
+            <i class="bi bi-search"></i> Explorar Retos
+          </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:mis_postulaciones' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_postulaciones' %}active{% endif %}"><i class="bi bi-send"></i> Mis Postulaciones</a>
+          <a href="{% url 'usuarios:mis_postulaciones' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_postulaciones' %}active{% endif %}">
+            <i class="bi bi-send"></i> Mis Postulaciones
+          </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:mis_entregables' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_entregables' %}active{% endif %}"><i class="bi bi-folder2-open"></i> Mis Entregables</a>
+          <a href="{% url 'usuarios:mis_entregables' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_entregables' %}active{% endif %}">
+            <i class="bi bi-folder2-open"></i> Mis Entregables
+          </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:certificados' %}" class="nav-link {% if request.resolver_match.url_name == 'certificados' %}active{% endif %}"><i class="bi bi-award"></i> Certificados</a>
+          <a href="{% url 'usuarios:certificados' %}" class="nav-link {% if request.resolver_match.url_name == 'certificados' %}active{% endif %}">
+            <i class="bi bi-award"></i> Certificados
+          </a>
         </li>
       {% endif %}
 
@@ -379,7 +511,7 @@
         </a>
       </li>
       <li class="nav-item">
-        <a href="{% url 'usuarios:logout' %}" class="nav-link text-danger-hover">
+        <a href="{% url 'usuarios:logout' %}" class="nav-link" style="color:rgba(255,255,255,0.5);">
           <i class="bi bi-box-arrow-left"></i> Cerrar Sesión
         </a>
       </li>
@@ -407,12 +539,10 @@
   <button class="btn-sidebar-toggle" id="sidebarToggle" aria-label="Menú">
     <i class="bi bi-list"></i>
   </button>
-
   <h1 class="page-heading">{% block page_title %}Dashboard{% endblock %}</h1>
-
   {% if user.is_authenticated %}
   <span class="topbar-email d-none d-lg-inline">{{ user.email }}</span>
-  <a href="{% url 'usuarios:logout' %}" class="btn btn-sm btn-outline-danger d-none d-md-flex align-items-center gap-1">
+  <a href="{% url 'usuarios:logout' %}" class="btn btn-sm btn-outline-danger d-none d-md-flex align-items-center gap-1" style="font-size:0.8rem;">
     <i class="bi bi-box-arrow-right"></i> Salir
   </a>
   {% endif %}
@@ -426,6 +556,7 @@
         <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show mb-3" role="alert">
           {% if message.tags == 'success' %}<i class="bi bi-check-circle-fill me-2"></i>{% endif %}
           {% if message.tags == 'error' or message.tags == 'danger' %}<i class="bi bi-exclamation-circle-fill me-2"></i>{% endif %}
+          {% if message.tags == 'warning' %}<i class="bi bi-exclamation-triangle-fill me-2"></i>{% endif %}
           {{ message }}
           <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
@@ -438,8 +569,8 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-  const sidebar  = document.getElementById('sidebar');
-  const overlay  = document.getElementById('sidebarOverlay');
+  const sidebar   = document.getElementById('sidebar');
+  const overlay   = document.getElementById('sidebarOverlay');
   const toggleBtn = document.getElementById('sidebarToggle');
 
   function openSidebar()  { sidebar.classList.add('open');  overlay.classList.add('show'); }

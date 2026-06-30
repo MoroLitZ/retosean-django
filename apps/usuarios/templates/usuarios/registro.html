@@ -1,5 +1,5 @@
 {% extends 'base_auth.html' %}
-{% block title %}Registro de Reto EAN{% endblock %}
+{% block title %}Registro — Retosean{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -10,7 +10,7 @@
     padding: 2rem 1.75rem;
     text-align: center;
     cursor: pointer;
-    transition: border-color .2s, box-shadow .2s, transform .2s;
+    transition: border-color .2s, box-shadow .2s, transform .18s;
     text-decoration: none;
     display: flex;
     flex-direction: column;
@@ -18,7 +18,7 @@
   }
   .tipo-card:hover {
     border-color: var(--card-accent);
-    box-shadow: 0 8px 24px rgba(0,0,0,.1);
+    box-shadow: 0 8px 28px rgba(0,0,0,.1);
     transform: translateY(-3px);
   }
   .tipo-card .card-icon {
@@ -29,9 +29,10 @@
     margin: 0 auto 1.2rem;
   }
   .tipo-card h4 {
-    font-size: 1.1rem;
+    font-family: 'Poppins', 'Montserrat', sans-serif;
+    font-size: 1.05rem;
     font-weight: 800;
-    color: #111827;
+    color: #0a0a0a;
     margin-bottom: .5rem;
   }
   .tipo-card p {
@@ -40,6 +41,7 @@
     line-height: 1.55;
     flex: 1;
     margin-bottom: 1.5rem;
+    font-weight: 300;
   }
   .tipo-card .btn-tipo {
     border-radius: 8px;
@@ -49,15 +51,19 @@
     border: none;
     color: #fff;
     background: var(--card-accent);
-    transition: opacity .15s;
+    transition: opacity .15s, transform .12s;
+    font-family: 'Open Sans', sans-serif;
   }
-  .tipo-card:hover .btn-tipo { opacity: .88; }
-  .card-academico { --card-accent: #1e3a5f; }
-  .card-empresa   { --card-accent: #198754; } /* Ajustado al color verde de empresa de HEAD */
-  
+  .tipo-card:hover .btn-tipo { opacity: .9; transform: translateY(1px); }
+
+  /* Verde EAN para académicos, azul institucional para empresas */
+  .card-academico { --card-accent: #3bac52; }
+  .card-empresa   { --card-accent: #005e85; }
+
   .divider-or {
     display: flex; align-items: center; gap: .75rem;
     color: #d1d5db; font-size: .78rem;
+    font-family: 'Open Sans', sans-serif;
   }
   .divider-or::before, .divider-or::after {
     content: ''; flex: 1; border-top: 1px solid #e5e7eb;
@@ -69,46 +75,59 @@
 <div class="auth-card" style="max-width: 720px; margin: 0 auto;">
   <div class="p-4 p-md-5">
 
-    <!-- Encabezado con lógica de textos de HEAD -->
+    <!-- Encabezado -->
     <div class="text-center mb-5">
-      <div style="font-size: 1.6rem; font-weight: 800; letter-spacing: -.5px; margin-bottom: .5rem;">
-        <span style="color: var(--orange);">Retos</span><span style="color: #1e3a5f;">EAN</span>
+      <div class="d-flex align-items-center justify-content-center gap-2 mb-2">
+        <div style="display:grid;grid-template-columns:repeat(3,5px);gap:2.5px;">
+          <span style="width:5px;height:5px;border-radius:50%;background:#3bac52;display:block;"></span>
+          <span style="width:5px;height:5px;border-radius:50%;background:rgba(0,0,0,0.15);display:block;"></span>
+          <span style="width:5px;height:5px;border-radius:50%;background:#3bac52;display:block;"></span>
+          <span style="width:5px;height:5px;border-radius:50%;background:#3bac52;display:block;"></span>
+          <span style="width:5px;height:5px;border-radius:50%;background:rgba(0,0,0,0.15);display:block;"></span>
+          <span style="width:5px;height:5px;border-radius:50%;background:#3bac52;display:block;"></span>
+          <span style="width:5px;height:5px;border-radius:50%;background:#3bac52;display:block;"></span>
+          <span style="width:5px;height:5px;border-radius:50%;background:#3bac52;display:block;"></span>
+          <span style="width:5px;height:5px;border-radius:50%;background:#3bac52;display:block;"></span>
+        </div>
+        <div style="font-family:'Poppins','Montserrat',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:-0.5px;">
+          <span style="color:#0a0a0a;">retos</span><span style="color:#3bac52;">ean</span>
+        </div>
       </div>
-      <h2 style="font-size: 1.4rem; font-weight: 800; color: #111827; margin-bottom: .3rem;">
-        Bienvenido al Registro de Reto EAN
+      <h2 style="font-family:'Poppins','Montserrat',sans-serif;font-size:1.35rem;font-weight:800;color:#0a0a0a;margin-bottom:.3rem;">
+        Crea tu cuenta en Retosean
       </h2>
-      <p style="color: #6b7280; font-size: .875rem; margin: 0;">
-        Por favor, selecciona el tipo de perfil que deseas crear en la plataforma
+      <p style="color:#6b7280;font-size:.875rem;margin:0;font-weight:300;">
+        Selecciona el tipo de perfil que deseas registrar en la plataforma
       </p>
     </div>
 
     <!-- Cards de selección -->
     <div class="row g-4 mb-4">
 
-      <!-- Académico -->
+      <!-- Académico (Estudiante / Profesor) -->
       <div class="col-sm-6">
         <a href="?tipo=academico" class="tipo-card card-academico">
-          <div class="card-icon" style="background: rgba(30,58,95,.1);">
-            <i class="bi bi-mortarboard" style="color: #1e3a5f;"></i>
+          <div class="card-icon" style="background: rgba(59,172,82,0.1);">
+            <i class="bi bi-mortarboard" style="color: #3bac52;"></i>
           </div>
           <h4>Comunidad EAN</h4>
-          <p>Si eres <strong>Estudiante</strong> o <strong>Profesor</strong> de la Universidad EAN, utiliza esta opción para validar tu correo institucional.</p>
+          <p>Si eres <strong>Estudiante</strong> o <strong>Profesor</strong> de la Universidad EAN, usa esta opción para validar tu correo institucional.</p>
           <span class="btn-tipo">
-            <i class="bi bi-arrow-right me-1"></i>Ingresar como Académico
+            <i class="bi bi-arrow-right me-1"></i>Soy de la EAN
           </span>
         </a>
       </div>
 
-      <!-- Empresa -->
+      <!-- Empresa / Organización -->
       <div class="col-sm-6">
         <a href="?tipo=empresa" class="tipo-card card-empresa">
-          <div class="card-icon" style="background: rgba(25,135,84,.1);">
-            <i class="bi bi-building" style="color: #198754;"></i>
+          <div class="card-icon" style="background: rgba(0,94,133,0.1);">
+            <i class="bi bi-building" style="color: #005e85;"></i>
           </div>
           <h4>Empresas / Organizaciones</h4>
-          <p>Si eres un <strong>Aliado Comercial</strong> externo buscando proponer retos o validar documentación legal, crea tu perfil corporativo aquí.</p>
+          <p>Si eres un <strong>Aliado Comercial</strong> externo y deseas proponer retos o validar documentación legal, crea tu perfil corporativo aquí.</p>
           <span class="btn-tipo">
-            <i class="bi bi-arrow-right me-1"></i>Ingresar como Empresa
+            <i class="bi bi-arrow-right me-1"></i>Soy Empresa Aliada
           </span>
         </a>
       </div>
@@ -117,8 +136,8 @@
 
     <!-- Divider y login -->
     <div class="divider-or mb-3">¿Ya tienes cuenta?</div>
-    <p class="text-center mb-0" style="font-size: .875rem; color: #6b7280;">
-      <a href="{% url 'usuarios:login' %}" class="text-link-orange">Inicia sesión aquí</a>
+    <p class="text-center mb-0" style="font-size:.875rem;color:#6b7280;">
+      <a href="{% url 'usuarios:login' %}" class="text-link-green">Inicia sesión aquí</a>
     </p>
 
   </div>
