@@ -18,7 +18,6 @@ urlpatterns = [
     # Admin
     path('admin/usuarios/',  views.lista_usuarios,    name='lista_usuarios'),
     path('admin/empresas/',  views.lista_empresas,    name='lista_empresas'),
-    path('admin/retos/',     views.lista_retos_admin, name='lista_retos_admin'),
     path('admin/reportes/',  views.reportes_admin,    name='reportes_admin'),
 
     # Empresa
@@ -38,6 +37,8 @@ urlpatterns = [
     # Estudiante
     path('estudiante/explorar-retos/',  views.explorar_retos,    name='explorar_retos'),
     path('estudiante/postulaciones/',   views.mis_postulaciones, name='mis_postulaciones'),
-    path('estudiante/entregables/',     views.mis_entregables,   name='mis_entregables'),
     path('estudiante/certificados/',    views.certificados,      name='certificados'),
+    path('estudiante/reto/<int:reto_id>/postular/', views.postular_a_reto, name='postular_a_reto'),
+    path('estudiante/entregables/', views.mis_entregables, name='mis_entregables'),
+    path('estudiante/reto/<int:reto_id>/entregables/', views.mis_entregables, name='mis_entregables'),
 ]

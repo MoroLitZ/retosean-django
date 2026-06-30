@@ -113,3 +113,69 @@ class DocumentoEmpresa(models.Model):
         return f"{self.empresa.razon_social} - {self.get_tipo_documento_display()} ({self.estado})"
     
     
+def ruta_entregables_estudiante(instance, filename):
+    ext = filename.split('.')[-1]
+    return os.path.join('entregables_retos', f"reto_{instance.reto_id}", f"estudiante_{instance.estudiante.username}.{ext}")
+
+
+class Entregable(models.Model):
+    ESTADOS_ENTREGABLE = [
+        ('ENVIADO', 'Enviado'),
+        ('EN_REVISION', 'En Revisión'),
+        ('CALIFICADO', 'Calificado'),
+    ]
+
+    reto = models.ForeignKey('retos.Reto', on_delete=models.CASCADE, related_name='entregables')
+    estudiante = models.ForeignKey(Usuario, on_delete=models.CASCADE, limit_choices_to={'rol': 'ESTUDIANTE'}, related_name='entregas')
+    archivo = models.FileField(upload_to=ruta_entregables_estudiante)
+    comentario_estudiante = models.TextField(blank=True, null=True)
+    comentario_profesor = models.TextField(blank=True, null=True)
+    nota = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    fecha_entrega = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+    estado = models.CharField(max_length=20, choices=ESTADOS_ENTREGABLE, default='ENVIADO')
+
+    class Meta:
+        db_table = 'entregables_estudiantes'
+        verbose_name = "Entregable"
+        verbose_name_plural = "Entregables"
+        unique_together = ['reto', 'estudiante']
+
+    def save(self, *args, **kwargs):
+        try:
+            this = Entregable.objects.get(id=self.id)
+            if this.archivo != self.archivo:
+                if os.path.isfile(this.archivo.path):
+                    os.remove(this.archivo.path)
+        except Entregable.DoesNotExist:
+            pass
+        super(Entregable, self).save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Reto {self.reto_id} - Estudiante: {self.estudiante.username} ({self.estado})"
+
+    @property
+    def nombre_archivo(self):
+        return os.path.basename(self.archivo.name)
+    
+
+class PostulacionReto(models.Model):
+    ESTADOS_POSTULACION = [
+        ('PENDIENTE', 'Pendiente de Aprobación'),
+        ('ACEPTADA', 'Aceptada (Asignado)'),
+        ('RECHAZADA', 'Rechazada'),
+    ]
+
+    reto = models.ForeignKey('retos.Reto', on_delete=models.CASCADE, related_name='postulaciones')
+    estudiante = models.ForeignKey(Usuario, on_delete=models.CASCADE, limit_choices_to={'rol': 'ESTUDIANTE'}, related_name='postulaciones')
+    fecha_postulacion = models.DateTimeField(auto_now_add=True)
+    estado = models.CharField(max_length=20, choices=ESTADOS_POSTULACION, default='PENDIENTE')
+
+    class Meta:
+        db_table = 'postulaciones_retos'
+        verbose_name = "Postulación a Reto"
+        verbose_name_plural = "Postulaciones a Retos"
+        unique_together = ['reto', 'estudiante']
+
+    def __str__(self):
+        return f"{self.estudiante.username} -> Reto {self.reto_id} ({self.estado})"
