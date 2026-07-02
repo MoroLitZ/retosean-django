@@ -21,6 +21,43 @@ Esta rama implementa el flujo base para que empresas, profesores y administrador
 - `SeguimientoReto`: registra sesiones, avances, observaciones y acuerdos sobre un reto.
 - `IntegracionAcademica`: conecta un reto aprobado o activo con una propuesta academica creada por un profesor.
 
+## Sistema de base de datos
+
+La rama usa PostgreSQL como base de datos principal. La conexion se define en `config/settings/base.py` y se alimenta desde variables de entorno para evitar credenciales quemadas en el codigo.
+
+Variables requeridas en `.env`:
+
+- `DB_NAME`: nombre de la base de datos.
+- `DB_USER`: usuario de PostgreSQL.
+- `DB_PASSWORD`: clave del usuario.
+- `DB_HOST`: host del servidor de base de datos, normalmente `localhost`.
+- `DB_PORT`: puerto de PostgreSQL. En `.env.example` se usa `5433`.
+
+El esquema se administra con migraciones de Django. En esta rama el modulo `retos` incluye su migracion inicial para crear las tablas de retos, historial de estados, seguimientos e integraciones academicas. Los modelos se relacionan con el usuario personalizado mediante `settings.AUTH_USER_MODEL`, por eso las tablas dependen tambien de las migraciones de `usuarios`.
+
+Relaciones principales:
+
+- Un usuario Empresa puede tener muchos `Reto`.
+- Un `Reto` puede tener muchos registros de `HistorialEstadoReto`.
+- Un `Reto` puede tener muchos `SeguimientoReto`.
+- Un `Reto` puede tener muchas `IntegracionAcademica`.
+- Un usuario Profesor puede tener muchas `IntegracionAcademica`.
+
+Flujo recomendado para trabajar con la base de datos:
+
+```bash
+python manage.py makemigrations
+python manage.py migrate
+python manage.py check
+```
+
+Cada cambio en `models.py` debe incluir su migracion correspondiente. Si dos ramas crean migraciones al mismo tiempo y Django detecta ramas paralelas en el historial, se debe resolver con:
+
+```bash
+python manage.py makemigrations --merge
+python manage.py migrate
+```
+
 ## Rutas principales
 
 - `/retos/mis-retos/`: listado de retos de la empresa.
