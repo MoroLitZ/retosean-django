@@ -43,6 +43,74 @@ Relaciones principales:
 - Un `Reto` puede tener muchas `IntegracionAcademica`.
 - Un usuario Profesor puede tener muchas `IntegracionAcademica`.
 
+Diagrama de relaciones:
+
+```mermaid
+erDiagram
+    USUARIO ||--o{ RETO : crea
+    USUARIO ||--o{ INTEGRACION_ACADEMICA : crea
+    USUARIO ||--o{ HISTORIAL_ESTADO_RETO : realiza
+    USUARIO ||--o{ SEGUIMIENTO_RETO : registra
+    RETO ||--o{ HISTORIAL_ESTADO_RETO : tiene
+    RETO ||--o{ SEGUIMIENTO_RETO : tiene
+    RETO ||--o{ INTEGRACION_ACADEMICA : integra
+
+    USUARIO {
+        int id PK
+        string rol
+        string email
+        string username
+    }
+
+    RETO {
+        int id PK
+        int empresa_id FK
+        string tipo
+        string titulo
+        string estado
+        int consecutivo
+        datetime fecha_envio_revision
+        datetime fecha_aprobacion
+        datetime creado_en
+        datetime actualizado_en
+    }
+
+    HISTORIAL_ESTADO_RETO {
+        int id PK
+        int reto_id FK
+        int realizado_por_id FK
+        string estado_anterior
+        string estado_nuevo
+        text comentario
+        datetime fecha
+    }
+
+    SEGUIMIENTO_RETO {
+        int id PK
+        int reto_id FK
+        int creado_por_id FK
+        string tipo_sesion
+        date fecha_sesion
+        int porcentaje_avance
+        text avances
+        text observaciones
+        text acuerdos
+    }
+
+    INTEGRACION_ACADEMICA {
+        int id PK
+        int reto_id FK
+        int profesor_id FK
+        string facultad
+        string programa_academico
+        string estado
+        datetime fecha_envio_revision
+        datetime fecha_aprobacion
+        datetime creado_en
+        datetime actualizado_en
+    }
+```
+
 Flujo recomendado para trabajar con la base de datos:
 
 ```bash
