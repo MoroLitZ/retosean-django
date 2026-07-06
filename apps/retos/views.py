@@ -13,7 +13,8 @@ from .forms import (
     RevisionRetoForm,
     SeguimientoRetoForm,
 )
-from .models import IntegracionAcademica, Reto
+from .models import Reto
+from apps.seguimiento.models import IntegracionAcademica, SeguimientoReto
 from .services import cambiar_estado_reto, registrar_cambio_estado
 
 

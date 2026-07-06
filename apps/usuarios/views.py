@@ -3,8 +3,12 @@ from django.contrib.auth import login, logout, get_user_model
 from django.contrib import messages
 from .forms import LoginForm, RegistroEmpresaForm, RegistroAcademicoForm, CargarDocumentoForm, EntregableForm
 from django.contrib.auth.decorators import login_required
-from .models import DocumentoEmpresa, Empresa, Usuario, PostulacionReto, Entregable
-from apps.retos.models import Reto, IntegracionAcademica
+from .models import Usuario
+from apps.empresas.models import Empresa, DocumentoEmpresa
+from apps.participaciones.models import Postulacion as PostulacionReto
+from apps.evaluacion.models import Entregable
+from apps.retos.models import Reto
+from apps.seguimiento.models import IntegracionAcademica
 from apps.retos.views import rol_requerido
 
 

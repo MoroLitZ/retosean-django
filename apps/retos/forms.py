@@ -1,6 +1,7 @@
 from django import forms
 
-from .models import IntegracionAcademica, Reto, SeguimientoReto
+from .models import Reto
+from apps.seguimiento.models import IntegracionAcademica, SeguimientoReto
 
 
 class BootstrapModelForm(forms.ModelForm):
