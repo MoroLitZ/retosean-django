@@ -14,6 +14,14 @@ class Empresa(models.Model):
     sector_industrial = models.CharField(max_length=100)
     fecha_creacion = models.DateField(auto_now_add=True)
 
+    usuario = models.OneToOneField(
+        "usuarios.Usuario",
+        on_delete=models.CASCADE,
+        related_name="empresa_perfil",
+        null=True,
+        blank=True,
+    )
+
     class Meta:
         db_table = "empresas"
         verbose_name = "Empresa"

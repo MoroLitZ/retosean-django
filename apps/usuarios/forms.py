@@ -86,6 +86,7 @@ class RegistroEmpresaForm(UserCreationForm):
         if commit:
             user.save()
             Empresa.objects.create(
+                usuario=user,
                 nit=self.cleaned_data.get("nit"),
                 razon_social=self.cleaned_data.get("razon_social"),
                 sector_industrial=self.cleaned_data.get("sector_industrial"),
