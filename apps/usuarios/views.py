@@ -54,7 +54,7 @@ def vista_registro(request):
             login(request, user)
             messages.success(request, f'¡Bienvenido a RetosEAN, {user.first_name or user.username}!')
             return redirect(_url_para_usuario(user))
-        return render(request, 'usuarios/form_academico.html', {'form': form})
+        return render(request, 'estudiante/form_academico.html', {'form': form})
 
     elif tipo_registro == 'empresa':
         form = RegistroEmpresaForm(request.POST or None)
@@ -63,7 +63,7 @@ def vista_registro(request):
             login(request, user)
             messages.success(request, '¡Organización registrada! Bienvenido a RetosEAN.')
             return redirect(_url_para_usuario(user))
-        return render(request, 'usuarios/form_empresa.html', {'form': form})    
+        return render(request, 'empresas/form_empresa.html', {'form': form})    
     
     return render(request, 'usuarios/registro.html')
 
@@ -149,7 +149,7 @@ def panel_documentos_empresa(request):
         'tiene_documentos': len(documentos_procesados) > 0,
         'perfil': empresa, # si no funciona, quitamos la linea
     }
-    return render(request, 'usuarios/panel_documentos.html', context)
+    return render(request, 'empresas/panel_documentos.html', context)
 
 
 @rol_requerido('ESTUDIANTE')
@@ -193,21 +193,21 @@ def dashboard_admin(request):
 def dashboard_empresa(request):
     if request.user.rol != 'EMPRESA':
         return redirect(_url_para_usuario(request.user))
-    return render(request, 'usuarios/dashboard_empresa.html')
+    return render(request, 'empresas/dashboard.html')
 
 
 @login_required(login_url='usuarios:login')
 def dashboard_profesor(request):
     if request.user.rol != 'PROFESOR':
         return redirect(_url_para_usuario(request.user))
-    return render(request, 'usuarios/dashboard_profesor.html')
+    return render(request, 'profesor/dashboard.html')
 
 
 @login_required(login_url='usuarios:login')
 def dashboard_estudiante(request):
     if request.user.rol != 'ESTUDIANTE':
         return redirect(_url_para_usuario(request.user))
-    return render(request, 'usuarios/dashboard_estudiante.html')
+    return render(request, 'estudiante/dashboard.html')
 
 
 
@@ -261,7 +261,7 @@ def explorar_retos(request):
         
     # Cambiamos '-fecha_creacion' por '-creado_en'
     retos_disponibles = Reto.objects.all().order_by('-creado_en') if 'Reto' in globals() else []
-    return render(request, 'usuarios/estudiante/explorar_retos.html', {
+    return render(request, 'estudiante/explorar_retos.html', {
         'retos': retos_disponibles, 'titulo': 'Explorar Retos Disponibles'
     })
 
@@ -273,7 +273,7 @@ def mis_postulaciones(request):
         
     postulaciones_usuario = PostulacionReto.objects.filter(estudiante=request.user).select_related('reto')
     
-    return render(request, 'usuarios/estudiante/mis_postulaciones.html', {
+    return render(request, 'estudiante/mis_postulaciones.html', {
         'postulaciones': postulaciones_usuario,
         'titulo': 'Mis Inscripciones a Retos'
     })
@@ -312,7 +312,7 @@ def mis_entregables(request, reto_id=None):
         
     todas_mis_postulaciones = PostulacionReto.objects.filter(estudiante=request.user).select_related('reto')
         
-    return render(request, 'usuarios/estudiante/mis_entregables.html', {
+    return render(request, 'estudiante/mis_entregables.html', {
         'titulo': 'Mis Entregables de Proyecto',
         'reto': reto,
         'form': form,
@@ -326,7 +326,7 @@ def certificados(request):
     if request.user.rol != 'ESTUDIANTE':
         return redirect(_url_para_usuario(request.user))
         
-    return render(request, 'usuarios/estudiante/certificados.html', {
+    return render(request, 'estudiante/certificados.html', {
         'titulo': 'Mis Certificados Obtenidos'
     })
     
@@ -358,7 +358,7 @@ def postulaciones_empresa(request):
         reto__in=retos_empresa
     ).select_related('reto', 'estudiante').order_by('-id')
 
-    return render(request, 'usuarios/empresa/postulaciones.html', {
+    return render(request, 'empresas/postulaciones.html', {
         'titulo': 'Gestión de Postulaciones y Entregables',
         'postulaciones': postulaciones,
         'entregables': entregables_recibidos,
@@ -410,7 +410,7 @@ def entregables_profesor(request):
         id__in=retos_integrados
     ).select_related('empresa').order_by('-id')
 
-    return render(request, 'usuarios/profesor/entregables.html', {
+    return render(request, 'profesor/entregables.html', {
         'titulo': 'Panel de Control Académico',
         'entregables': entregables_academia,
         'retos': todos_los_retos
@@ -447,7 +447,7 @@ def indicadores_empresa(request):
         'entregables_pendientes': Entregable.objects.filter(reto__in=retos, estado='ENVIADO').count(),
         'retos_recientes': retos.order_by('-creado_en')[:5],
     }
-    return render(request, 'usuarios/empresa/indicadores.html', context)
+    return render(request, 'empresas/indicadores.html', context)
 
 
 # Profesor
@@ -460,7 +460,7 @@ def mis_cursos(request):
         profesor=request.user
     ).select_related('reto').order_by('-creado_en')
 
-    return render(request, 'usuarios/profesor/mis_cursos.html', {
+    return render(request, 'profesor/mis_cursos.html', {
         'titulo': 'Mis Cursos y Retos Vinculados',
         'integraciones': integraciones,
     })
@@ -485,7 +485,7 @@ def mis_estudiantes(request):
         estado='ACEPTADA',
     ).select_related('estudiante', 'reto').order_by('reto', 'estudiante__last_name')
 
-    return render(request, 'usuarios/profesor/mis_estudiantes.html', {
+    return render(request, 'profesor/mis_estudiantes.html', {
         'titulo': 'Mis Estudiantes',
         'postulaciones': postulaciones_aceptadas,
     })
@@ -521,7 +521,7 @@ def evaluaciones(request):
                 messages.error(request, 'No tienes permisos para calificar este entregable.')
         return redirect('usuarios:evaluaciones')
 
-    return render(request, 'usuarios/profesor/evaluaciones.html', {
+    return render(request, 'profesor/evaluaciones.html', {
         'titulo': 'Evaluaciones y Calificaciones',
         'entregables': entregables,
     })
