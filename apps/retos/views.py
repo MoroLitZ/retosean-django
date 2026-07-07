@@ -311,7 +311,7 @@ def admin_integraciones(request):
     return render(request, 'retos/admin_integraciones.html', {
         'integraciones': paginator.get_page(request.GET.get('page')),
         'estado': estado,
-        'estados': IntegracionAcademica.ESTADO_CHOICES,
+        'estados': IntegracionAcademica.ESTADOS,
     })
 
 

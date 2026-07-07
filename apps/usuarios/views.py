@@ -84,13 +84,13 @@ def vista_perfil(request):
 def panel_documentos_empresa(request):
 
     # verificamos que el usuario que entra sea una empresa
-    if (request.user.rol != 'EMPRESA' or not request.user.empresa) and not request.user.is_staff:
+    if (request.user.rol != 'EMPRESA' or not request.user.empresa_perfil) and not request.user.is_staff:
         messages.error(request, "Acceso denegado. Esta sección es exclusiva para empresas con perfil completo.")
         return redirect(_url_para_usuario(request.user))
 
     # asignamos la empresa
     try:
-        empresa = request.user.empresa
+        empresa = request.user.empresa_perfil
     except Empresa.DoesNotExist:
         messages.error(request, "Tu empresa aún no tiene perfil completo.")
         return redirect(_url_para_usuario(request.user))
@@ -338,7 +338,7 @@ def postulaciones_empresa(request):
         return redirect(_url_para_usuario(request.user))
 
     try:
-        request.user.empresa
+        request.user.empresa_perfil
     except Empresa.DoesNotExist:
         messages.error(request, "Primero debes completar el perfil de tu empresa.")
         return redirect('usuarios:empresa_dashboard')
@@ -363,7 +363,7 @@ def postulaciones_empresa(request):
         'postulaciones': postulaciones,
         'entregables': entregables_recibidos,
         'estado_filtro': estado_filtro,
-        'estados': PostulacionReto.ESTADOS_POSTULACION,
+        'estados': PostulacionReto.ESTADOS,
     })
 
 
