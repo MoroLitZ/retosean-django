@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from apps.empresas.views import admin_revisar_documentacion, procesar_aprobacion
 
 app_name = 'usuarios'
 
@@ -19,7 +20,8 @@ urlpatterns = [
     path('admin/usuarios/',  views.lista_usuarios,    name='lista_usuarios'),
     path('admin/empresas/',  views.lista_empresas,    name='lista_empresas'),
     path('admin/reportes/',  views.reportes_admin,    name='reportes_admin'),
-
+    path('admin/documentos/revisar/', admin_revisar_documentacion, name='admin_revisar_documentacion'),
+    path('admin/documentos/procesar/<int:documento_id>/', procesar_aprobacion, name='procesar_aprobacion'),
     # Empresa
     path('empresa/publicar-reto/',  views.publicar_reto,              name='publicar_reto'),
     path('empresa/mis-retos/',      views.mis_retos_empresa,          name='mis_retos_empresa'),

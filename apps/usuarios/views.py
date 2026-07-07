@@ -12,6 +12,24 @@ from apps.seguimiento.models import IntegracionAcademica
 from apps.retos.views import rol_requerido
 
 
+# por ahora mientras migramos el código a sus carpetas correspondientes
+from apps.empresas.views import admin_revisar_documentacion, procesar_aprobacion
+from apps.empresas.services import puede_la_empresa_operar
+
+@login_required
+def publicar_reto(request):
+    # Aquí validamos primero si tiene permisos legales
+    empresa = request.user.empresa_perfil # O el nombre de tu relación
+    
+    if not puede_la_empresa_operar(empresa):
+        messages.error(request, "Tu documentación legal no ha sido aprobada aún. No puedes publicar retos.")
+        return redirect('usuarios:documentos_empresa')
+    
+    # Si pasa el filtro, entonces redirigimos a donde se crea el reto realmente
+    return redirect('retos:crear')
+# por ahora mientras migramos el código a sus carpetas correspondientes
+
+
 def _url_para_usuario(user):
     if user.is_superuser:
         return 'usuarios:admin_dashboard'
@@ -418,10 +436,6 @@ def entregables_profesor(request):
 # ── Vistas stub (en construcción) ──────────────────────────────────
 
 # Empresa — stubs que apuntan a vistas reales
-@login_required(login_url='usuarios:login')
-def publicar_reto(request):
-    return redirect('retos:crear')
-
 
 @login_required(login_url='usuarios:login')
 def mis_retos_empresa(request):

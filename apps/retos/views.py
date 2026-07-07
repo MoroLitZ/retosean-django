@@ -16,6 +16,7 @@ from .forms import (
 from .models import Reto
 from apps.seguimiento.models import IntegracionAcademica, SeguimientoReto
 from .services import cambiar_estado_reto, registrar_cambio_estado
+from apps.empresas.decorators import empresa_verificada
 
 
 def rol_requerido(*roles_permitidos):
@@ -69,6 +70,7 @@ def mis_retos(request):
 
 
 @solo_empresa
+@empresa_verificada
 def crear_reto(request):
     form = RetoForm(request.POST or None, request.FILES or None)
     if request.method == 'POST' and form.is_valid():
@@ -111,7 +113,7 @@ def enviar_revision(request, pk):
         messages.error(request, 'Este reto no puede enviarse a revision desde su estado actual.')
         return redirect('retos:detalle', pk=reto.pk)
 
-    faltantes = reto.campos_faltantes_para_revision()
+    faltantes = reto.campos_faltantes_para_revision
     if faltantes:
         messages.error(request, 'Completa estos campos antes de enviar: ' + ', '.join(faltantes) + '.')
         return redirect('retos:editar', pk=reto.pk)
@@ -266,7 +268,7 @@ def editar_integracion(request, pk):
 @solo_profesor
 def enviar_integracion_revision(request, pk):
     integracion = get_object_or_404(IntegracionAcademica, pk=pk, profesor=request.user)
-    faltantes = integracion.campos_faltantes_para_revision()
+    faltantes = integracion.campos_faltantes_para_revision
     if faltantes:
         messages.error(request, 'Completa estos campos antes de enviar: ' + ', '.join(faltantes) + '.')
         return redirect('retos:editar_integracion', pk=integracion.pk)
