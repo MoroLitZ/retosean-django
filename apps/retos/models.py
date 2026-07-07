@@ -2,7 +2,6 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
-
 class Reto(models.Model):
     TIPO_CHOICES = [
         ("reto", "Reto"),
@@ -53,6 +52,20 @@ class Reto(models.Model):
         return self.titulo or f"Reto #{self.pk or 'nuevo'}"
 
     @property
+    def campos_faltantes_para_revision(self):
+        """
+        Calcula qué campos obligatorios están vacíos para enviar a revisión.
+        """
+        faltantes = []
+        if not self.titulo: faltantes.append("Título")
+        if not self.descripcion: faltantes.append("Descripción")
+        if not self.area: faltantes.append("Área")
+        if not self.fecha_inicio_tentativa: faltantes.append("Fecha de inicio tentativa")
+        if not self.fecha_fin_tentativa: faltantes.append("Fecha de fin tentativa")
+        if not self.fecha_limite_postulacion: faltantes.append("Fecha límite de postulación")
+        return faltantes
+
+    @property
     def puede_editar_empresa(self):
         return self.estado in {"borrador", "rechazado"}
 
@@ -65,6 +78,7 @@ class Reto(models.Model):
             return
         ultimo = Reto.objects.exclude(consecutivo__isnull=True).order_by("-consecutivo").first()
         self.consecutivo = (ultimo.consecutivo if ultimo else 0) + 1
+        self.save()
 
 
 class HistorialEstadoReto(models.Model):

@@ -396,10 +396,11 @@
           </a>
         </li>
         <li class="nav-item">
-          <a href="/admin/" class="nav-link">
-            <i class="bi bi-shield-lock"></i> Panel Admin
+          <a href="{% url 'usuarios:admin_revisar_documentacion' %}" class="nav-link {% if request.resolver_match.url_name == 'admin_revisar_documentacion' %}active{% endif %}">
+            <i class="bi bi-file-earmark-check"></i> Revisar Documentos
           </a>
         </li>
+        
 
       {% elif user.rol == 'EMPRESA' %}
         {# ── EMPRESA ── #}

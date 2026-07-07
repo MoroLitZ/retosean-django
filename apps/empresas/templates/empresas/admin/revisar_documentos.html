@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Revisión de Documentación Legal</h2>
+    <hr>
+    
+    {% if pendientes %}
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Empresa</th>
+                    <th>Documento</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in pendientes %}
+                <tr>
+                    <td>{{ doc.empresa.razon_social }}</td>
+                    <td><a href="{{ doc.archivo.url }}" target="_blank">Ver Archivo</a></td>
+                    <td>
+                        <!-- Botón Aprobar -->
+                        <form action="{% url 'usuarios:procesar_aprobacion' doc.id %}" method="POST" style="display:inline;">
+                            {% csrf_token %}
+                            <input type="hidden" name="nuevo_estado" value="VERIFICADO">
+                            <button type="submit" class="btn btn-sm btn-success">Aprobar</button>
+                        </form>
+                        
+                        <!-- Botón Rechazar -->
+                        <form action="{% url 'usuarios:procesar_aprobacion' doc.id %}" method="POST" style="display:inline;">
+                            {% csrf_token %}
+                            <input type="hidden" name="nuevo_estado" value="RECHAZADO">
+                            <input type="text" name="motivo" placeholder="Motivo del rechazo" required class="form-control form-control-sm" style="width: auto; display: inline-block;">
+                            <button type="submit" class="btn btn-sm btn-danger">Rechazar</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="alert alert-info">No hay documentos pendientes de revisión.</div>
+    {% endif %}
+</div>
+{% endblock %}
