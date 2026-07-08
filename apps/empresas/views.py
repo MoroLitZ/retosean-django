@@ -187,17 +187,11 @@ def admin_revisar_documentacion(request):
         messages.error(request, "Acceso denegado.")
         return redirect('usuarios:perfil')
     
-<<<<<<< HEAD
-    pendientes = DocumentoEmpresa.objects.filter(estado='CARGADO')
-    return render(request, 'empresas/admin/revisar_documentos.html', {'pendientes': pendientes})
-
-=======
     # Filtramos solo documentos en estado CARGADO que tengan archivo
     pendientes = DocumentoEmpresa.objects.filter(estado='CARGADO').exclude(archivo='')
     return render(request, 'empresas/admin/revisar_documentos.html', {'pendientes': pendientes})
 
 
->>>>>>> 7c27f42cdad2dad97899c7181d03be51e1edbad5
 @login_required
 def procesar_aprobacion(request, documento_id):
     """
@@ -217,8 +211,4 @@ def procesar_aprobacion(request, documento_id):
         estado_str = "aprobado" if nuevo_estado == 'VERIFICADO' else "rechazado"
         messages.success(request, f"Documento {doc.get_tipo_documento_display()} {estado_str} exitosamente.")
         
-<<<<<<< HEAD
-    return redirect('usuarios:admin_revisar_documentacion')
-=======
     return redirect('empresas:admin_revisar_documentacion')
->>>>>>> 7c27f42cdad2dad97899c7181d03be51e1edbad5
