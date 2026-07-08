@@ -11,4 +11,8 @@ urlpatterns = [
     path('postulaciones/<int:postulacion_id>/gestionar/', views.gestionar_postulacion, name='gestionar_postulacion'),
     path('documentos/',     views.panel_documentos_empresa,   name='documentos'),
     path('indicadores/',    views.indicadores_empresa,        name='indicadores_empresa'),
+    
+    # Admin - Gestión de documentos
+    path('admin/revisar-documentos/', views.admin_revisar_documentacion, name='admin_revisar_documentacion'),
+    path('admin/procesar-aprobacion/<int:documento_id>/', views.procesar_aprobacion, name='procesar_aprobacion'),
 ]
