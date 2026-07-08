@@ -187,7 +187,8 @@ def admin_revisar_documentacion(request):
         messages.error(request, "Acceso denegado.")
         return redirect('usuarios:perfil')
     
-    pendientes = DocumentoEmpresa.objects.filter(estado='CARGADO')
+    # Filtramos solo documentos en estado CARGADO que tengan archivo
+    pendientes = DocumentoEmpresa.objects.filter(estado='CARGADO').exclude(archivo='')
     return render(request, 'empresas/admin/revisar_documentos.html', {'pendientes': pendientes})
 
 

@@ -18,7 +18,13 @@
                 {% for doc in pendientes %}
                 <tr>
                     <td>{{ doc.empresa.razon_social }}</td>
-                    <td><a href="{{ doc.archivo.url }}" target="_blank">Ver Archivo</a></td>
+                    <td>
+                        {% if doc.archivo %}
+                            <a href="{{ doc.archivo.url }}" target="_blank">Ver Archivo</a>
+                        {% else %}
+                            <span class="text-muted">Sin archivo</span>
+                        {% endif %}
+                    </td>
                     <td>
                         <!-- Botón Aprobar -->
                         <form action="{% url 'empresas:procesar_aprobacion' doc.id %}" method="POST" style="display:inline;">
