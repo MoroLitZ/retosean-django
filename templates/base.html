@@ -381,6 +381,11 @@
           </a>
         </li>
         <li class="nav-item">
+          <a href="{% url 'empresas:admin_revisar_documentacion' %}" class="nav-link {% if request.resolver_match.url_name == 'admin_revisar_documentacion' %}active{% endif %}">
+            <i class="bi bi-file-text"></i> Documentos
+          </a>
+        </li>
+        <li class="nav-item">
           <a href="{% url 'retos:admin_panel' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'admin_panel' %}active{% endif %}">
             <i class="bi bi-trophy"></i> Retos
           </a>
@@ -395,12 +400,6 @@
             <i class="bi bi-bar-chart-line"></i> Reportes
           </a>
         </li>
-        <li class="nav-item">
-          <a href="{% url 'usuarios:admin_revisar_documentacion' %}" class="nav-link {% if request.resolver_match.url_name == 'admin_revisar_documentacion' %}active{% endif %}">
-            <i class="bi bi-file-earmark-check"></i> Revisar Documentos
-          </a>
-        </li>
-        
 
       {% elif user.rol == 'EMPRESA' %}
         {# ── EMPRESA ── #}
@@ -421,17 +420,17 @@
           </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:postulaciones_empresa' %}" class="nav-link {% if request.resolver_match.url_name == 'postulaciones_empresa' %}active{% endif %}">
+          <a href="{% url 'empresas:postulaciones_empresa' %}" class="nav-link {% if request.resolver_match.url_name == 'postulaciones_empresa' %}active{% endif %}">
             <i class="bi bi-person-check"></i> Postulaciones
           </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:documentos_empresa' %}" class="nav-link {% if request.resolver_match.url_name == 'documentos_empresa' %}active{% endif %}">
+          <a href="{% url 'empresas:documentos' %}" class="nav-link {% if request.resolver_match.url_name == 'documentos' %}active{% endif %}">
             <i class="bi bi-file-earmark-text"></i> Documentos Legales
           </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:indicadores_empresa' %}" class="nav-link {% if request.resolver_match.url_name == 'indicadores_empresa' %}active{% endif %}">
+          <a href="{% url 'empresas:indicadores_empresa' %}" class="nav-link {% if request.resolver_match.url_name == 'indicadores_empresa' %}active{% endif %}">
             <i class="bi bi-bar-chart"></i> Indicadores
           </a>
         </li>
@@ -445,7 +444,7 @@
           </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:mis_cursos' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_cursos' %}active{% endif %}">
+          <a href="{% url 'seguimiento:mis_cursos' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_cursos' %}active{% endif %}">
             <i class="bi bi-journal-text"></i> Mis Cursos
           </a>
         </li>
@@ -460,17 +459,17 @@
           </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:mis_estudiantes' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_estudiantes' %}active{% endif %}">
+          <a href="{% url 'seguimiento:mis_estudiantes' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_estudiantes' %}active{% endif %}">
             <i class="bi bi-people"></i> Mis Estudiantes
           </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:evaluaciones' %}" class="nav-link {% if request.resolver_match.url_name == 'evaluaciones' %}active{% endif %}">
+          <a href="{% url 'seguimiento:evaluaciones' %}" class="nav-link {% if request.resolver_match.url_name == 'evaluaciones' %}active{% endif %}">
             <i class="bi bi-star-half"></i> Evaluaciones
           </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:entregables_profesor' %}" class="nav-link {% if request.resolver_match.url_name == 'entregables_profesor' %}active{% endif %}">
+          <a href="{% url 'seguimiento:entregables_profesor' %}" class="nav-link {% if request.resolver_match.url_name == 'entregables_profesor' %}active{% endif %}">
             <i class="bi bi-folder-check"></i> Entregables
           </a>
         </li>
@@ -484,22 +483,22 @@
           </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:explorar_retos' %}" class="nav-link {% if request.resolver_match.url_name == 'explorar_retos' %}active{% endif %}">
+          <a href="{% url 'academico:explorar_retos' %}" class="nav-link {% if request.resolver_match.url_name == 'explorar_retos' %}active{% endif %}">
             <i class="bi bi-search"></i> Explorar Retos
           </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:mis_postulaciones' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_postulaciones' %}active{% endif %}">
+          <a href="{% url 'academico:mis_postulaciones' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_postulaciones' %}active{% endif %}">
             <i class="bi bi-send"></i> Mis Postulaciones
           </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:mis_entregables' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_entregables' %}active{% endif %}">
+          <a href="{% url 'participaciones:mis_entregables' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_entregables' %}active{% endif %}">
             <i class="bi bi-folder2-open"></i> Mis Entregables
           </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'usuarios:certificados' %}" class="nav-link {% if request.resolver_match.url_name == 'certificados' %}active{% endif %}">
+          <a href="{% url 'academico:certificados' %}" class="nav-link {% if request.resolver_match.url_name == 'certificados' %}active{% endif %}">
             <i class="bi bi-award"></i> Certificados
           </a>
         </li>
