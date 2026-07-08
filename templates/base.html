@@ -381,6 +381,11 @@
           </a>
         </li>
         <li class="nav-item">
+          <a href="{% url 'empresas:admin_revisar_documentacion' %}" class="nav-link {% if request.resolver_match.url_name == 'admin_revisar_documentacion' %}active{% endif %}">
+            <i class="bi bi-file-text"></i> Documentos
+          </a>
+        </li>
+        <li class="nav-item">
           <a href="{% url 'retos:admin_panel' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'admin_panel' %}active{% endif %}">
             <i class="bi bi-trophy"></i> Retos
           </a>
