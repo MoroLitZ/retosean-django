@@ -82,14 +82,14 @@
                 <td class="text-center pe-4">
                   {% if p.estado == 'PENDIENTE' %}
                   <div class="d-flex gap-1 justify-content-center">
-                    <form method="post" action="{% url 'usuarios:gestionar_postulacion' postulacion_id=p.pk %}">
+                    <form method="post" action="{% url 'empresas:gestionar_postulacion' postulacion_id=p.pk %}">
                       {% csrf_token %}
                       <button name="accion" value="aceptar" type="submit"
                               class="btn btn-sm btn-success px-3">
                         <i class="bi bi-check-lg"></i> Aceptar
                       </button>
                     </form>
-                    <form method="post" action="{% url 'usuarios:gestionar_postulacion' postulacion_id=p.pk %}">
+                    <form method="post" action="{% url 'empresas:gestionar_postulacion' postulacion_id=p.pk %}">
                       {% csrf_token %}
                       <button name="accion" value="rechazar" type="submit"
                               class="btn btn-sm btn-outline-danger px-3"

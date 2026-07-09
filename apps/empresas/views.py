@@ -23,10 +23,20 @@ def panel_documentos_empresa(request):
         form = CargarDocumentoForm(request.POST, request.FILES)
 
         if form.is_valid():
-            documento = form.save(commit=False)
-            documento.empresa = empresa
-            documento.estado = 'CARGADO'
-            documento.save()
+            tipo = form.cleaned_data['tipo_documento']
+            archivo = form.cleaned_data['archivo']
+            fecha_expedicion = form.cleaned_data.get('fecha_expedicion')
+
+            documento, created = DocumentoEmpresa.objects.update_or_create(
+                empresa=empresa,
+                tipo_documento=tipo,
+                defaults={
+                    'archivo': archivo,
+                    'estado': 'CARGADO',
+                    'motivo_rechazo': '',
+                    'fecha_expedicion': fecha_expedicion
+                }
+            )
             
             messages.success(request, "Documento cargado correctamente.")
             return redirect('empresas:documentos')
@@ -129,7 +139,6 @@ def indicadores_empresa(request):
     if request.user.rol != 'EMPRESA' or not hasattr(request.user, 'empresa_perfil'):
         return redirect(_url_para_usuario(request.user))
 
-    # CORRECCIÓN: Filtrar por empresa_perfil
     retos = Reto.objects.filter(empresa=request.user)
     context = {
         'titulo': 'Indicadores de Gestión',
@@ -158,37 +167,37 @@ def mis_retos_empresa(request):
 
 
 @login_required
-def admin_revisar_documentacion(request):
-    if not request.user.is_superuser:
-        messages.error(request, "Acceso denegado.")
-        return redirect('usuarios:perfil')
-    
-    pendientes = DocumentoEmpresa.objects.filter(estado='CARGADO').exclude(archivo='')
-    return render(request, 'empresas/admin/revisar_documentos.html', {'pendientes': pendientes})
+def admin_revisar_documentacion(request, empresa_id):
+    empresa = get_object_or_404(Empresa, id=empresa_id)
+    pendientes = DocumentoEmpresa.objects.filter(empresa=empresa).exclude(estado__in=['VERIFICADO', 'RECHAZADO'])
+
+    return render(request, 'empresas/admin/revisar_documentos.html', {
+        'empresa': empresa,
+        'pendientes': pendientes
+    })
 
 
 @login_required
 def procesar_aprobacion(request, documento_id):
-    if not request.user.is_superuser:
-        return redirect('usuarios:perfil')
-        
-    doc = get_object_or_404(DocumentoEmpresa, pk=documento_id)
-    
     if request.method == 'POST':
+        documento = get_object_or_404(DocumentoEmpresa, id=documento_id)
+        
         nuevo_estado = request.POST.get('nuevo_estado')
-        doc.estado = nuevo_estado
-        doc.motivo_rechazo = request.POST.get('motivo', '')
-        doc.save()
+        motivo = request.POST.get('motivo', '')
         
-        # Lógica de cierre HU01: Validar si al aprobar un documento, la empresa queda VERIFICADA
-        if puede_la_empresa_operar(doc.empresa):
-            doc.empresa.estado_validacion = 'VERIFICADA'
-            doc.empresa.save()
+        if nuevo_estado == 'VERIFICADO':
+            documento.estado = 'VERIFICADO'
+            documento.motivo_rechazo = ''
+        elif nuevo_estado == 'RECHAZADO':
+            documento.estado = 'RECHAZADO'
+            documento.motivo_rechazo = motivo
         
-        estado_str = "aprobado" if nuevo_estado == 'VERIFICADO' else "rechazado"
-        messages.success(request, f"Documento {doc.get_tipo_documento_display()} {estado_str} exitosamente.")
+        documento.save()
+        messages.success(request, f"Documento {documento.get_tipo_documento_display()} procesado correctamente.")
         
-    return redirect('empresas:admin_revisar_documentacion')
+        return redirect('empresas:admin_revisar_documentacion', empresa_id=documento.empresa.id)
+    
+    return redirect('empresas:lista_empresas')
 
 
 @login_required(login_url='usuarios:login')
