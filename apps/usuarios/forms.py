@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from .models import Usuario
 from apps.academico.models import Estudiante, Profesor
-from apps.empresas.models import Empresa, DocumentoEmpresa
+from apps.empresas.models import Empresa
 from apps.evaluacion.models import Entregable
 
 
@@ -107,33 +107,6 @@ class RegistroEmpresaForm(UserCreationForm):
         self.fields["email"].label = "Correo Electronico Corporativo"
         self.fields["password1"].label = "Contrasena"
         self.fields["password2"].label = "Confirmar contrasena"
-
-
-class CargarDocumentoForm(forms.ModelForm):
-    class Meta:
-        model = DocumentoEmpresa
-        fields = ["tipo_documento", "archivo", "fecha_expedicion"]
-        widgets = {
-            "tipo_documento": forms.Select(attrs={"class": "form-control"}),
-            "archivo": forms.FileInput(attrs={"class": "form-control", "accept": ".pdf"}),
-            "fecha_expedicion": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
-        }
-
-    def clean(self):
-        cleaned_data = super().clean()
-        tipo = cleaned_data.get("tipo_documento")
-        fecha_exp = cleaned_data.get("fecha_expedicion")
-        archivo = cleaned_data.get("archivo")
-        if archivo and not fecha_exp:
-            self.add_error("fecha_expedicion", "Debes indicar la fecha de expedicion.")
-        if tipo == "CAMARA_COMERCIO" and fecha_exp:
-            hoy = timezone.now().date()
-            dias = (hoy - fecha_exp).days
-            if dias > 30:
-                self.add_error("fecha_expedicion", f"La Camara de Comercio tiene {dias} dias y el maximo es 30.")
-            elif dias < 0:
-                self.add_error("fecha_expedicion", "La fecha no puede ser futura.")
-        return cleaned_data
 
 
 class EntregableForm(forms.ModelForm):
