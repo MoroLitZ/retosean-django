@@ -2,7 +2,7 @@
 
 {% block content %}
 <div class="container mt-4">
-    <h2>Revisión de Documentación Legal</h2>
+    <h2>Revisión de Documentación Legal: {{ empresa.razon_social }}</h2>
     <hr>
     
     {% if pendientes %}
@@ -10,6 +10,7 @@
             <thead>
                 <tr>
                     <th>Empresa</th>
+                    <th>Tipo de Documento</th>
                     <th>Documento</th>
                     <th>Acciones</th>
                 </tr>
@@ -18,6 +19,15 @@
                 {% for doc in pendientes %}
                 <tr>
                     <td>{{ doc.empresa.razon_social }}</td>
+                    
+                    <td>
+                        {% if doc.get_tipo_documento_display %}
+                            {{ doc.get_tipo_documento_display }}
+                        {% else %}
+                            {{ doc.tipo_documento }}
+                        {% endif %}
+                    </td>
+                    
                     <td>
                         {% if doc.archivo %}
                             <a href="{{ doc.archivo.url }}" target="_blank">Ver Archivo</a>
@@ -25,19 +35,18 @@
                             <span class="text-muted">Sin archivo</span>
                         {% endif %}
                     </td>
+                    
                     <td>
-                        <!-- Botón Aprobar -->
                         <form action="{% url 'empresas:procesar_aprobacion' doc.id %}" method="POST" style="display:inline;">
                             {% csrf_token %}
                             <input type="hidden" name="nuevo_estado" value="VERIFICADO">
                             <button type="submit" class="btn btn-sm btn-success">Aprobar</button>
                         </form>
                         
-                        <!-- Botón Rechazar -->
                         <form action="{% url 'empresas:procesar_aprobacion' doc.id %}" method="POST" style="display:inline;">
                             {% csrf_token %}
                             <input type="hidden" name="nuevo_estado" value="RECHAZADO">
-                            <input type="text" name="motivo" placeholder="Motivo del rechazo" required class="form-control form-control-sm" style="width: auto;display: inline-block;">
+                            <input type="text" name="motivo" placeholder="Motivo del rechazo" required class="form-control form-control-sm" style="width: auto; display: inline-block;">
                             <button type="submit" class="btn btn-sm btn-danger">Rechazar</button>
                         </form>
                     </td>
@@ -46,7 +55,7 @@
             </tbody>
         </table>
     {% else %}
-        <div class="alert alert-info">No hay documentos pendientes de revisión.</div>
+        <div class="alert alert-info">No hay documentos pendientes de revisión para esta empresa.</div>
     {% endif %}
 </div>
 {% endblock %}
