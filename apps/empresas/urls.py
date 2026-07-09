@@ -13,6 +13,7 @@ urlpatterns = [
     path('indicadores/',    views.indicadores_empresa,        name='indicadores_empresa'),
     
     # Admin - Gestión de documentos
+    path('admin/empresas/',  views.lista_empresas,    name='lista_empresas'),
     path('admin/revisar-documentos/', views.admin_revisar_documentacion, name='admin_revisar_documentacion'),
     path('admin/procesar-aprobacion/<int:documento_id>/', views.procesar_aprobacion, name='procesar_aprobacion'),
 ]

@@ -18,6 +18,5 @@ urlpatterns = [
 
     # Admin
     path('admin/usuarios/',  views.lista_usuarios,    name='lista_usuarios'),
-    path('admin/empresas/',  views.lista_empresas,    name='lista_empresas'),
     path('admin/reportes/',  views.reportes_admin,    name='reportes_admin'),
 ]

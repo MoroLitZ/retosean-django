@@ -123,18 +123,6 @@ def lista_usuarios(request):
         'titulo': 'Gestión de Usuarios'
     })
 
-
-@login_required(login_url='usuarios:login')
-def lista_empresas(request):
-    """Gestión y listado de empresas aliadas"""
-    if not request.user.is_superuser:
-        return redirect(_url_para_usuario(request.user))
-    
-    empresas = Empresa.objects.all().order_by('razon_social')
-    return render(request, 'usuarios/admin/lista_empresas.html', {
-        'empresas': empresas,
-        'titulo': 'Empresas Aliadas'
-    })
     
 
 @login_required(login_url='usuarios:login')
