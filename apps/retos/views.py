@@ -13,7 +13,7 @@ from .forms import (
     RevisionRetoForm,
     SeguimientoRetoForm,
 )
-from .models import IntegracionAcademica, Reto
+from .models import IntegracionAcademica, Reto, RetoArchivo, SeguimientoArchivo
 from .services import cambiar_estado_reto, registrar_cambio_estado
 
 
@@ -59,6 +59,26 @@ def _puede_ver_reto(user, reto):
     return False
 
 
+def _guardar_archivos_reto(reto, archivos):
+    for archivo in archivos:
+        RetoArchivo.objects.create(
+            reto=reto,
+            archivo=archivo,
+            nombre_original=archivo.name,
+            tamano=archivo.size,
+        )
+
+
+def _guardar_archivos_seguimiento(seguimiento, archivos):
+    for archivo in archivos:
+        SeguimientoArchivo.objects.create(
+            seguimiento=seguimiento,
+            archivo=archivo,
+            nombre_original=archivo.name,
+            tamano=archivo.size,
+        )
+
+
 @solo_empresa
 def mis_retos(request):
     retos = Reto.objects.filter(empresa=request.user).order_by('-actualizado_en')
@@ -73,6 +93,7 @@ def crear_reto(request):
         reto.empresa = request.user
         reto.estado = 'borrador'
         reto.save()
+        _guardar_archivos_reto(reto, form.cleaned_data.get('archivos', []))
         messages.success(request, 'Reto guardado como borrador.')
         if request.POST.get('accion') == 'enviar':
             return redirect('retos:enviar_revision', pk=reto.pk)
@@ -94,6 +115,7 @@ def editar_reto(request, pk):
             reto.estado = 'borrador'
             reto.comentarios_revision = ''
         reto.save()
+        _guardar_archivos_reto(reto, form.cleaned_data.get('archivos', []))
         messages.success(request, 'Reto actualizado.')
         if request.POST.get('accion') == 'enviar':
             return redirect('retos:enviar_revision', pk=reto.pk)
@@ -105,7 +127,7 @@ def editar_reto(request, pk):
 def enviar_revision(request, pk):
     reto = get_object_or_404(Reto, pk=pk, empresa=request.user)
     if not reto.puede_editar_empresa:
-        messages.error(request, 'Este reto no puede enviarse a revision desde su estado actual.')
+        messages.error(request, 'Este reto no puede enviarse a aprobacion desde su estado actual.')
         return redirect('retos:detalle', pk=reto.pk)
 
     faltantes = reto.campos_faltantes_para_revision()
@@ -117,8 +139,8 @@ def enviar_revision(request, pk):
     reto.estado = 'en_revision'
     reto.fecha_envio_revision = timezone.now()
     reto.save(update_fields=['estado', 'fecha_envio_revision', 'actualizado_en'])
-    registrar_cambio_estado(reto, estado_anterior, 'en_revision', request.user, 'Reto enviado a revision.')
-    messages.success(request, 'Reto enviado a revision del administrador.')
+    registrar_cambio_estado(reto, estado_anterior, 'en_revision', request.user, 'Reto enviado a aprobacion.')
+    messages.success(request, 'Reto enviado a aprobacion del administrador.')
     return redirect('retos:detalle', pk=reto.pk)
 
 
@@ -204,12 +226,13 @@ def agregar_seguimiento(request, pk):
     reto = get_object_or_404(Reto, pk=pk)
     if not _puede_ver_reto(request.user, reto):
         raise PermissionDenied('No tienes acceso al seguimiento de este reto.')
-    form = SeguimientoRetoForm(request.POST or None)
+    form = SeguimientoRetoForm(request.POST or None, request.FILES or None)
     if request.method == 'POST' and form.is_valid():
         seguimiento = form.save(commit=False)
         seguimiento.reto = reto
         seguimiento.creado_por = request.user
         seguimiento.save()
+        _guardar_archivos_seguimiento(seguimiento, form.cleaned_data.get('archivos', []))
         messages.success(request, 'Seguimiento registrado.')
         return redirect('retos:seguimientos', pk=reto.pk)
     return render(request, 'retos/seguimiento_form.html', {'reto': reto, 'form': form})
@@ -270,7 +293,7 @@ def enviar_integracion_revision(request, pk):
     integracion.estado = 'en_revision'
     integracion.fecha_envio_revision = timezone.now()
     integracion.save(update_fields=['estado', 'fecha_envio_revision', 'actualizado_en'])
-    messages.success(request, 'Integracion enviada a revision del administrador.')
+    messages.success(request, 'Integracion enviada a aprobacion del administrador.')
     return redirect('retos:detalle_integracion', pk=integracion.pk)
 
 
@@ -301,7 +324,7 @@ def publicar_integracion(request, pk):
 @solo_administrador
 def admin_integraciones(request):
     estado = request.GET.get('estado', '')
-    integraciones = IntegracionAcademica.objects.select_related('reto', 'profesor')
+    integraciones = IntegracionAcademica.objects.select_related('reto', 'profesor').order_by('-actualizado_en')
     if estado:
         integraciones = integraciones.filter(estado=estado)
     paginator = Paginator(integraciones, 25)

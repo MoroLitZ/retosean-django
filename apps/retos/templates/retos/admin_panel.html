@@ -31,7 +31,7 @@
           <td>{{ reto.actualizado_en|date:'Y-m-d H:i' }}</td>
           <td class="text-end">
             <a href="{% url 'retos:detalle' reto.pk %}" class="btn btn-sm btn-outline-secondary">Ver</a>
-            <a href="{% url 'retos:admin_revisar' reto.pk %}" class="btn btn-sm btn-primary">Revisar</a>
+            <a href="{% url 'retos:admin_revisar' reto.pk %}" class="btn btn-sm btn-primary">Aprobar reto</a>
           </td>
         </tr>
         {% empty %}
