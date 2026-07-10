@@ -1,12 +1,31 @@
 from django.contrib import admin
 
-from .models import HistorialEstadoReto, IntegracionAcademica, Reto, SeguimientoReto
+from .models import (
+    HistorialEstadoReto,
+    IntegracionAcademica,
+    Reto,
+    RetoArchivo,
+    SeguimientoArchivo,
+    SeguimientoReto,
+)
 
 
 class SeguimientoInline(admin.TabularInline):
     model = SeguimientoReto
     extra = 0
     readonly_fields = ['creado_en']
+
+
+class RetoArchivoInline(admin.TabularInline):
+    model = RetoArchivo
+    extra = 0
+    readonly_fields = ['nombre_original', 'tamano', 'creado_en']
+
+
+class SeguimientoArchivoInline(admin.TabularInline):
+    model = SeguimientoArchivo
+    extra = 0
+    readonly_fields = ['nombre_original', 'tamano', 'creado_en']
 
 
 class HistorialInline(admin.TabularInline):
@@ -21,7 +40,7 @@ class RetoAdmin(admin.ModelAdmin):
     list_display = ['titulo', 'empresa', 'tipo', 'estado', 'consecutivo', 'actualizado_en']
     list_filter = ['estado', 'tipo', 'area', 'nivel_academico']
     search_fields = ['titulo', 'descripcion', 'empresa__username', 'empresa__email']
-    inlines = [SeguimientoInline, HistorialInline]
+    inlines = [RetoArchivoInline, SeguimientoInline, HistorialInline]
 
 
 @admin.register(IntegracionAcademica)
@@ -36,6 +55,19 @@ class SeguimientoRetoAdmin(admin.ModelAdmin):
     list_display = ['reto', 'tipo_sesion', 'fecha_sesion', 'porcentaje_avance', 'creado_por']
     list_filter = ['tipo_sesion', 'fecha_sesion']
     search_fields = ['reto__titulo', 'avances', 'observaciones', 'acuerdos']
+    inlines = [SeguimientoArchivoInline]
+
+
+@admin.register(RetoArchivo)
+class RetoArchivoAdmin(admin.ModelAdmin):
+    list_display = ['reto', 'nombre_original', 'tamano', 'creado_en']
+    search_fields = ['reto__titulo', 'nombre_original']
+
+
+@admin.register(SeguimientoArchivo)
+class SeguimientoArchivoAdmin(admin.ModelAdmin):
+    list_display = ['seguimiento', 'nombre_original', 'tamano', 'creado_en']
+    search_fields = ['seguimiento__reto__titulo', 'nombre_original']
 
 
 @admin.register(HistorialEstadoReto)

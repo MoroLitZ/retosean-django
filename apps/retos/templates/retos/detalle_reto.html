@@ -12,11 +12,11 @@
     <div class="d-flex flex-wrap gap-2">
       {% if user.rol == 'EMPRESA' and reto.puede_editar_empresa %}
       <a href="{% url 'retos:editar' reto.pk %}" class="btn btn-outline-primary">Editar</a>
-      <a href="{% url 'retos:enviar_revision' reto.pk %}" class="btn btn-primary">Enviar a revision</a>
+      <a href="{% url 'retos:enviar_revision' reto.pk %}" class="btn btn-primary">Enviar a aprobacion</a>
       <a href="{% url 'retos:eliminar' reto.pk %}" class="btn btn-outline-danger">Eliminar</a>
       {% endif %}
       {% if user.is_superuser or user.rol == 'ADMIN' %}
-      <a href="{% url 'retos:admin_revisar' reto.pk %}" class="btn btn-primary">Revisar</a>
+      <a href="{% url 'retos:admin_revisar' reto.pk %}" class="btn btn-primary">Aprobar reto</a>
       <a href="{% url 'retos:admin_cambiar_estado' reto.pk %}" class="btn btn-outline-primary">Cambiar estado</a>
       {% endif %}
       {% if user.is_superuser or user.rol == 'ADMIN' or user.rol == 'PROFESOR' %}
@@ -50,8 +50,15 @@
           <p><strong>Fin:</strong> {{ reto.fecha_fin_tentativa|default:'-' }}</p>
           <p><strong>Limite postulacion:</strong> {{ reto.fecha_limite_postulacion|default:'-' }}</p>
           <p><strong>Premios:</strong> {{ reto.premios|linebreaksbr|default:'-' }}</p>
-          {% if reto.documento_soporte %}
-          <a href="{{ reto.documento_soporte.url }}" class="btn btn-sm btn-outline-secondary">Documento soporte</a>
+          {% if reto.documento_soporte or reto.archivos.exists %}
+          <div class="d-grid gap-2">
+            {% if reto.documento_soporte %}
+            <a href="{{ reto.documento_soporte.url }}" class="btn btn-sm btn-outline-secondary">Documento soporte</a>
+            {% endif %}
+            {% for archivo in reto.archivos.all %}
+            <a href="{{ archivo.archivo.url }}" target="_blank" class="btn btn-sm btn-outline-secondary">{{ archivo.nombre_original|default:'Archivo de soporte' }}</a>
+            {% endfor %}
+          </div>
           {% endif %}
         </div>
       </div>

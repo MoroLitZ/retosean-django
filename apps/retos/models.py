@@ -1,3 +1,5 @@
+import os
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -11,7 +13,7 @@ class Reto(models.Model):
     ]
     ESTADO_CHOICES = [
         ('borrador', 'Borrador'),
-        ('en_revision', 'En revision'),
+        ('en_revision', 'En aprobacion'),
         ('aprobado', 'Aprobado'),
         ('rechazado', 'Rechazado'),
         ('en_curso', 'En curso'),
@@ -142,6 +144,52 @@ class SeguimientoReto(models.Model):
 
     def __str__(self):
         return f'{self.reto} - {self.get_tipo_sesion_display()}'
+
+
+class RetoArchivo(models.Model):
+    reto = models.ForeignKey(Reto, on_delete=models.CASCADE, related_name='archivos')
+    archivo = models.FileField(upload_to='retos/soportes/')
+    nombre_original = models.CharField(max_length=255, blank=True)
+    tamano = models.PositiveBigIntegerField(default=0)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-creado_en']
+        verbose_name = 'Archivo de reto'
+        verbose_name_plural = 'Archivos de reto'
+
+    def save(self, *args, **kwargs):
+        if self.archivo and not self.nombre_original:
+            self.nombre_original = os.path.basename(self.archivo.name)
+        if self.archivo and not self.tamano:
+            self.tamano = self.archivo.size
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.nombre_original or os.path.basename(self.archivo.name)
+
+
+class SeguimientoArchivo(models.Model):
+    seguimiento = models.ForeignKey(SeguimientoReto, on_delete=models.CASCADE, related_name='archivos')
+    archivo = models.FileField(upload_to='retos/seguimientos/')
+    nombre_original = models.CharField(max_length=255, blank=True)
+    tamano = models.PositiveBigIntegerField(default=0)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-creado_en']
+        verbose_name = 'Archivo de seguimiento'
+        verbose_name_plural = 'Archivos de seguimiento'
+
+    def save(self, *args, **kwargs):
+        if self.archivo and not self.nombre_original:
+            self.nombre_original = os.path.basename(self.archivo.name)
+        if self.archivo and not self.tamano:
+            self.tamano = self.archivo.size
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.nombre_original or os.path.basename(self.archivo.name)
 
 
 class IntegracionAcademica(models.Model):
