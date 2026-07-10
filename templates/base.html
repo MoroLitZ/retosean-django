@@ -391,9 +391,15 @@
             <i class="bi bi-diagram-3"></i> Integraciones
           </a>
         </li>
-        <li class="nav-item">
+                        <li class="nav-item">
           <a href="{% url 'usuarios:reportes_admin' %}" class="nav-link {% if request.resolver_match.url_name == 'reportes_admin' %}active{% endif %}">
             <i class="bi bi-bar-chart-line"></i> Reportes
+          </a>
+        </li>
+        <li><div class="nav-section-label">Gestión Académica</div></li>
+        <li class="nav-item">
+          <a href="{% url 'unidades_estudio:lista' %}" class="nav-link {% if request.resolver_match.namespace == 'unidades_estudio' %}active{% endif %}">
+            <i class="bi bi-journal-bookmark-fill"></i> Unidades de Estudio
           </a>
         </li>
 
@@ -464,9 +470,14 @@
             <i class="bi bi-star-half"></i> Evaluaciones
           </a>
         </li>
-        <li class="nav-item">
+                <li class="nav-item">
           <a href="{% url 'seguimiento:entregables_profesor' %}" class="nav-link {% if request.resolver_match.url_name == 'entregables_profesor' %}active{% endif %}">
             <i class="bi bi-folder-check"></i> Entregables
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="{% url 'unidades_estudio:lista' %}" class="nav-link {% if request.resolver_match.namespace == 'unidades_estudio' %}active{% endif %}">
+            <i class="bi bi-journal-bookmark-fill"></i> Unidades de Estudio
           </a>
         </li>
 
