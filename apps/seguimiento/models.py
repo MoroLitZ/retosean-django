@@ -40,6 +40,25 @@ class IntegracionAcademica(models.Model):
     def __str__(self):
         return f"{self.reto} - {self.profesor}"
 
+    @property
+    def campos_faltantes_para_revision(self):
+        """
+        Calcula qué campos obligatorios están vacíos para enviar a revisión.
+        """
+        faltantes = []
+        if not self.facultad: faltantes.append("Facultad")
+        if not self.nivel_formacion: faltantes.append("Nivel de formación")
+        if not self.programa_academico: faltantes.append("Programa académico")
+        if not self.ecosistema: faltantes.append("Ecosistema")
+        if not self.alcance: faltantes.append("Alcance")
+        if not self.entregable_esperado: faltantes.append("Entregable esperado")
+        if not self.cronograma_sesiones: faltantes.append("Cronograma de sesiones")
+        return faltantes
+
+    @property
+    def puede_editar_profesor(self):
+        return self.estado in {"borrador", "rechazada"}
+
 
 class SesionReto(models.Model):
     TIPOS = [
@@ -84,3 +103,4 @@ class SeguimientoReto(models.Model):
 
     def __str__(self):
         return f"{self.reto} - {self.fecha_sesion}"
+
