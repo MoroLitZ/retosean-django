@@ -1,7 +1,6 @@
-from django.contrib import messages
+﻿from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse
 
 from .models import UnidadEstudio
 
@@ -29,19 +28,26 @@ def crear_unidad(request):
     if request.method == "POST":
         codigo = request.POST.get("codigo", "").strip()
         nombre = request.POST.get("nombre", "").strip()
-        programa_id = request.POST.get("programa")
+        programa_nombre = request.POST.get("programa", "").strip()
         periodo = request.POST.get("periodo", "").strip()
         ciclo = request.POST.get("ciclo", "").strip()
         archivo = request.FILES.get("archivo")
 
-        if not codigo or not nombre or not programa_id:
+        if not codigo or not nombre or not programa_nombre:
             messages.error(request, "Código, nombre y programa son obligatorios.")
             return render(request, "unidades_estudio/form.html", {"accion": "Crear"})
+
+        from apps.academico.models import Programa
+
+        programa, _ = Programa.objects.get_or_create(
+            nombre__iexact=programa_nombre,
+            defaults={"nombre": programa_nombre},
+        )
 
         UnidadEstudio.objects.create(
             codigo=codigo,
             nombre=nombre,
-            programa_id=programa_id,
+            programa=programa,
             periodo=periodo,
             ciclo=ciclo,
             archivo=archivo,
@@ -49,12 +55,7 @@ def crear_unidad(request):
         messages.success(request, f"Unidad de estudio '{codigo} - {nombre}' creada correctamente.")
         return redirect("unidades_estudio:lista")
 
-    from apps.academico.models import Programa
-
-    return render(request, "unidades_estudio/form.html", {
-        "accion": "Crear",
-        "programas": Programa.objects.select_related("facultad").all(),
-    })
+    return render(request, "unidades_estudio/form.html", {"accion": "Crear"})
 
 
 @login_required(login_url="usuarios:login")
@@ -68,19 +69,25 @@ def editar_unidad(request, pk):
     if request.method == "POST":
         unidad.codigo = request.POST.get("codigo", "").strip()
         unidad.nombre = request.POST.get("nombre", "").strip()
-        programa_id = request.POST.get("programa")
+        programa_nombre = request.POST.get("programa", "").strip()
         unidad.periodo = request.POST.get("periodo", "").strip()
         unidad.ciclo = request.POST.get("ciclo", "").strip()
         archivo = request.FILES.get("archivo")
 
-        if not unidad.codigo or not unidad.nombre or not programa_id:
+        if not unidad.codigo or not unidad.nombre or not programa_nombre:
             messages.error(request, "Código, nombre y programa son obligatorios.")
             return render(request, "unidades_estudio/form.html", {
                 "accion": "Editar",
                 "unidad": unidad,
             })
 
-        unidad.programa_id = programa_id
+        from apps.academico.models import Programa
+
+        programa, _ = Programa.objects.get_or_create(
+            nombre__iexact=programa_nombre,
+            defaults={"nombre": programa_nombre},
+        )
+        unidad.programa = programa
         if archivo:
             unidad.archivo = archivo
         unidad.save()
@@ -88,12 +95,9 @@ def editar_unidad(request, pk):
         messages.success(request, f"Unidad de estudio '{unidad.codigo}' actualizada correctamente.")
         return redirect("unidades_estudio:lista")
 
-    from apps.academico.models import Programa
-
     return render(request, "unidades_estudio/form.html", {
         "accion": "Editar",
         "unidad": unidad,
-        "programas": Programa.objects.select_related("facultad").all(),
     })
 
 
