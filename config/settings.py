@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     'apps.reportes',
     'apps.dashboard',
     'apps.presupuesto',
+    'apps.unidades_estudio',
 ]
 
 MIDDLEWARE = [

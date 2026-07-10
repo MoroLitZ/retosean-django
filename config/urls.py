@@ -31,6 +31,7 @@ urlpatterns = [
     path('seguimiento/', include('apps.seguimiento.urls')),
     path('evaluacion/', include('apps.evaluacion.urls')),
     path('dashboard/', include('apps.dashboard.urls')),
+    path('unidades-estudio/', include('apps.unidades_estudio.urls')),
     path('notificaciones/', include('apps.notificaciones.urls')),
 ]
 

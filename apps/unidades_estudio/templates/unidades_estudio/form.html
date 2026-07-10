@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ accion }} Unidad de Estudio{% endblock %}
+{% block page_title %}{{ accion }} Unidad de Estudio{% endblock %}
+
+{% block content %}
+<div class="card-panel">
+  <div class="card-panel-header">
+    <h4 class="mb-0">{{ accion }} Unidad de Estudio</h4>
+    <a href="{% url 'unidades_estudio:lista' %}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left"></i> Volver
+    </a>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" class="p-3">
+    {% csrf_token %}
+
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label">Código <span class="text-danger">*</span></label>
+        <input type="text" name="codigo" class="form-control" required
+               value="{{ unidad.codigo|default:'' }}" placeholder="Ej: ING-101">
+      </div>
+      <div class="col-md-8">
+        <label class="form-label">Nombre <span class="text-danger">*</span></label>
+        <input type="text" name="nombre" class="form-control" required
+               value="{{ unidad.nombre|default:'' }}" placeholder="Nombre de la asignatura">
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Programa académico <span class="text-danger">*</span></label>
+        <select name="programa" class="form-select" required>
+          <option value="">Seleccione...</option>
+          {% for p in programas %}
+          <option value="{{ p.pk }}" {% if unidad.programa_id == p.pk %}selected{% endif %}>
+            {{ p.nombre }} ({{ p.facultad.nombre }})
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Periodo</label>
+        <input type="text" name="periodo" class="form-control"
+               value="{{ unidad.periodo|default:'' }}" placeholder="Ej: 2026-2">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Ciclo / Semestre</label>
+        <input type="text" name="ciclo" class="form-control"
+               value="{{ unidad.ciclo|default:'' }}" placeholder="Ej: 3">
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">Archivo (PDF con info completa)</label>
+        <input type="file" name="archivo" class="form-control" accept=".pdf">
+        {% if unidad and unidad.archivo %}
+        <div class="mt-2">
+          <a href="{{ unidad.archivo.url }}" target="_blank" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-file-earmark-pdf"></i> Archivo actual
+          </a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="mt-4">
+      <button type="submit" class="btn" style="background: var(--accent); color: #fff;">
+        <i class="bi bi-save"></i> {{ accion }}
+      </button>
+      <a href="{% url 'unidades_estudio:lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
