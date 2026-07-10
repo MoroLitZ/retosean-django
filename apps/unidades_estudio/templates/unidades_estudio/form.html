@@ -30,8 +30,23 @@
 
       <div class="col-md-6">
         <label class="form-label">Programa académico <span class="text-danger">*</span></label>
-        <input type="text" name="programa" class="form-control" required
-               value="{{ unidad.programa.nombre|default:'' }}" placeholder="Ej: Ingeniería de Sistemas">
+        <select name="programa" class="form-select" required>
+          <option value="">Seleccione un programa...</option>
+          <option value="Ingeniería de Sistemas" {% if unidad.programa.nombre == 'Ingeniería de Sistemas' %}selected{% endif %}>Ingeniería de Sistemas</option>
+          <option value="Ingeniería Mecatrónica" {% if unidad.programa.nombre == 'Ingeniería Mecatrónica' %}selected{% endif %}>Ingeniería Mecatrónica</option>
+          <option value="Ingeniería Química" {% if unidad.programa.nombre == 'Ingeniería Química' %}selected{% endif %}>Ingeniería Química</option>
+          <option value="Ingeniería Ambiental" {% if unidad.programa.nombre == 'Ingeniería Ambiental' %}selected{% endif %}>Ingeniería Ambiental</option>
+          <option value="Ingeniería Industrial" {% if unidad.programa.nombre == 'Ingeniería Industrial' %}selected{% endif %}>Ingeniería Industrial</option>
+          <option value="Administración de Empresas" {% if unidad.programa.nombre == 'Administración de Empresas' %}selected{% endif %}>Administración de Empresas</option>
+          <option value="Negocios Internacionales" {% if unidad.programa.nombre == 'Negocios Internacionales' %}selected{% endif %}>Negocios Internacionales</option>
+          <option value="Finanzas" {% if unidad.programa.nombre == 'Finanzas' %}selected{% endif %}>Finanzas</option>
+          <option value="Contaduría Pública" {% if unidad.programa.nombre == 'Contaduría Pública' %}selected{% endif %}>Contaduría Pública</option>
+          <option value="Mercadeo" {% if unidad.programa.nombre == 'Mercadeo' %}selected{% endif %}>Mercadeo</option>
+          <option value="Derecho" {% if unidad.programa.nombre == 'Derecho' %}selected{% endif %}>Derecho</option>
+          <option value="Psicología" {% if unidad.programa.nombre == 'Psicología' %}selected{% endif %}>Psicología</option>
+          <option value="Enfermería" {% if unidad.programa.nombre == 'Enfermería' %}selected{% endif %}>Enfermería</option>
+          <option value="Medicina" {% if unidad.programa.nombre == 'Medicina' %}selected{% endif %}>Medicina</option>
+        </select>
       </div>
       <div class="col-md-3">
         <label class="form-label">Periodo</label>
