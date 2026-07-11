@@ -37,11 +37,16 @@ def crear_unidad(request):
             messages.error(request, "Código, nombre y programa son obligatorios.")
             return render(request, "unidades_estudio/form.html", {"accion": "Crear"})
 
-        from apps.academico.models import Programa
+        from apps.academico.models import Programa, Facultad
+
+        facultad, _ = Facultad.objects.get_or_create(
+            nombre="Facultad de Ingeniería y Ciencias Básicas",
+            defaults={"codigo": "FICB"},
+        )
 
         programa, _ = Programa.objects.get_or_create(
             nombre__iexact=programa_nombre,
-            defaults={"nombre": programa_nombre},
+            defaults={"nombre": programa_nombre, "facultad": facultad},
         )
 
         UnidadEstudio.objects.create(
@@ -81,12 +86,18 @@ def editar_unidad(request, pk):
                 "unidad": unidad,
             })
 
-        from apps.academico.models import Programa
+        from apps.academico.models import Programa, Facultad
+
+        facultad, _ = Facultad.objects.get_or_create(
+            nombre="Facultad de Ingeniería y Ciencias Básicas",
+            defaults={"codigo": "FICB"},
+        )
 
         programa, _ = Programa.objects.get_or_create(
             nombre__iexact=programa_nombre,
-            defaults={"nombre": programa_nombre},
+            defaults={"nombre": programa_nombre, "facultad": facultad},
         )
+
         unidad.programa = programa
         if archivo:
             unidad.archivo = archivo
