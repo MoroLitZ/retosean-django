@@ -124,7 +124,7 @@
               </div>
             {% elif user.rol == 'EMPRESA' %}
               <div class="d-grid">
-                <a href="/usuarios/empresa/documentos/" class="btn btn-primary btn-md fw-semibold text-start">
+                <a href="{% url 'empresas:documentos' %}" class="btn btn-primary btn-md fw-semibold text-start">
                   <i class="bi bi-file-earmark-text me-2"></i> Gestionar Documentación Legal
                 </a>
               </div>

@@ -18,11 +18,20 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.views.generic import RedirectView
 
 urlpatterns = [
+    path('', RedirectView.as_view(pattern_name='usuarios:perfil', permanent=False)),
     path('admin/', admin.site.urls),
     path('usuarios/', include('apps.usuarios.urls')),
     path('retos/', include('apps.retos.urls')),
+    path('empresas/', include('apps.empresas.urls')),
+    path('academico/', include('apps.academico.urls')),
+    path('participaciones/', include('apps.participaciones.urls')),
+    path('seguimiento/', include('apps.seguimiento.urls')),
+    path('evaluacion/', include('apps.evaluacion.urls')),
+    path('dashboard/', include('apps.dashboard.urls')),
+    path('notificaciones/', include('apps.notificaciones.urls')),
 ]
 
 if settings.DEBUG:

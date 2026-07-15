@@ -1,0 +1,194 @@
+{% extends 'base.html' %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h2 class="page-title">Postulaciones y Entregables</h2>
+    <p class="page-subtitle">Gestiona las solicitudes de estudiantes y revisa sus avances</p>
+  </div>
+</div>
+
+<!-- Tabs -->
+<ul class="nav nav-tabs mb-4" id="empresaTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link {% if estado_filtro != 'entregables' %}active{% endif %}" id="post-tab" data-bs-toggle="tab" data-bs-target="#postulaciones-tab-pane" type="button" role="tab">
+      <i class="bi bi-send me-1"></i> Postulaciones
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link {% if estado_filtro == 'entregables' %}active{% endif %}" id="entr-tab" data-bs-toggle="tab" data-bs-target="#entregables-tab-pane" type="button" role="tab">
+      <i class="bi bi-folder-check me-1"></i> Entregables recibidos
+    </button>
+  </li>
+</ul>
+
+<div class="tab-content" id="empresaTabsContent">
+
+  <!-- ── TAB POSTULACIONES ── -->
+  <div class="tab-pane fade {% if estado_filtro != 'entregables' %}show active{% endif %}" id="postulaciones-tab-pane" role="tabpanel">
+
+    <!-- Filtros de estado -->
+    <div class="d-flex gap-2 mb-3 flex-wrap">
+      {% for valor, etiqueta in estados %}
+        <a href="?estado={{ valor }}"
+           class="btn btn-sm {% if estado_filtro == valor %}btn-dark{% else %}btn-outline-secondary{% endif %}">
+          {{ etiqueta }}
+        </a>
+      {% endfor %}
+      <a href="?" class="btn btn-sm {% if not estado_filtro %}btn-dark{% else %}btn-outline-secondary{% endif %}">Todas</a>
+    </div>
+
+    <div class="card-panel">
+      <div class="card-panel-header">
+        <span><i class="bi bi-people me-2 text-muted"></i>
+          Postulaciones
+          {% if estado_filtro == 'PENDIENTE' %}pendientes{% elif estado_filtro == 'ACEPTADA' %}aceptadas{% elif estado_filtro == 'RECHAZADA' %}rechazadas{% endif %}
+        </span>
+        <span class="badge bg-secondary">{{ postulaciones|length }}</span>
+      </div>
+      <div class="p-0">
+        {% if postulaciones %}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th class="ps-4">Estudiante</th>
+                <th>Reto</th>
+                <th>Fecha</th>
+                <th>Estado</th>
+                <th class="text-center pe-4">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in postulaciones %}
+              <tr>
+                <td class="ps-4">
+                  <div class="fw-semibold">{{ p.estudiante.get_full_name|default:p.estudiante.username }}</div>
+                  <div class="text-muted small">{{ p.estudiante.email }}</div>
+                </td>
+                <td>
+                  <a href="{% url 'retos:detalle' pk=p.reto.pk %}" class="text-decoration-none fw-semibold text-dark">
+                    {{ p.reto.titulo|truncatechars:50 }}
+                  </a>
+                </td>
+                <td class="text-muted small">{{ p.fecha_postulacion|date:"d/m/Y H:i" }}</td>
+                <td>
+                  <span class="badge {% if p.estado == 'PENDIENTE' %}bg-warning text-dark{% elif p.estado == 'ACEPTADA' %}bg-success{% else %}bg-danger{% endif %}">
+                    {{ p.get_estado_display }}
+                  </span>
+                </td>
+                <td class="text-center pe-4">
+                  {% if p.estado == 'PENDIENTE' %}
+                  <div class="d-flex gap-1 justify-content-center">
+                    <form method="post" action="{% url 'empresas:gestionar_postulacion' postulacion_id=p.pk %}">
+                      {% csrf_token %}
+                      <button name="accion" value="aceptar" type="submit"
+                              class="btn btn-sm btn-success px-3">
+                        <i class="bi bi-check-lg"></i> Aceptar
+                      </button>
+                    </form>
+                    <form method="post" action="{% url 'empresas:gestionar_postulacion' postulacion_id=p.pk %}">
+                      {% csrf_token %}
+                      <button name="accion" value="rechazar" type="submit"
+                              class="btn btn-sm btn-outline-danger px-3"
+                              onclick="return confirm('¿Rechazar la postulación de {{ p.estudiante.get_full_name|default:p.estudiante.username }}?')">
+                        <i class="bi bi-x-lg"></i> Rechazar
+                      </button>
+                    </form>
+                  </div>
+                  {% else %}
+                  <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+          <i class="bi bi-inbox display-4 opacity-25"></i>
+          <p class="mt-3 mb-0">No hay postulaciones
+            {% if estado_filtro == 'PENDIENTE' %}pendientes{% elif estado_filtro == 'ACEPTADA' %}aceptadas{% elif estado_filtro == 'RECHAZADA' %}rechazadas{% endif %}
+            en este momento.
+          </p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TAB ENTREGABLES ── -->
+  <div class="tab-pane fade {% if estado_filtro == 'entregables' %}show active{% endif %}" id="entregables-tab-pane" role="tabpanel">
+    <div class="card-panel">
+      <div class="card-panel-header">
+        <span><i class="bi bi-folder-check me-2 text-muted"></i>Entregables de proyectos</span>
+        <span class="badge bg-secondary">{{ entregables|length }}</span>
+      </div>
+      <div class="p-0">
+        {% if entregables %}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th class="ps-4">Estudiante</th>
+                <th>Reto</th>
+                <th>Fecha entrega</th>
+                <th>Estado</th>
+                <th>Nota</th>
+                <th class="text-center pe-4">Archivo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for e in entregables %}
+              <tr>
+                <td class="ps-4">
+                  <div class="fw-semibold">{{ e.estudiante.get_full_name|default:e.estudiante.username }}</div>
+                </td>
+                <td class="text-muted small fw-semibold">{{ e.reto.titulo|truncatechars:45 }}</td>
+                <td class="text-muted small">{{ e.fecha_entrega|date:"d/m/Y H:i" }}</td>
+                <td>
+                  <span class="badge {% if e.estado == 'ENVIADO' %}bg-info text-dark{% elif e.estado == 'EN_REVISION' %}bg-warning text-dark{% else %}bg-success{% endif %}">
+                    {{ e.get_estado_display }}
+                  </span>
+                </td>
+                <td class="text-muted small">{{ e.nota|default:"—" }}</td>
+                <td class="text-center pe-4">
+                  {% if e.archivo %}
+                  <a href="{{ e.archivo.url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-download"></i> Descargar
+                  </a>
+                  {% else %}
+                  <span class="text-muted small">Sin archivo</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+          <i class="bi bi-archive display-4 opacity-25"></i>
+          <p class="mt-3 mb-0">Los estudiantes aún no han subido entregables.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Mantener tab activo al filtrar por URL
+  const hash = window.location.hash;
+  if (hash) {
+    const tab = document.querySelector(`[data-bs-target="${hash}-pane"]`);
+    if (tab) new bootstrap.Tab(tab).show();
+  }
+</script>
+{% endblock %}
