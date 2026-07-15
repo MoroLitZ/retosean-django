@@ -1,10 +1,14 @@
-from django.shortcuts import render, redirect
-from django.contrib.auth import login, logout
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth import login, logout, get_user_model
 from django.contrib import messages
-from .forms import LoginForm, RegistroEmpresaForm, RegistroAcademicoForm, CargarDocumentoForm
+from .forms import LoginForm, RegistroEmpresaForm, RegistroAcademicoForm
 from django.contrib.auth.decorators import login_required
-from .models import DocumentoEmpresa, Empresa
+from .models import Usuario
+from apps.empresas.models import Empresa
+from apps.retos.models import Reto
 
+
+# ── Rutas de autenticación y perfil ──────────────────────────────
 
 def _url_para_usuario(user):
     if user.is_superuser:
@@ -14,8 +18,6 @@ def _url_para_usuario(user):
         'PROFESOR':   'usuarios:profesor_dashboard',
         'ESTUDIANTE': 'usuarios:estudiante_dashboard',
     }.get(user.rol, 'usuarios:perfil')
-
-# se manda al user a su perfil si ya tiene registro en la app
 def vista_login(request):
     if request.user.is_authenticated:
         return redirect(_url_para_usuario(request.user))
@@ -48,7 +50,7 @@ def vista_registro(request):
             login(request, user)
             messages.success(request, f'¡Bienvenido a RetosEAN, {user.first_name or user.username}!')
             return redirect(_url_para_usuario(user))
-        return render(request, 'usuarios/form_academico.html', {'form': form})
+        return render(request, 'estudiante/form_academico.html', {'form': form})
 
     elif tipo_registro == 'empresa':
         form = RegistroEmpresaForm(request.POST or None)
@@ -57,16 +59,13 @@ def vista_registro(request):
             login(request, user)
             messages.success(request, '¡Organización registrada! Bienvenido a RetosEAN.')
             return redirect(_url_para_usuario(user))
-        return render(request, 'usuarios/form_empresa.html', {'form': form})    
+        return render(request, 'empresas/form_empresa.html', {'form': form})    
     
     return render(request, 'usuarios/registro.html')
 
 
-@login_required(login_url='usuarios:login') # Se protege la vista para que únicamente los usuarios logeados puedan entrar
-# la vista donde el usuario va a ir directamente despues del login o el registro
+@login_required(login_url='usuarios:login')
 def vista_perfil(request):
-    usuario = request.user
-    nombre_completo = usuario.get_full_name().strip() or 'Sin nombre registrado'
     usuario = request.user
     nombre_completo = usuario.get_full_name().strip() or 'Sin nombre registrado'
     context = {
@@ -76,76 +75,7 @@ def vista_perfil(request):
 
     return render(request, 'usuarios/perfil.html', context)
 
-@login_required
-def panel_documentos_empresa(request):
 
-    # verificamos que el usuario que entra sea una empresa
-    if (request.user.rol != 'EMPRESA' or not request.user.empresa) and not request.user.is_staff:
-        messages.error(request, "Acceso denegado. Esta sección es exclusiva para empresas con perfil completo.")
-        return redirect(_url_para_usuario(request.user))
-
-    # asignamos la empresa
-    try:
-        empresa = request.user.empresa
-    except Empresa.DoesNotExist:
-        messages.error(request, "Tu empresa aún no tiene perfil completo.")
-        return redirect(_url_para_usuario(request.user))
-    
-    if request.method == 'POST':
-        form = CargarDocumentoForm(request.POST, request.FILES)
-        if form.is_valid():
-            documento = form.save(commit=False)
-            documento.empresa = empresa
-            documento.estado = 'CARGADO'
-            
-            try:
-                # si el documento ya existía, se actualiza en lugar de duplicarlo
-                doc_existente = DocumentoEmpresa.objects.get(empresa=empresa, tipo_documento=documento.tipo_documento)
-                doc_existente.archivo = documento.archivo
-                doc_existente.fecha_expedicion = documento.fecha_expedicion
-                doc_existente.estado = 'CARGADO'
-                doc_existente.motivo_rechazo = None
-                doc_existente.save()
-            except DocumentoEmpresa.DoesNotExist:
-                # si el documento no existía aún, se crea el registro desde cero
-                documento.save()
-                
-            messages.success(request, f"El documento {form.get_tipo_documento_display if hasattr(form, 'get_tipo_documento_display') else form.cleaned_data['tipo_documento']} se cargó correctamente.")
-            #return redirect('/usuarios/empresa/documentos/')
-            return redirect('usuarios:documentos_empresa')
-    else:
-        form = CargarDocumentoForm()
-    
-    # consultamos el estado actual de todos sus documentos para ponerlos en la tabla
-    documentos_raw = DocumentoEmpresa.objects.filter(empresa=empresa) if empresa else []
-    documentos_procesados = []
-
-    ESTADOS_MAP = {
-        'PENDIENTE': {'texto': 'Pendiente', 'clase': 'bg-warning text-dark'},
-        'CARGADO': {'texto': 'En Revisión', 'clase': 'bg-info text-dark'},
-        'VERIFICADO': {'texto': 'Aprobado', 'clase': 'bg-success text-white'},
-        'RECHAZADO': {'texto': 'Rechazado', 'clase': 'bg-danger text-white'},
-    }
-
-    for doc in documentos_raw:
-        info_estado = ESTADOS_MAP.get(doc.estado, {'texto': doc.estado, 'clase': 'bg-secondary'})
-        
-        documentos_procesados.append({
-            'tipo': doc.get_tipo_documento_display(),
-            'estado_texto': info_estado['texto'],
-            'estado_clase': info_estado['clase'],
-            'motivo_rechazo': doc.motivo_rechazo,
-            'fecha_expedicion': doc.fecha_expedicion.strftime('%d/%m/%Y') if doc.fecha_expedicion else '--',
-            'url_archivo': doc.archivo.url if doc.archivo else None
-        })
-
-    context = {
-        'form': form,
-        'documentos': documentos_procesados,
-        'tiene_documentos': len(documentos_procesados) > 0,
-        'perfil': empresa, # si no funciona, quitamos la linea
-    }
-    return render(request, 'usuarios/panel_documentos.html', context)
 
 
 @login_required(login_url='usuarios:login')
@@ -159,63 +89,53 @@ def dashboard_admin(request):
 def dashboard_empresa(request):
     if request.user.rol != 'EMPRESA':
         return redirect(_url_para_usuario(request.user))
-    return render(request, 'usuarios/dashboard_empresa.html')
+    return render(request, 'empresas/dashboard.html')
 
 
 @login_required(login_url='usuarios:login')
 def dashboard_profesor(request):
     if request.user.rol != 'PROFESOR':
         return redirect(_url_para_usuario(request.user))
-    return render(request, 'usuarios/dashboard_profesor.html')
+    return render(request, 'profesor/dashboard.html')
 
 
 @login_required(login_url='usuarios:login')
 def dashboard_estudiante(request):
     if request.user.rol != 'ESTUDIANTE':
         return redirect(_url_para_usuario(request.user))
-    return render(request, 'usuarios/dashboard_estudiante.html')
+    return render(request, 'estudiante/dashboard.html')
 
 
 
 
+# ── Vistas de Administración ──────────────────────────────────
 
-# ── Vistas stub (en construcción) ──────────────────────────────────
+@login_required(login_url='usuarios:login')
+def lista_usuarios(request):
+    """Gestión y listado de todos los usuarios del sistema"""
+    if not request.user.is_superuser:
+        return redirect(_url_para_usuario(request.user))
+    
+    # Consulta real a la tabla de usuarios de Postgres
+    usuarios = Usuario.objects.all().order_by('-date_joined')
+    return render(request, 'usuarios/admin/lista_usuarios.html', {
+        'usuarios': usuarios,
+        'titulo': 'Gestión de Usuarios'
+    })
 
-def _stub(titulo, icono, rol=None):
-    def view(request):
-        if rol == 'SUPERUSER' and not request.user.is_superuser:
-            return redirect(_url_para_usuario(request.user))
-        if rol and rol != 'SUPERUSER' and request.user.rol != rol:
-            return redirect(_url_para_usuario(request.user))
-        return render(request, 'usuarios/en_construccion.html', {
-            'titulo': titulo, 'icono': icono
-        })
-    view.__name__ = titulo.lower().replace(' ', '_')
-    return login_required(view, login_url='usuarios:login')
+    
 
-
-# Admin
-lista_usuarios    = _stub('Usuarios',         'bi-people',           rol='SUPERUSER')
-lista_empresas    = _stub('Empresas',         'bi-building',         rol='SUPERUSER')
-lista_retos_admin = _stub('Retos',            'bi-trophy',           rol='SUPERUSER')
-reportes_admin    = _stub('Reportes',         'bi-bar-chart-line',   rol='SUPERUSER')
-
-# Empresa
-publicar_reto         = _stub('Publicar Reto',     'bi-plus-circle',       rol='EMPRESA')
-mis_retos_empresa     = _stub('Mis Retos',         'bi-trophy',            rol='EMPRESA')
-postulaciones_empresa = _stub('Postulaciones',     'bi-person-check',      rol='EMPRESA')
-indicadores_empresa   = _stub('Indicadores',       'bi-bar-chart',         rol='EMPRESA')
-
-# Profesor
-mis_cursos           = _stub('Mis Cursos',       'bi-journal-text', rol='PROFESOR')
-retos_vinculados     = _stub('Retos Vinculados', 'bi-trophy',       rol='PROFESOR')
-mis_estudiantes      = _stub('Mis Estudiantes',  'bi-people',       rol='PROFESOR')
-evaluaciones         = _stub('Evaluaciones',     'bi-star-half',    rol='PROFESOR')
-entregables_profesor = _stub('Entregables',      'bi-folder-check', rol='PROFESOR')
-
-# Estudiante
-explorar_retos    = _stub('Explorar Retos',    'bi-search',       rol='ESTUDIANTE')
-mis_postulaciones = _stub('Mis Postulaciones', 'bi-send',         rol='ESTUDIANTE')
-mis_entregables   = _stub('Mis Entregables',   'bi-folder2-open', rol='ESTUDIANTE')
-certificados      = _stub('Certificados',      'bi-award',        rol='ESTUDIANTE')
+@login_required(login_url='usuarios:login')
+def reportes_admin(request):
+    """Reportes y estadísticas generales del sistema"""
+    if not request.user.is_superuser:
+        return redirect(_url_para_usuario(request.user))
+        
+    context = {
+        'titulo': 'Reportes y Estadísticas',
+        'total_usuarios': Usuario.objects.count(),
+        'total_empresas': Empresa.objects.count(),
+        'total_retos': Reto.objects.count(),
+    }
+    return render(request, 'usuarios/admin/reportes.html', context)
 

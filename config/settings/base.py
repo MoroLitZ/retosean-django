@@ -36,15 +36,17 @@ DJANGO_APPS = [
 LOCAL_APPS = [
     "apps.usuarios.apps.UsuariosConfig",
     "apps.empresas.apps.EmpresasConfig",
+    "apps.academico.apps.AcademicoConfig",
     "apps.retos.apps.RetosConfig",
-    "apps.estudiantes.apps.EstudiantesConfig",
+    "apps.participaciones.apps.ParticipacionesConfig",
     "apps.evaluacion.apps.EvaluacionConfig",
     "apps.seguimiento.apps.SeguimientoConfig",
+    "apps.cierre.apps.CierreConfig",
+    "apps.hackaton.apps.HackatonConfig",
     "apps.notificaciones.apps.NotificacionesConfig",
     "apps.reportes.apps.ReportesConfig",
     "apps.dashboard.apps.DashboardConfig",
-    "apps.cierre.apps.CierreConfig",
-    "apps.hackathon.apps.HackathonConfig",
+    "apps.presupuesto.apps.PresupuestoConfig",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + LOCAL_APPS
@@ -80,16 +82,24 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": config("DB_NAME"),
-        "USER": config("DB_USER"),
-        "PASSWORD": config("DB_PASSWORD"),
-        "HOST": config("DB_HOST", default="localhost"),
-        "PORT": config("DB_PORT", default="5432"),
+if env_bool("USE_SQLITE", default=False):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": config("DB_NAME"),
+            "USER": config("DB_USER"),
+            "PASSWORD": config("DB_PASSWORD"),
+            "HOST": config("DB_HOST", default="localhost"),
+            "PORT": config("DB_PORT", default="5432"),
+        }
+    }
 
 AUTH_USER_MODEL = "usuarios.Usuario"
 

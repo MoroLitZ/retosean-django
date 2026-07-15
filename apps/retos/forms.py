@@ -1,6 +1,7 @@
 from django import forms
 
-from .models import IntegracionAcademica, Reto, SeguimientoReto
+from .models import Reto
+from apps.seguimiento.models import IntegracionAcademica, SeguimientoReto
 
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024
 MAX_UPLOAD_SIZE_MB = 50

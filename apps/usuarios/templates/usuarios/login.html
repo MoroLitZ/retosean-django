@@ -5,21 +5,31 @@
 <div class="auth-card">
   <div class="row g-0">
 
-    <!-- Panel izquierdo: identidad de marca -->
+    <!-- Panel izquierdo: identidad EAN -->
     <div class="col-md-5 auth-panel-left">
       <div>
-        <div class="brand-logo mb-3">
-          <span class="brand-retos">Retos</span><span class="brand-ean">EAN</span>
+        <div class="brand-logo-auth mb-1">
+          <div class="brand-dots-auth">
+            <span></span><span></span><span></span>
+            <span></span><span></span><span></span>
+            <span></span><span></span><span></span>
+          </div>
+          <div class="brand-wordmark-auth">
+            <span class="brand-retos">retos</span><span class="brand-ean">ean</span>
+          </div>
         </div>
-        <p style="color: rgba(255,255,255,0.55); font-size: 0.875rem; line-height: 1.6;">
-          Plataforma académica que conecta empresas, profesores y estudiantes a través de retos del mundo real.
+        <div class="brand-sub-auth mb-4">Universidad EAN · Plataforma Académica</div>
+
+        <p style="color: rgba(255,255,255,0.5); font-size: 0.845rem; line-height: 1.65; position:relative; z-index:1;">
+          Conectamos empresas, profesores y estudiantes a través de retos y hackathons del mundo real.
         </p>
+        <div class="auth-divider"></div>
       </div>
 
       <div>
         <div class="auth-feature-item">
-          <div class="auth-feature-icon" style="background: rgba(232,119,34,0.15);">
-            <i class="bi bi-building" style="color: var(--orange);"></i>
+          <div class="auth-feature-icon" style="background: rgba(59,172,82,0.15);">
+            <i class="bi bi-building" style="color: var(--ean-green);"></i>
           </div>
           <div>
             <div class="auth-feature-title">Empresas</div>
@@ -27,17 +37,17 @@
           </div>
         </div>
         <div class="auth-feature-item">
-          <div class="auth-feature-icon" style="background: rgba(34, 197, 94, 0.15);">
-            <i class="bi bi-journal-text" style="color: #22c55e;"></i>
+          <div class="auth-feature-icon" style="background: rgba(0,94,133,0.18);">
+            <i class="bi bi-journal-text" style="color: #2da8d0;"></i>
           </div>
           <div>
             <div class="auth-feature-title">Profesores</div>
-            <div class="auth-feature-sub">Vincula cursos con la industria</div>
+            <div class="auth-feature-sub">Vincula tus cursos con la industria</div>
           </div>
         </div>
         <div class="auth-feature-item">
-          <div class="auth-feature-icon" style="background: rgba(99, 179, 237, 0.15);">
-            <i class="bi bi-mortarboard" style="color: #63b3ed;"></i>
+          <div class="auth-feature-icon" style="background: rgba(59,172,82,0.1);">
+            <i class="bi bi-mortarboard" style="color: var(--ean-green);"></i>
           </div>
           <div>
             <div class="auth-feature-title">Estudiantes</div>
@@ -45,22 +55,17 @@
           </div>
         </div>
 
-        <p style="color: rgba(255,255,255,0.28); font-size: 0.72rem; margin-top: 1.5rem; margin-bottom: 0;">
+        <div class="auth-university-badge mt-3">
+          <span class="dot"></span>
           © 2026 Universidad EAN · Bogotá, Colombia
-        </p>
+        </div>
       </div>
     </div>
 
     <!-- Panel derecho: formulario -->
     <div class="col-md-7 auth-panel-right">
-      <div class="mb-4">
-        <h2 style="font-size: 1.6rem; font-weight: 800; color: #111827; margin-bottom: 0.3rem;">
-          Bienvenido de vuelta
-        </h2>
-        <p style="color: #6b7280; font-size: 0.875rem; margin: 0;">
-          Ingresa tus credenciales para acceder al sistema
-        </p>
-      </div>
+      <h2>Bienvenido de vuelta</h2>
+      <p class="auth-subtitle">Ingresa tus credenciales para acceder al sistema</p>
 
       {% if messages %}
         {% for message in messages %}
@@ -81,7 +86,7 @@
             {{ form.username }}
           </div>
           {% if form.username.errors %}
-            <div class="text-danger" style="font-size: 0.8rem; margin-top: 0.3rem;">{{ form.username.errors.0 }}</div>
+            <div class="text-danger" style="font-size:0.8rem;margin-top:0.3rem;">{{ form.username.errors.0 }}</div>
           {% endif %}
         </div>
 
@@ -91,12 +96,12 @@
             <span class="input-group-text"><i class="bi bi-lock"></i></span>
             {{ form.password }}
             <button class="btn input-group-text" type="button" id="togglePassword" title="Mostrar/ocultar"
-              style="background:#f9fafb; border: 1.5px solid #d1d5db; border-left: none; cursor: pointer;">
+              style="background:#f9fafb;border:1.5px solid #d1d5db;border-left:none;cursor:pointer;">
               <i class="bi bi-eye" id="toggleIcon"></i>
             </button>
           </div>
           {% if form.password.errors %}
-            <div class="text-danger" style="font-size: 0.8rem; margin-top: 0.3rem;">{{ form.password.errors.0 }}</div>
+            <div class="text-danger" style="font-size:0.8rem;margin-top:0.3rem;">{{ form.password.errors.0 }}</div>
           {% endif %}
         </div>
 
@@ -105,11 +110,11 @@
         </button>
       </form>
 
-      <hr style="border-color: #f3f4f6; margin: 1.75rem 0;">
+      <hr style="border-color:#f3f4f6;margin:1.75rem 0;">
 
-      <p class="text-center mb-0" style="font-size: 0.875rem; color: #6b7280;">
+      <p class="text-center mb-0" style="font-size:0.875rem;color:#6b7280;">
         ¿No tienes una cuenta?
-        <a href="{% url 'usuarios:registro' %}" class="text-link-orange ms-1">Regístrate aquí</a>
+        <a href="{% url 'usuarios:registro' %}" class="text-link-green ms-1">Regístrate aquí</a>
       </p>
     </div>
 

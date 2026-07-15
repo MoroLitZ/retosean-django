@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titulo }}{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="card-panel">
+    <div class="card-panel-header">
+        <span>Empresas y Organizaciones Aliadas</span>
+    </div>
+    <div class="p-4">
+        <p class="page-subtitle mb-4">Entidades encargadas de proponer retos académicos a la universidad.</p>
+        
+        <div class="row g-3">
+            {% for empresa in empresas %}
+            <div class="col-md-4">
+                <div class="card card-stat">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="stat-icon-box {% if empresa.estado_validacion == 'VERIFICADA' %}bg-success{% else %}bg-warning{% endif %} text-white">
+                            <i class="bi bi-building"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">{{ empresa.razon_social }}</h5>
+                            <small class="text-muted">NIT: {{ empresa.nit|default:"N/A" }}</small>
+                            <div class="mt-2">
+                                <span class="badge {% if empresa.estado_validacion == 'VERIFICADA' %}bg-success{% else %}bg-warning{% endif %}">
+                                    {{ empresa.get_estado_validacion_display }}
+                                </span>
+                                <a href="{% url 'empresas:admin_revisar_documentacion' empresa.id %}" class="btn btn-sm btn-outline-primary ms-2">Revisar Docs</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
