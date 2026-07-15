@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Revisar Vinculación{% endblock %}
+{% block page_title %}Revisar solicitud de vinculación{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-8 mx-auto">
+    <div class="card-panel">
+      <div class="card-panel-header">
+        <span><i class="bi bi-person-check me-2"></i>Solicitud de {{ integracion.profesor.get_full_name|default:integracion.profesor.username }}</span>
+        <a href="{% url 'retos:empresa_integraciones' %}" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-arrow-left"></i> Volver
+        </a>
+      </div>
+      <div class="p-4">
+        <!-- Info del profesor -->
+        <div class="row mb-4">
+          <div class="col-md-6">
+            <h6 class="text-muted mb-1">Profesor</h6>
+            <p class="fw-bold mb-0">{{ integracion.profesor.get_full_name|default:integracion.profesor.username }}</p>
+            <small class="text-muted">{{ integracion.profesor.email }}</small>
+          </div>
+          <div class="col-md-6">
+            <h6 class="text-muted mb-1">Reto solicitado</h6>
+            <p class="fw-bold mb-0">
+              <a href="{% url 'retos:detalle' integracion.reto.pk %}" class="text-decoration-none">
+                {{ integracion.reto.titulo }}
+              </a>
+            </p>
+            <small class="text-muted">Empresa: {{ integracion.reto.empresa.get_full_name|default:integracion.reto.empresa.username }}</small>
+          </div>
+        </div>
+
+        <hr>
+
+        <!-- Detalles de la integración -->
+        <h6 class="text-muted mb-3">Datos de la vinculación</h6>
+        <div class="row mb-3">
+          <div class="col-md-4 mb-2">
+            <small class="text-muted d-block">Facultad</small>
+            <span>{{ integracion.facultad|default:"-" }}</span>
+          </div>
+          <div class="col-md-4 mb-2">
+            <small class="text-muted d-block">Nivel de formación</small>
+            <span>{{ integracion.nivel_formacion|default:"-" }}</span>
+          </div>
+          <div class="col-md-4 mb-2">
+            <small class="text-muted d-block">Programa académico</small>
+            <span>{{ integracion.programa_academico|default:"-" }}</span>
+          </div>
+        </div>
+        <div class="row mb-3">
+          <div class="col-md-4 mb-2">
+            <small class="text-muted d-block">Ecosistema</small>
+            <span>{{ integracion.ecosistema|default:"-" }}</span>
+          </div>
+          <div class="col-md-4 mb-2">
+            <small class="text-muted d-block">Entregable esperado</small>
+            <span>{{ integracion.entregable_esperado|default:"-" }}</span>
+          </div>
+          <div class="col-md-4 mb-2">
+            <small class="text-muted d-block">Estado actual</small>
+            {% if integracion.estado == 'en_revision' %}
+              <span class="badge bg-warning text-dark">Pendiente de tu revisión</span>
+            {% elif integracion.estado == 'aprobada' %}
+              <span class="badge bg-success">Aprobada</span>
+            {% elif integracion.estado == 'rechazada' %}
+              <span class="badge bg-danger">Rechazada</span>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if integracion.alcance %}
+        <div class="mb-3">
+          <small class="text-muted d-block">Alcance</small>
+          <p class="mb-0">{{ integracion.alcance|linebreaks }}</p>
+        </div>
+        {% endif %}
+
+        {% if integracion.cronograma_sesiones %}
+        <div class="mb-3">
+          <small class="text-muted d-block">Cronograma de sesiones</small>
+          <p class="mb-0">{{ integracion.cronograma_sesiones|linebreaks }}</p>
+        </div>
+        {% endif %}
+
+        <hr>
+
+        <!-- Formulario de aprobación/rechazo -->
+        {% if integracion.estado == 'en_revision' %}
+        <form method="post">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Comentario (opcional)</label>
+            <textarea name="comentario" class="form-control" rows="3" placeholder="Agrega un comentario para el profesor...">{{ form.comentario.value|default:'' }}</textarea>
+          </div>
+          <div class="d-flex gap-2">
+            <button type="submit" name="accion" value="aprobar" class="btn btn-ean">
+              <i class="bi bi-check-circle"></i> Aprobar vinculación
+            </button>
+            <button type="submit" name="accion" value="rechazar" class="btn btn-outline-danger">
+              <i class="bi bi-x-circle"></i> Rechazar
+            </button>
+          </div>
+        </form>
+        {% elif integracion.estado == 'aprobada' %}
+        <div class="alert alert-success">
+          <i class="bi bi-check-circle-fill me-2"></i>
+          Ya aprobaste esta vinculación el {{ integracion.fecha_aprobacion|date:"d/m/Y H:i" }}.
+        </div>
+        {% if integracion.comentarios_revision %}
+        <div class="mt-2">
+          <small class="text-muted">Tu comentario:</small>
+          <p class="mb-0">{{ integracion.comentarios_revision }}</p>
+        </div>
+        {% endif %}
+        {% elif integracion.estado == 'rechazada' %}
+        <div class="alert alert-danger">
+          <i class="bi bi-x-circle-fill me-2"></i>
+          Rechazaste esta vinculación.
+        </div>
+        {% if integracion.comentarios_revision %}
+        <div class="mt-2">
+          <small class="text-muted">Tu comentario:</small>
+          <p class="mb-0">{{ integracion.comentarios_revision }}</p>
+        </div>
+        {% endif %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

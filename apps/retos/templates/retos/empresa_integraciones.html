@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Solicitudes de Vinculación{% endblock %}
+{% block page_title %}Solicitudes de Profesores{% endblock %}
+
+{% block content %}
+<div class="card-panel">
+  <div class="card-panel-header">
+    <span><i class="bi bi-person-plus me-2"></i>Solicitudes de vinculación a tus retos</span>
+    <span class="badge bg-warning rounded-pill">{{ integraciones|length }} solicitud{{ integraciones|length|pluralize:"es" }}</span>
+  </div>
+  <div class="p-3">
+    {% if integraciones %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Profesor</th>
+            <th>Reto</th>
+            <th>Facultad</th>
+            <th>Programa</th>
+            <th>Estado</th>
+            <th>Enviada</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for integracion in integraciones %}
+          <tr>
+            <td>
+              <strong>{{ integracion.profesor.get_full_name|default:integracion.profesor.username }}</strong>
+              <br><small class="text-muted">{{ integracion.profesor.email }}</small>
+            </td>
+            <td>
+              <a href="{% url 'retos:detalle' integracion.reto.pk %}" class="text-decoration-none">
+                {{ integracion.reto.titulo|truncatechars:40 }}
+              </a>
+            </td>
+            <td>{{ integracion.facultad|default:"-" }}</td>
+            <td>{{ integracion.programa_academico|default:"-" }}</td>
+            <td>
+              {% if integracion.estado == 'borrador' %}
+                <span class="badge bg-secondary">Borrador</span>
+              {% elif integracion.estado == 'en_revision' %}
+                <span class="badge bg-warning text-dark">Pendiente</span>
+              {% elif integracion.estado == 'aprobada' %}
+                <span class="badge bg-success">Aprobada</span>
+              {% elif integracion.estado == 'rechazada' %}
+                <span class="badge bg-danger">Rechazada</span>
+              {% elif integracion.estado == 'publicada' %}
+                <span class="badge bg-info">Publicada</span>
+              {% endif %}
+            </td>
+            <td><small class="text-muted">{{ integracion.fecha_envio_revision|date:"d/m/Y"|default:"-" }}</small></td>
+            <td>
+              {% if integracion.estado == 'en_revision' %}
+                <a href="{% url 'retos:empresa_revisar_integracion' integracion.pk %}" class="btn btn-sm btn-ean">
+                  <i class="bi bi-check-lg"></i> Revisar
+                </a>
+              {% elif integracion.estado == 'aprobada' or integracion.estado == 'rechazada' %}
+                <span class="text-muted small">Ya revisada</span>
+              {% else %}
+                <span class="text-muted small">Pendiente de envío</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-inbox" style="font-size: 3rem; display: block; margin-bottom: 1rem;"></i>
+      <h5>No hay solicitudes de vinculación</h5>
+      <p>Cuando un profesor solicite vincularse a uno de tus retos, aparecerá aquí.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

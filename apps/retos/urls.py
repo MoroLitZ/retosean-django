@@ -28,4 +28,7 @@ urlpatterns = [
     path('integraciones/<int:pk>/publicar/', views.publicar_integracion, name='publicar_integracion'),
     path('admin/integraciones/', views.admin_integraciones, name='admin_integraciones'),
     path('admin/integraciones/<int:pk>/revisar/', views.revisar_integracion, name='admin_revisar_integracion'),
+    # Empresa - solicitudes de vinculacion de profesores
+    path('empresa/integraciones/', views.empresa_integraciones, name='empresa_integraciones'),
+    path('empresa/integraciones/<int:pk>/revisar/', views.empresa_revisar_integracion, name='empresa_revisar_integracion'),
 ]
