@@ -47,6 +47,7 @@ LOCAL_APPS = [
     "apps.reportes.apps.ReportesConfig",
     "apps.dashboard.apps.DashboardConfig",
     "apps.presupuesto.apps.PresupuestoConfig",
+    "apps.unidades_estudio.apps.UnidadesEstudioConfig",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + LOCAL_APPS

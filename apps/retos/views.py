@@ -352,3 +352,40 @@ def revisar_integracion(request, pk):
         integracion.save()
         return redirect('retos:admin_integraciones')
     return render(request, 'retos/admin_revisar_integracion.html', {'integracion': integracion, 'form': form})
+
+
+# --- VISTAS PARA EMPRESA: SOLICITUDES DE VINCULACION DE PROFESORES ---
+
+@solo_administrador
+def empresa_integraciones(request):
+    integraciones = IntegracionAcademica.objects.select_related(
+        'reto', 'profesor'
+    ).order_by('-creado_en')
+    return render(request, 'retos/empresa_integraciones.html', {
+        'integraciones': integraciones,
+    })
+
+
+@solo_administrador
+def empresa_revisar_integracion(request, pk):
+    integracion = get_object_or_404(
+        IntegracionAcademica.objects.select_related('reto', 'profesor'),
+        pk=pk,
+    )
+    form = RevisionIntegracionForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        accion = form.cleaned_data['accion']
+        integracion.comentarios_revision = form.cleaned_data['comentario']
+        if accion == 'aprobar':
+            integracion.estado = 'aprobada'
+            integracion.fecha_aprobacion = timezone.now()
+            messages.success(request, f'Vinculacion de {integracion.profesor.get_full_name()} aprobada.')
+        else:
+            integracion.estado = 'rechazada'
+            messages.success(request, f'Vinculacion de {integracion.profesor.get_full_name()} rechazada.')
+        integracion.save()
+        return redirect('retos:empresa_integraciones')
+    return render(request, 'retos/empresa_revisar_integracion.html', {
+        'integracion': integracion,
+        'form': form,
+    })

@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ accion }} Unidad de Estudio{% endblock %}
+{% block page_title %}{{ accion }} Unidad de Estudio{% endblock %}
+
+{% block content %}
+<div class="row">
+  <!-- COLUMNA IZQUIERDA: Formulario individual -->
+  <div class="col-lg-7 mb-4">
+    <div class="card-panel">
+      <div class="card-panel-header">
+        <span><i class="bi bi-pencil-square me-2"></i>{{ accion }} unidad individual</span>
+        <span class="badge bg-info rounded-pill">1 unidad</span>
+      </div>
+
+      <div class="px-3 pt-3">
+        <div class="alert alert-info small py-2 mb-0">
+          <i class="bi bi-info-circle me-1"></i>
+          Diligencia el formulario para crear <strong>una sola unidad de estudio</strong>.
+          Si necesitas crear varias a la vez, usa la sección de carga masiva por CSV de la derecha.
+        </div>
+      </div>
+
+      <form method="post" enctype="multipart/form-data" class="p-3">
+        {% csrf_token %}
+
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Código <span class="text-danger">*</span></label>
+            <input type="text" name="codigo" class="form-control" required
+                   value="{{ unidad.codigo|default:'' }}" placeholder="Ej: ING-101">
+          </div>
+          <div class="col-md-8">
+            <label class="form-label">Nombre <span class="text-danger">*</span></label>
+            <input type="text" name="nombre" class="form-control" required
+                   value="{{ unidad.nombre|default:'' }}" placeholder="Nombre de la asignatura">
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Programa académico <span class="text-danger">*</span></label>
+            <select name="programa" class="form-select" required>
+              <option value="">Seleccione un programa...</option>
+              <option value="Ingeniería de Sistemas" {% if unidad.programa.nombre == 'Ingeniería de Sistemas' %}selected{% endif %}>Ingeniería de Sistemas</option>
+              <option value="Ingeniería Mecatrónica" {% if unidad.programa.nombre == 'Ingeniería Mecatrónica' %}selected{% endif %}>Ingeniería Mecatrónica</option>
+              <option value="Ingeniería Química" {% if unidad.programa.nombre == 'Ingeniería Química' %}selected{% endif %}>Ingeniería Química</option>
+              <option value="Ingeniería Ambiental" {% if unidad.programa.nombre == 'Ingeniería Ambiental' %}selected{% endif %}>Ingeniería Ambiental</option>
+              <option value="Ingeniería Industrial" {% if unidad.programa.nombre == 'Ingeniería Industrial' %}selected{% endif %}>Ingeniería Industrial</option>
+              <option value="Administración de Empresas" {% if unidad.programa.nombre == 'Administración de Empresas' %}selected{% endif %}>Administración de Empresas</option>
+              <option value="Negocios Internacionales" {% if unidad.programa.nombre == 'Negocios Internacionales' %}selected{% endif %}>Negocios Internacionales</option>
+              <option value="Finanzas" {% if unidad.programa.nombre == 'Finanzas' %}selected{% endif %}>Finanzas</option>
+              <option value="Contaduría Pública" {% if unidad.programa.nombre == 'Contaduría Pública' %}selected{% endif %}>Contaduría Pública</option>
+              <option value="Mercadeo" {% if unidad.programa.nombre == 'Mercadeo' %}selected{% endif %}>Mercadeo</option>
+              <option value="Derecho" {% if unidad.programa.nombre == 'Derecho' %}selected{% endif %}>Derecho</option>
+              <option value="Psicología" {% if unidad.programa.nombre == 'Psicología' %}selected{% endif %}>Psicología</option>
+              <option value="Enfermería" {% if unidad.programa.nombre == 'Enfermería' %}selected{% endif %}>Enfermería</option>
+              <option value="Medicina" {% if unidad.programa.nombre == 'Medicina' %}selected{% endif %}>Medicina</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Periodo</label>
+            <input type="text" name="periodo" class="form-control"
+                   value="{{ unidad.periodo|default:'' }}" placeholder="Ej: 2026-2">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Ciclo / Semestre</label>
+            <input type="text" name="ciclo" class="form-control"
+                   value="{{ unidad.ciclo|default:'' }}" placeholder="Ej: 3">
+          </div>
+
+          <div class="col-12">
+            <label class="form-label">Archivo PDF de la asignatura (opcional)</label>
+            <input type="file" name="archivo" class="form-control" accept=".pdf">
+            <small class="text-muted">Solo archivos <strong>PDF</strong>. Si ya existe uno, se reemplazará.</small>
+            {% if unidad and unidad.archivo %}
+            <div class="mt-2">
+              <a href="{{ unidad.archivo.url }}" target="_blank" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-file-earmark-pdf"></i> Archivo actual
+              </a>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <button type="submit" class="btn" style="background: var(--accent); color: #fff;">
+            <i class="bi bi-save"></i> {{ accion }}
+          </button>
+          <a href="{% url 'unidades_estudio:lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- COLUMNA DERECHA: Carga masiva por CSV -->
+  {% if accion == "Crear" %}
+  <div class="col-lg-5 mb-4">
+    <div class="card-panel">
+      <div class="card-panel-header">
+        <span><i class="bi bi-upload me-2"></i>Carga masiva por CSV</span>
+        <span class="badge bg-success rounded-pill">Varias unidades</span>
+      </div>
+      <div class="p-3">
+        <div class="alert alert-success small py-2 mb-3">
+          <i class="bi bi-file-earmark-spreadsheet me-1"></i>
+          <strong>¿Necesitas crear varias unidades?</strong> Sube un archivo CSV
+          con los datos de todas las unidades que quieras crear de una sola vez.
+        </div>
+
+        <form method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          <input type="hidden" name="accion" value="cargar_csv">
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Archivo CSV <span class="text-danger">*</span></label>
+            <input type="file" name="archivo_csv" class="form-control" accept=".csv" required>
+            <small class="text-muted">Solo archivos <strong>.csv</strong> (no PDF, no Excel).</small>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Estructura del archivo</label>
+            <p class="small text-muted mb-1">El CSV debe tener una fila de encabezado con estas columnas:</p>
+            <pre class="bg-light p-2 rounded small" style="font-size: 0.7rem; white-space: pre-wrap;">codigo,nombre,programa,periodo,ciclo
+ING-101,Introducción a la Ing.,Ingeniería de Sistemas,2026-2,1
+MAT-201,Cálculo Diferencial,Ingeniería Industrial,2026-2,2
+FIS-101,Física Mecánica,Ingeniería Mecatrónica,2026-2,2</pre>
+            <p class="small text-muted mb-0">
+              <i class="bi bi-info-circle"></i>
+              Solo <strong>código</strong>, <strong>nombre</strong> y <strong>programa</strong> son obligatorios.
+              Periodo y ciclo son opcionales en el CSV.
+            </p>
+          </div>
+
+          <button type="submit" class="btn btn-ean w-100">
+            <i class="bi bi-upload"></i> Cargar CSV y crear unidades
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
