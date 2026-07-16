@@ -13,9 +13,25 @@ from .forms import (
     RevisionRetoForm,
     SeguimientoRetoForm,
 )
-from .models import IntegracionAcademica, Reto, RetoArchivo, SeguimientoArchivo
+from .models import Reto, RetoArchivo
+from apps.seguimiento.models import IntegracionAcademica, SeguimientoArchivo, SeguimientoReto
 from .services import cambiar_estado_reto, registrar_cambio_estado
 from apps.empresas.decorators import empresa_verificada
+
+
+def _guardar_archivos_reto(reto, archivos):
+    for archivo in archivos:
+        RetoArchivo.objects.create(reto=reto, archivo=archivo, nombre_original=archivo.name, tamano=archivo.size)
+
+
+def _guardar_archivos_seguimiento(seguimiento, archivos):
+    for archivo in archivos:
+        SeguimientoArchivo.objects.create(
+            seguimiento=seguimiento,
+            archivo=archivo,
+            nombre_original=archivo.name,
+            tamano=archivo.size,
+        )
 
 
 def rol_requerido(*roles_permitidos):
@@ -60,26 +76,6 @@ def _puede_ver_reto(user, reto):
     if user.rol == 'ESTUDIANTE' and reto.esta_aprobado_o_activo:
         return True
     return False
-
-
-def _guardar_archivos_reto(reto, archivos):
-    for archivo in archivos:
-        RetoArchivo.objects.create(
-            reto=reto,
-            archivo=archivo,
-            nombre_original=archivo.name,
-            tamano=archivo.size,
-        )
-
-
-def _guardar_archivos_seguimiento(seguimiento, archivos):
-    for archivo in archivos:
-        SeguimientoArchivo.objects.create(
-            seguimiento=seguimiento,
-            archivo=archivo,
-            nombre_original=archivo.name,
-            tamano=archivo.size,
-        )
 
 
 @solo_empresa
@@ -131,7 +127,7 @@ def editar_reto(request, pk):
 def enviar_revision(request, pk):
     reto = get_object_or_404(Reto, pk=pk, empresa=request.user)
     if not reto.puede_editar_empresa:
-        messages.error(request, 'Este reto no puede enviarse a aprobacion desde su estado actual.')
+        messages.error(request, 'Este reto no puede enviarse a revision desde su estado actual.')
         return redirect('retos:detalle', pk=reto.pk)
 
     faltantes = reto.campos_faltantes_para_revision
@@ -143,8 +139,8 @@ def enviar_revision(request, pk):
     reto.estado = 'en_revision'
     reto.fecha_envio_revision = timezone.now()
     reto.save(update_fields=['estado', 'fecha_envio_revision', 'actualizado_en'])
-    registrar_cambio_estado(reto, estado_anterior, 'en_revision', request.user, 'Reto enviado a aprobacion.')
-    messages.success(request, 'Reto enviado a aprobacion del administrador.')
+    registrar_cambio_estado(reto, estado_anterior, 'en_revision', request.user, 'Reto enviado a revision.')
+    messages.success(request, 'Reto enviado a revision del administrador.')
     return redirect('retos:detalle', pk=reto.pk)
 
 
@@ -298,7 +294,7 @@ def enviar_integracion_revision(request, pk):
     integracion.estado = 'en_revision'
     integracion.fecha_envio_revision = timezone.now()
     integracion.save(update_fields=['estado', 'fecha_envio_revision', 'actualizado_en'])
-    messages.success(request, 'Integracion enviada a aprobacion del administrador.')
+    messages.success(request, 'Integracion enviada a revision del administrador.')
     return redirect('retos:detalle_integracion', pk=integracion.pk)
 
 
@@ -329,7 +325,7 @@ def publicar_integracion(request, pk):
 @solo_administrador
 def admin_integraciones(request):
     estado = request.GET.get('estado', '')
-    integraciones = IntegracionAcademica.objects.select_related('reto', 'profesor').order_by('-actualizado_en')
+    integraciones = IntegracionAcademica.objects.select_related('reto', 'profesor')
     if estado:
         integraciones = integraciones.filter(estado=estado)
     paginator = Paginator(integraciones, 25)
