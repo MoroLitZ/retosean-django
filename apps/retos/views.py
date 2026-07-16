@@ -289,7 +289,8 @@ def editar_integracion(request, pk):
 
 @solo_profesor
 def enviar_integracion_revision(request, pk):
-    integracion = get_object_or_404(IntegracionAcademica, pk=pk, profesor=request.user)
+    integracion = get_object_or_404(IntegracionAcademica, pk=pk, profesor_id=request.user.pk)
+    print(f"DEBUG: Accediendo a la vista con el usuario {request.user.rol}")
     faltantes = integracion.campos_faltantes_para_revision
     if faltantes:
         messages.error(request, 'Completa estos campos antes de enviar: ' + ', '.join(faltantes) + '.')
@@ -335,7 +336,7 @@ def admin_integraciones(request):
     return render(request, 'retos/admin_integraciones.html', {
         'integraciones': paginator.get_page(request.GET.get('page')),
         'estado': estado,
-        'estados': IntegracionAcademica.ESTADOS,
+        'estados': IntegracionAcademica.ESTADO_CHOICES,
     })
 
 
