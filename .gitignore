@@ -7,6 +7,7 @@ db.sqlite3
 media/
 staticfiles/
 *.log
+*.err
 .DS_Store
 
 retos_db.sqlite3

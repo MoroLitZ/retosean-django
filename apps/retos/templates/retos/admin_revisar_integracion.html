@@ -2,7 +2,7 @@
 
 {% block content %}
 <div class="container mt-4">
-  <h1 class="h3">Revisar integracion academica</h1>
+  <h1 class="h3">Aprobar integracion academica</h1>
   <p class="text-muted">{{ integracion.reto }} · {{ integracion.profesor.get_full_name|default:integracion.profesor.username }}</p>
   <form method="post" class="row g-3">
     {% csrf_token %}
@@ -14,7 +14,7 @@
     </div>
     {% endfor %}
     <div class="col-12">
-      <button class="btn btn-primary">Guardar revision</button>
+      <button class="btn btn-primary">Guardar aprobacion</button>
       <a href="{% url 'retos:admin_integraciones' %}" class="btn btn-outline-secondary">Volver</a>
     </div>
   </form>

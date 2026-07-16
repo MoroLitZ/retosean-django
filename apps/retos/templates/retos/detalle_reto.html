@@ -3,6 +3,7 @@
 {% block page_title %}Detalle del Reto{% endblock %}
 
 {% block content %}
+<<<<<<< HEAD
 <div style="max-width: 1100px;">
 
   {% if messages %}
@@ -83,6 +84,27 @@
           <span class="badge bg-info text-dark px-3 py-2">{{ reto.get_estado_display }}</span>
         {% endif %}
       </div>
+=======
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+    <div>
+      <h1 class="h3">{{ reto.titulo|default:'Borrador sin titulo' }}</h1>
+      <p class="text-muted mb-0">{{ reto.get_tipo_display }} · {{ reto.get_estado_display }}{% if reto.consecutivo %} · #{{ reto.consecutivo }}{% endif %}</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      {% if user.rol == 'EMPRESA' and reto.puede_editar_empresa %}
+      <a href="{% url 'retos:editar' reto.pk %}" class="btn btn-outline-primary">Editar</a>
+      <a href="{% url 'retos:enviar_revision' reto.pk %}" class="btn btn-primary">Enviar a aprobacion</a>
+      <a href="{% url 'retos:eliminar' reto.pk %}" class="btn btn-outline-danger">Eliminar</a>
+      {% endif %}
+      {% if user.is_superuser or user.rol == 'ADMIN' %}
+      <a href="{% url 'retos:admin_revisar' reto.pk %}" class="btn btn-primary">Aprobar reto</a>
+      <a href="{% url 'retos:admin_cambiar_estado' reto.pk %}" class="btn btn-outline-primary">Cambiar estado</a>
+      {% endif %}
+      {% if user.is_superuser or user.rol == 'ADMIN' or user.rol == 'PROFESOR' %}
+      <a href="{% url 'retos:seguimientos' reto.pk %}" class="btn btn-outline-secondary">Seguimiento</a>
+      {% endif %}
+>>>>>>> origin/Caicedo
     </div>
   </div>
 
@@ -176,68 +198,25 @@
       </div>
 
     </div>
-
-    <!-- Columna lateral -->
-    <div class="col-lg-4">
-
-      <!-- Info del reto -->
-      <div class="card-panel mb-4">
-        <div class="card-panel-header">
-          <i class="bi bi-info-circle me-2 text-muted"></i>Información
-        </div>
-        <div class="p-4">
-          <dl style="margin: 0;">
-            <div class="mb-3">
-              <dt style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: #9ca3af;">Empresa</dt>
-              <dd style="color: #111827; font-weight: 600; margin: 0.2rem 0 0; font-size: 0.9rem;">
-                {{ reto.empresa.get_full_name|default:reto.empresa.username }}
-              </dd>
-            </div>
-            <div class="mb-3">
-              <dt style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: #9ca3af;">Área</dt>
-              <dd style="color: #111827; font-weight: 500; margin: 0.2rem 0 0; font-size: 0.9rem;">{{ reto.area|default:'—' }}</dd>
-            </div>
-            <div class="mb-3">
-              <dt style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: #9ca3af;">Nivel Académico</dt>
-              <dd style="color: #111827; font-weight: 500; margin: 0.2rem 0 0; font-size: 0.9rem;">{{ reto.nivel_academico|default:'—' }}</dd>
-            </div>
-            {% if reto.fecha_inicio_tentativa %}
-            <div class="mb-3">
-              <dt style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: #9ca3af;">Fecha de Inicio</dt>
-              <dd style="color: #111827; font-weight: 500; margin: 0.2rem 0 0; font-size: 0.9rem;">{{ reto.fecha_inicio_tentativa|date:'d/m/Y' }}</dd>
-            </div>
+    <div class="col-md-4">
+      <div class="card">
+        <div class="card-body">
+          <p><strong>Empresa:</strong> {{ reto.empresa.get_full_name|default:reto.empresa.username }}</p>
+          <p><strong>Area:</strong> {{ reto.area|default:'-' }}</p>
+          <p><strong>Nivel:</strong> {{ reto.nivel_academico|default:'-' }}</p>
+          <p><strong>Inicio:</strong> {{ reto.fecha_inicio_tentativa|default:'-' }}</p>
+          <p><strong>Fin:</strong> {{ reto.fecha_fin_tentativa|default:'-' }}</p>
+          <p><strong>Limite postulacion:</strong> {{ reto.fecha_limite_postulacion|default:'-' }}</p>
+          <p><strong>Premios:</strong> {{ reto.premios|linebreaksbr|default:'-' }}</p>
+          {% if reto.documento_soporte or reto.archivos.exists %}
+          <div class="d-grid gap-2">
+            {% if reto.documento_soporte %}
+            <a href="{{ reto.documento_soporte.url }}" class="btn btn-sm btn-outline-secondary">Documento soporte</a>
             {% endif %}
-            {% if reto.fecha_fin_tentativa %}
-            <div class="mb-3">
-              <dt style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: #9ca3af;">Fecha de Finalización</dt>
-              <dd style="color: #111827; font-weight: 500; margin: 0.2rem 0 0; font-size: 0.9rem;">{{ reto.fecha_fin_tentativa|date:'d/m/Y' }}</dd>
-            </div>
-            {% endif %}
-            {% if reto.fecha_limite_postulacion %}
-            <div class="mb-3">
-              <dt style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: #9ca3af;">Límite de Postulación</dt>
-              <dd style="margin: 0.2rem 0 0;">
-                <span class="badge bg-warning text-dark px-2">
-                  <i class="bi bi-calendar-event me-1"></i>{{ reto.fecha_limite_postulacion|date:'d/m/Y' }}
-                </span>
-              </dd>
-            </div>
-            {% endif %}
-            {% if reto.premios %}
-            <div class="mb-0">
-              <dt style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: #9ca3af;">Premios / Incentivos</dt>
-              <dd style="color: #111827; font-weight: 500; margin: 0.2rem 0 0; font-size: 0.9rem; white-space: pre-line;">{{ reto.premios }}</dd>
-            </div>
-            {% endif %}
-          </dl>
-
-          {% if reto.documento_soporte %}
-            <div class="mt-4 pt-3" style="border-top: 1px solid #f3f4f6;">
-              <a href="{{ reto.documento_soporte.url }}" target="_blank"
-                 class="btn btn-sm w-100 btn-outline-secondary">
-                <i class="bi bi-file-earmark-arrow-down me-1"></i>Descargar Documento Soporte
-              </a>
-            </div>
+            {% for archivo in reto.archivos.all %}
+            <a href="{{ archivo.archivo.url }}" target="_blank" class="btn btn-sm btn-outline-secondary">{{ archivo.nombre_original|default:'Archivo de soporte' }}</a>
+            {% endfor %}
+          </div>
           {% endif %}
         </div>
       </div>

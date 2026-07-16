@@ -26,7 +26,7 @@
           <td>{{ integracion.get_estado_display }}</td>
           <td class="text-end">
             <a href="{% url 'retos:detalle_integracion' integracion.pk %}" class="btn btn-sm btn-outline-secondary">Ver</a>
-            <a href="{% url 'retos:admin_revisar_integracion' integracion.pk %}" class="btn btn-sm btn-primary">Revisar</a>
+            <a href="{% url 'retos:admin_revisar_integracion' integracion.pk %}" class="btn btn-sm btn-primary">Aprobar integracion</a>
           </td>
         </tr>
         {% empty %}

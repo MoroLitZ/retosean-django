@@ -11,7 +11,7 @@
   </div>
   <div class="table-responsive">
     <table class="table table-striped">
-      <thead><tr><th>Fecha</th><th>Sesion</th><th>Avance</th><th>Observaciones</th><th>Acuerdos</th><th>Creado por</th></tr></thead>
+      <thead><tr><th>Fecha</th><th>Sesion</th><th>Avance</th><th>Observaciones</th><th>Acuerdos</th><th>Archivos</th><th>Creado por</th></tr></thead>
       <tbody>
         {% for seguimiento in reto.seguimientos.all %}
         <tr>
@@ -20,10 +20,17 @@
           <td>{{ seguimiento.porcentaje_avance }}%</td>
           <td>{{ seguimiento.observaciones|linebreaksbr|default:'-' }}</td>
           <td>{{ seguimiento.acuerdos|linebreaksbr|default:'-' }}</td>
+          <td>
+            {% for archivo in seguimiento.archivos.all %}
+              <a href="{{ archivo.archivo.url }}" target="_blank" class="d-block small">{{ archivo.nombre_original|default:'Archivo' }}</a>
+            {% empty %}
+              <span class="text-muted">-</span>
+            {% endfor %}
+          </td>
           <td>{{ seguimiento.creado_por|default:'-' }}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="6" class="text-center text-muted">Aun no hay seguimientos.</td></tr>
+        <tr><td colspan="7" class="text-center text-muted">Aun no hay seguimientos.</td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -12,7 +12,7 @@
     <div class="d-flex flex-wrap gap-2">
       {% if user.rol == 'PROFESOR' and integracion.puede_editar_profesor %}
       <a href="{% url 'retos:editar_integracion' integracion.pk %}" class="btn btn-outline-primary">Editar</a>
-      <a href="{% url 'retos:enviar_integracion_revision' integracion.pk %}" class="btn btn-primary">Enviar a revision</a>
+      <a href="{% url 'retos:enviar_integracion_revision' integracion.pk %}" class="btn btn-primary">Enviar a aprobacion</a>
       {% endif %}
       {% if user.rol == 'PROFESOR' and integracion.estado == 'aprobada' %}
       <form method="post" action="{% url 'retos:publicar_integracion' integracion.pk %}">
@@ -21,7 +21,7 @@
       </form>
       {% endif %}
       {% if user.is_superuser or user.rol == 'ADMIN' %}
-      <a href="{% url 'retos:admin_revisar_integracion' integracion.pk %}" class="btn btn-primary">Revisar</a>
+      <a href="{% url 'retos:admin_revisar_integracion' integracion.pk %}" class="btn btn-primary">Aprobar integracion</a>
       {% endif %}
     </div>
   </div>
