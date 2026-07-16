@@ -3,6 +3,7 @@ import os
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 class Reto(models.Model):
     TIPO_CHOICES = [
@@ -10,7 +11,6 @@ class Reto(models.Model):
         ("hackathon", "Hackathon"),
     ]
     ESTADO_CHOICES = [
-<<<<<<< HEAD
         ("borrador", "Borrador"),
         ("en_revision", "En Revision"),
         ("aprobado", "Aprobado"),
@@ -19,16 +19,6 @@ class Reto(models.Model):
         ("pausado", "Pausado"),
         ("finalizado", "Finalizado"),
         ("cancelado", "Cancelado"),
-=======
-        ('borrador', 'Borrador'),
-        ('en_revision', 'En aprobacion'),
-        ('aprobado', 'Aprobado'),
-        ('rechazado', 'Rechazado'),
-        ('en_curso', 'En curso'),
-        ('pausado', 'Pausado'),
-        ('finalizado', 'Finalizado'),
-        ('cancelado', 'Cancelado'),
->>>>>>> origin/Caicedo
     ]
 
     empresa = models.ForeignKey(
@@ -95,7 +85,7 @@ class Reto(models.Model):
 
 
 class HistorialEstadoReto(models.Model):
-    reto = models.ForeignKey(Reto, on_delete=models.CASCADE, related_name="historial_estados")
+    reto = models.ForeignKey('retos.Reto', on_delete=models.CASCADE, related_name="historial_estados")
     estado_anterior = models.CharField(max_length=20, blank=True)
     estado_nuevo = models.CharField(max_length=20, choices=Reto.ESTADO_CHOICES)
     comentario = models.TextField(blank=True)
@@ -127,7 +117,7 @@ class SeguimientoReto(models.Model):
         ('otro', 'Otro'),
     ]
 
-    reto = models.ForeignKey(Reto, on_delete=models.CASCADE, related_name='seguimientos')
+    reto = models.ForeignKey('retos.Reto', on_delete=models.CASCADE, related_name='seguimientos')
     tipo_sesion = models.CharField(max_length=30, choices=SESION_CHOICES, default='seguimiento')
     fecha_sesion = models.DateField(default=timezone.localdate)
     porcentaje_avance = models.PositiveSmallIntegerField(default=0)
@@ -152,7 +142,7 @@ class SeguimientoReto(models.Model):
 
 
 class RetoArchivo(models.Model):
-    reto = models.ForeignKey(Reto, on_delete=models.CASCADE, related_name='archivos')
+    reto = models.ForeignKey('retos.Reto', on_delete=models.CASCADE, related_name='archivos')
     archivo = models.FileField(upload_to='retos/soportes/')
     nombre_original = models.CharField(max_length=255, blank=True)
     tamano = models.PositiveBigIntegerField(default=0)
@@ -175,7 +165,7 @@ class RetoArchivo(models.Model):
 
 
 class SeguimientoArchivo(models.Model):
-    seguimiento = models.ForeignKey(SeguimientoReto, on_delete=models.CASCADE, related_name='archivos')
+    seguimiento = models.ForeignKey('retos.SeguimientoReto', on_delete=models.CASCADE, related_name='archivos')
     archivo = models.FileField(upload_to='retos/seguimientos/')
     nombre_original = models.CharField(max_length=255, blank=True)
     tamano = models.PositiveBigIntegerField(default=0)
@@ -206,7 +196,7 @@ class IntegracionAcademica(models.Model):
         ('publicada', 'Publicada'),
     ]
 
-    reto = models.ForeignKey(Reto, on_delete=models.CASCADE, related_name='integraciones')
+    reto = models.ForeignKey('retos.Reto', on_delete=models.CASCADE, related_name='integraciones')
     profesor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,

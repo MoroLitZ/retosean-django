@@ -10,7 +10,7 @@ class IntegracionAcademica(models.Model):
         ("rechazada", "Rechazada"),
         ("publicada", "Publicada"),
     ]
-    reto = models.ForeignKey("retos.Reto", on_delete=models.CASCADE, related_name="integraciones")
+    reto = models.ForeignKey("retos.Reto", on_delete=models.CASCADE, related_name="integraciones_seguimiento")
     profesor = models.ForeignKey("usuarios.Usuario", on_delete=models.CASCADE, related_name="integraciones")
     facultad = models.CharField(max_length=140, blank=True)
     nivel_formacion = models.CharField(max_length=120, blank=True)
@@ -86,7 +86,7 @@ class SesionReto(models.Model):
 
 
 class SeguimientoReto(models.Model):
-    reto = models.ForeignKey("retos.Reto", on_delete=models.CASCADE, related_name="seguimientos")
+    reto = models.ForeignKey("retos.Reto", on_delete=models.CASCADE, related_name="seguimientos_seguimiento")
     tipo_sesion = models.CharField(max_length=30, blank=True)
     fecha_sesion = models.DateField(default=timezone.localdate)
     porcentaje_avance = models.PositiveSmallIntegerField(default=0)
