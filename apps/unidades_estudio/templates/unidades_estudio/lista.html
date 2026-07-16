@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Unidades de Estudio{% endblock %}
+{% block page_title %}Unidades de Estudio{% endblock %}
+
+{% block content %}
+<div class="card-panel">
+  <div class="card-panel-header">
+    <h4 class="mb-0">Unidades de Estudio</h4>
+    <a href="{% url 'unidades_estudio:crear' %}" class="btn btn-sm" style="background: var(--accent); color: #fff;">
+      <i class="bi bi-plus-lg"></i> Nueva unidad
+    </a>
+  </div>
+
+  {% if unidades %}
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Nombre</th>
+          <th>Programa</th>
+          <th>Periodo</th>
+          <th>Ciclo</th>
+          <th>Archivo</th>
+          <th>Estado</th>
+          <th class="text-end">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in unidades %}
+        <tr>
+          <td><strong>{{ u.codigo }}</strong></td>
+          <td>{{ u.nombre }}</td>
+          <td>{{ u.programa.nombre }}</td>
+          <td>{{ u.periodo|default:"-" }}</td>
+          <td>{{ u.ciclo|default:"-" }}</td>
+          <td>
+            {% if u.archivo %}
+            <a href="{{ u.archivo.url }}" target="_blank" class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-file-earmark-pdf"></i>
+            </a>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if u.activo %}
+            <span class="badge" style="background: var(--ean-green);">Activo</span>
+            {% else %}
+            <span class="badge bg-secondary">Inactivo</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <a href="{% url 'unidades_estudio:editar' u.pk %}" class="btn btn-sm btn-outline-primary">
+              <i class="bi bi-pencil"></i>
+            </a>
+            {% if u.activo %}
+            <a href="{% url 'unidades_estudio:eliminar' u.pk %}" class="btn btn-sm btn-outline-danger"
+               onclick="return confirm('¿Desactivar {{ u.codigo }}?')">
+              <i class="bi bi-x-circle"></i>
+            </a>
+            {% else %}
+            <a href="{% url 'unidades_estudio:activar' u.pk %}" class="btn btn-sm btn-outline-success">
+              <i class="bi bi-check-circle"></i>
+            </a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="text-center py-5">
+    <i class="bi bi-journal-text" style="font-size: 3rem; color: var(--ean-teal);"></i>
+    <h5 class="mt-3">No hay unidades de estudio</h5>
+    <p class="text-muted">Crea la primera unidad para comenzar.</p>
+    <a href="{% url 'unidades_estudio:crear' %}" class="btn" style="background: var(--accent); color: #fff;">
+      <i class="bi bi-plus-lg"></i> Crear unidad
+    </a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

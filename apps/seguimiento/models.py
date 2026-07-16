@@ -124,7 +124,6 @@ class SeguimientoReto(models.Model):
     def __str__(self):
         return f"{self.reto} - {self.fecha_sesion}"
 
-
 class SeguimientoArchivo(models.Model):
     seguimiento = models.ForeignKey(SeguimientoReto, on_delete=models.CASCADE, related_name="archivos")
     archivo = models.FileField(upload_to="retos/seguimientos/")
