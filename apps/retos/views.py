@@ -342,8 +342,6 @@ def revisar_integracion(request, pk):
 def empresa_integraciones(request):
     integraciones = IntegracionAcademica.objects.select_related(
         'reto', 'profesor'
-    ).filter(
-        reto__empresa=request.user
     ).order_by('-creado_en')
     return render(request, 'retos/empresa_integraciones.html', {
         'integraciones': integraciones,
@@ -355,7 +353,6 @@ def empresa_revisar_integracion(request, pk):
     integracion = get_object_or_404(
         IntegracionAcademica.objects.select_related('reto', 'profesor'),
         pk=pk,
-        reto__empresa=request.user,
     )
     form = RevisionIntegracionForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
