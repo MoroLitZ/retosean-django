@@ -8,7 +8,7 @@
   <form method="post" enctype="multipart/form-data" class="row g-3">
     {% csrf_token %}
     {% for field in form %}
-    <div class="col-md-{% if field.name == 'descripcion' or field.name == 'premios' or field.name == 'criterios_evaluacion' or field.name == 'documento_soporte' %}12{% else %}6{% endif %}">
+    <div class="col-md-{% if field.name == 'descripcion' or field.name == 'premios' or field.name == 'criterios_evaluacion' or field.name == 'archivos' %}12{% else %}6{% endif %}">
       <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
       {{ field }}
       {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
@@ -17,7 +17,7 @@
     {% endfor %}
     <div class="col-12 d-flex gap-2">
       <button type="submit" name="accion" value="guardar" class="btn btn-secondary">Guardar borrador</button>
-      <button type="submit" name="accion" value="enviar" class="btn btn-primary">Enviar a revision</button>
+      <button type="submit" name="accion" value="enviar" class="btn btn-primary">Enviar a aprobacion</button>
       <a href="{% url 'retos:mis_retos' %}" class="btn btn-outline-secondary">Volver</a>
     </div>
   </form>
