@@ -1,6 +1,7 @@
 ﻿from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 
 from .models import UnidadEstudio
 
@@ -227,6 +228,7 @@ def editar_unidad(request, pk):
 
 
 @login_required(login_url="usuarios:login")
+@require_POST
 def eliminar_unidad(request, pk):
     if not _puede_gestionar(request.user):
         messages.error(request, "No tienes permiso para gestionar unidades de estudio.")
@@ -240,6 +242,7 @@ def eliminar_unidad(request, pk):
 
 
 @login_required(login_url="usuarios:login")
+@require_POST
 def activar_unidad(request, pk):
     if not _puede_gestionar(request.user):
         messages.error(request, "No tienes permiso.")
