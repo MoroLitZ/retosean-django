@@ -338,7 +338,7 @@ def revisar_integracion(request, pk):
 
 # --- VISTAS PARA EMPRESA: SOLICITUDES DE VINCULACION DE PROFESORES ---
 
-@solo_empresa
+@solo_administrador
 def empresa_integraciones(request):
     integraciones = IntegracionAcademica.objects.select_related(
         'reto', 'profesor'
@@ -350,7 +350,7 @@ def empresa_integraciones(request):
     })
 
 
-@solo_empresa
+@solo_administrador
 def empresa_revisar_integracion(request, pk):
     integracion = get_object_or_404(
         IntegracionAcademica.objects.select_related('reto', 'profesor'),

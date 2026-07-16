@@ -389,7 +389,12 @@
         </li>
         <li class="nav-item">
           <a href="{% url 'retos:admin_integraciones' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'admin_integraciones' %}active{% endif %}">
-            <i class="bi bi-diagram-3"></i> Integraciones
+                        <i class="bi bi-diagram-3"></i> Integraciones
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="{% url 'retos:empresa_integraciones' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'empresa_integraciones' or request.resolver_match.url_name == 'empresa_revisar_integracion' %}active{% endif %}">
+            <i class="bi bi-link-45deg"></i> Vinculaciones
           </a>
         </li>
                         <li class="nav-item">
@@ -424,16 +429,11 @@
         </li>
         <li class="nav-item">
                     <a href="{% url 'empresas:postulaciones' %}" class="nav-link {% if request.resolver_match.url_name == 'postulaciones' %}active{% endif %}">
-            <i class="bi bi-person-check"></i> Postulaciones
-          </a>
+                      <i class="bi bi-person-check"></i> Postulaciones
+                    </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'retos:empresa_integraciones' %}" class="nav-link {% if request.resolver_match.url_name == 'empresa_integraciones' or request.resolver_match.url_name == 'empresa_revisar_integracion' %}active{% endif %}">
-            <i class="bi bi-link-45deg"></i> Vinculaciones
-          </a>
-        </li>
-        <li class="nav-item">
-          <a href="{% url 'empresas:documentos' %}" class="nav-link {% if request.resolver_match.url_name == 'documentos' %}active{% endif %}">
+                    <a href="{% url 'empresas:documentos' %}" class="nav-link {% if request.resolver_match.url_name == 'documentos' %}active{% endif %}">
             <i class="bi bi-file-earmark-text"></i> Documentos Legales
           </a>
         </li>
