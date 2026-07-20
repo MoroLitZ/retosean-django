@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Vinculaciones de Profesores{% endblock %}
+{% block page_title %}Solicitudes de Vinculación{% endblock %}
+
+{% block content %}
+<div class="card-panel">
+  <div class="card-panel-header">
+    <span><i class="bi bi-link-45deg me-2"></i>Vinculaciones de profesores a retos</span>
+    <span class="badge bg-warning rounded-pill">{{ integraciones|length }} solicitud{{ integraciones|length|pluralize:"es" }}</span>
+  </div>
+  <div class="p-3">
+    {% if integraciones %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Profesor</th>
+            <th>Reto</th>
+            <th>Empresa</th>
+            <th>Estado</th>
+            <th>Enviada</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for i in integraciones %}
+          <tr>
+            <td>
+              <strong>{{ i.profesor.get_full_name|default:i.profesor.username }}</strong>
+              <br><small class="text-muted">{{ i.profesor.email }}</small>
+            </td>
+            <td>
+              <a href="{% url 'retos:detalle' i.reto.pk %}" class="text-decoration-none">
+                {{ i.reto.titulo|truncatechars:40 }}
+              </a>
+            </td>
+            <td>{{ i.reto.empresa.get_full_name|default:i.reto.empresa.username }}</td>
+            <td>
+              {% if i.estado == 'borrador' %}
+                <span class="badge bg-secondary">Borrador</span>
+              {% elif i.estado == 'en_revision' %}
+                <span class="badge bg-warning text-dark">Pendiente</span>
+              {% elif i.estado == 'aprobada' %}
+                <span class="badge bg-success">Aprobada</span>
+              {% elif i.estado == 'rechazada' %}
+                <span class="badge bg-danger">Rechazada</span>
+              {% elif i.estado == 'publicada' %}
+                <span class="badge bg-info">Publicada</span>
+              {% endif %}
+            </td>
+            <td><small class="text-muted">{{ i.fecha_envio_revision|date:"d/m/Y"|default:"-" }}</small></td>
+            <td>
+              {% if i.estado == 'en_revision' %}
+                <a href="{% url 'retos:admin_revisar_vinculacion' i.pk %}" class="btn btn-sm btn-ean">
+                  <i class="bi bi-check-lg"></i> Revisar
+                </a>
+              {% else %}
+                <a href="{% url 'retos:detalle_integracion' i.pk %}" class="btn btn-sm btn-outline-secondary">
+                  <i class="bi bi-eye"></i> Ver
+                </a>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-inbox" style="font-size: 3rem; display: block; margin-bottom: 1rem;"></i>
+      <h5>No hay solicitudes de vinculación</h5>
+      <p>Cuando un profesor solicite vincularse a un reto, aparecerá aquí.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
