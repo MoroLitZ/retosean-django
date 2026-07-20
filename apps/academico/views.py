@@ -13,8 +13,7 @@ def explorar_retos(request):
     if hasattr(request.user, 'rol') and request.user.rol.upper() != 'ESTUDIANTE' and not request.user.is_superuser:
         return redirect(_url_para_usuario(request.user))
         
-    # Cambiamos '-fecha_creacion' por '-creado_en'
-    retos_disponibles = Reto.objects.all().order_by('-creado_en') if 'Reto' in globals() else []
+    retos_disponibles = Reto.objects.all().order_by('-creado_en')
     return render(request, 'estudiante/explorar_retos.html', {
         'retos': retos_disponibles, 'titulo': 'Explorar Retos Disponibles'
     })
@@ -43,3 +42,4 @@ def certificados(request):
     return render(request, 'estudiante/certificados.html', {
         'titulo': 'Mis Certificados Obtenidos'
     })
+

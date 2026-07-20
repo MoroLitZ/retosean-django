@@ -82,28 +82,73 @@ def vista_perfil(request):
 def dashboard_admin(request):
     if not request.user.is_superuser:
         return redirect(_url_para_usuario(request.user))
-    return render(request, 'usuarios/dashboard_admin.html')
+    from apps.empresas.models import Empresa
+    from apps.retos.models import Reto
+    total_usuarios = Usuario.objects.count()
+    total_empresas = Empresa.objects.count()
+    total_retos = Reto.objects.count()
+    total_estudiantes = Usuario.objects.filter(rol='ESTUDIANTE').count()
+    return render(request, 'usuarios/dashboard_admin.html', {
+        'total_usuarios': total_usuarios,
+        'total_empresas': total_empresas,
+        'total_retos': total_retos,
+        'total_estudiantes': total_estudiantes,
+    })
 
 
 @login_required(login_url='usuarios:login')
 def dashboard_empresa(request):
     if request.user.rol != 'EMPRESA':
         return redirect(_url_para_usuario(request.user))
-    return render(request, 'empresas/dashboard.html')
+    from apps.retos.models import Reto
+    from apps.seguimiento.models import IntegracionAcademica
+    retos = Reto.objects.filter(empresa=request.user)
+    mis_retos = retos.count()
+    postulaciones = IntegracionAcademica.objects.filter(reto__empresa=request.user).count()
+    en_evaluacion = IntegracionAcademica.objects.filter(reto__empresa=request.user, estado='en_revision').count()
+    retos_cerrados = retos.filter(estado='finalizado').count()
+    return render(request, 'empresas/dashboard.html', {
+        'total_retos': mis_retos,
+        'total_postulaciones': postulaciones,
+        'en_evaluacion': en_evaluacion,
+        'retos_cerrados': retos_cerrados,
+    })
 
 
 @login_required(login_url='usuarios:login')
 def dashboard_profesor(request):
     if request.user.rol != 'PROFESOR':
         return redirect(_url_para_usuario(request.user))
-    return render(request, 'profesor/dashboard.html')
+    from apps.seguimiento.models import IntegracionAcademica
+    integraciones = IntegracionAcademica.objects.filter(profesor=request.user)
+    cursos_activos = integraciones.filter(estado='aprobada').count()
+    retos_asignados = integraciones.count()
+    estudiantes = 0  # TODO: conectar con modelo de estudiantes por profesor
+    evaluaciones_pendientes = integraciones.filter(estado='aprobada').count()
+    return render(request, 'profesor/dashboard.html', {
+        'cursos_activos': cursos_activos,
+        'retos_asignados': retos_asignados,
+        'total_estudiantes': estudiantes,
+        'evaluaciones_pendientes': evaluaciones_pendientes,
+    })
 
 
 @login_required(login_url='usuarios:login')
 def dashboard_estudiante(request):
     if request.user.rol != 'ESTUDIANTE':
         return redirect(_url_para_usuario(request.user))
-    return render(request, 'estudiante/dashboard.html')
+    from apps.retos.models import Reto
+    from apps.seguimiento.models import IntegracionAcademica
+    retos_disponibles = Reto.objects.filter(estado__in=['publicado', 'abierto']).count()
+    mis_postulaciones = IntegracionAcademica.objects.filter(profesor=request.user).count()
+    entregables_pendientes = 0  # TODO: conectar con modelo de entregables
+    certificados = 0  # TODO: conectar con modelo de certificados
+    return render(request, 'estudiante/dashboard.html', {
+        'retos_disponibles': retos_disponibles,
+        'mis_postulaciones': mis_postulaciones,
+        'entregables_pendientes': entregables_pendientes,
+        'certificados': certificados,
+    })
 
 
 

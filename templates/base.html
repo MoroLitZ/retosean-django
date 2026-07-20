@@ -384,17 +384,12 @@
         
         <li class="nav-item">
           <a href="{% url 'retos:admin_panel' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'admin_panel' %}active{% endif %}">
-            <i class="bi bi-trophy"></i> Retos
+                        <i class="bi bi-trophy"></i> Retos
           </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'retos:admin_integraciones' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'admin_integraciones' %}active{% endif %}">
-                        <i class="bi bi-diagram-3"></i> Integraciones
-          </a>
-        </li>
-        <li class="nav-item">
-          <a href="{% url 'retos:empresa_integraciones' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'empresa_integraciones' or request.resolver_match.url_name == 'empresa_revisar_integracion' %}active{% endif %}">
-            <i class="bi bi-link-45deg"></i> Vinculaciones
+          <a href="{% url 'retos:admin_vinculaciones' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'admin_vinculaciones' or request.resolver_match.url_name == 'admin_revisar_vinculacion' %}active{% endif %}">
+                        <i class="bi bi-link-45deg"></i> Vinculaciones
           </a>
         </li>
                         <li class="nav-item">
