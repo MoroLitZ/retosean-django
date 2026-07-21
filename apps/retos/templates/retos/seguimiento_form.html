@@ -4,12 +4,13 @@
 <div class="container mt-4">
   <h1 class="h3">Registrar seguimiento</h1>
   <p class="text-muted">{{ reto }}</p>
-  <form method="post" class="row g-3">
+  <form method="post" enctype="multipart/form-data" class="row g-3">
     {% csrf_token %}
     {% for field in form %}
-    <div class="col-md-{% if field.name == 'avances' or field.name == 'observaciones' or field.name == 'acuerdos' %}12{% else %}4{% endif %}">
+    <div class="col-md-{% if field.name == 'avances' or field.name == 'observaciones' or field.name == 'acuerdos' or field.name == 'archivos' %}12{% else %}4{% endif %}">
       <label class="form-label">{{ field.label }}</label>
       {{ field }}
+      {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
       {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
     </div>
     {% endfor %}
