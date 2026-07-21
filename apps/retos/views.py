@@ -18,6 +18,21 @@ from apps.seguimiento.models import IntegracionAcademica, SeguimientoArchivo, Se
 from .services import cambiar_estado_reto, registrar_cambio_estado
 
 
+def _guardar_archivos_reto(reto, archivos):
+    for archivo in archivos:
+        RetoArchivo.objects.create(reto=reto, archivo=archivo, nombre_original=archivo.name, tamano=archivo.size)
+
+
+def _guardar_archivos_seguimiento(seguimiento, archivos):
+    for archivo in archivos:
+        SeguimientoArchivo.objects.create(
+            seguimiento=seguimiento,
+            archivo=archivo,
+            nombre_original=archivo.name,
+            tamano=archivo.size,
+        )
+
+
 def rol_requerido(*roles_permitidos):
     def decorador(view_func):
         @login_required(login_url='usuarios:login')
@@ -350,7 +365,7 @@ def admin_integraciones(request):
     return render(request, 'retos/admin_integraciones.html', {
         'integraciones': paginator.get_page(request.GET.get('page')),
         'estado': estado,
-        'estados': IntegracionAcademica.ESTADO_CHOICES,
+        'estados': IntegracionAcademica.ESTADOS,
     })
 
 
@@ -367,7 +382,7 @@ def revisar_integracion(request, pk):
             messages.success(request, 'Integracion academica aprobada.')
         else:
             integracion.estado = 'rechazada'
-            messages.success(request, 'Integracion academica rechazada.')
+            messages.error(request, 'Integracion academica rechazada.')
         integracion.save()
         return redirect('retos:admin_integraciones')
     return render(request, 'retos/admin_revisar_integracion.html', {'integracion': integracion, 'form': form})
