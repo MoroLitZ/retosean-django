@@ -2,7 +2,7 @@
 
 {% block content %}
 <div class="container mt-4">
-  <h1 class="h3">Revisar reto</h1>
+  <h1 class="h3">Aprobar reto</h1>
   <p class="text-muted">{{ reto }} · {{ reto.empresa.get_full_name|default:reto.empresa.username }}</p>
   <div class="card mb-3">
     <div class="card-body">
@@ -10,6 +10,15 @@
       <p><strong>Area:</strong> {{ reto.area|default:'-' }}</p>
       <p><strong>Nivel:</strong> {{ reto.nivel_academico|default:'-' }}</p>
       <p><strong>Criterios:</strong> {{ reto.criterios_evaluacion|linebreaksbr|default:'-' }}</p>
+      {% if reto.documento_soporte or reto.archivos.exists %}
+      <p class="mb-2"><strong>Archivos:</strong></p>
+      {% if reto.documento_soporte %}
+      <a href="{{ reto.documento_soporte.url }}" target="_blank" class="btn btn-sm btn-outline-secondary me-2 mb-2">Documento soporte</a>
+      {% endif %}
+      {% for archivo in reto.archivos.all %}
+      <a href="{{ archivo.archivo.url }}" target="_blank" class="btn btn-sm btn-outline-secondary me-2 mb-2">{{ archivo.nombre_original|default:'Archivo' }}</a>
+      {% endfor %}
+      {% endif %}
     </div>
   </div>
   <form method="post" class="row g-3">
@@ -22,7 +31,7 @@
     </div>
     {% endfor %}
     <div class="col-12">
-      <button class="btn btn-primary">Guardar revision</button>
+      <button class="btn btn-primary">Guardar aprobacion</button>
       <a href="{% url 'retos:admin_panel' %}" class="btn btn-outline-secondary">Volver</a>
     </div>
   </form>

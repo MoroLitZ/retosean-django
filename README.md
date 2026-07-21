@@ -1,90 +1,173 @@
-# Reto EAN - Plataforma de Desafíos Académicos y Hackatones
+# Rama Caicedo - Modulo de Retos e Integraciones
 
-Proyecto de grado desarrollado para la **Universidad EAN** enfocado en conectar el ecosistema empresarial con la comunidad universitaria mediante la publicación, gestión y evaluación de retos tecnológicos y hackatones.
+Esta rama implementa el flujo base para que empresas, profesores y administradores gestionen retos, hackatones, integraciones academicas y seguimientos dentro de la plataforma Retos EAN.
 
----
+## Alcance principal
 
-## Roles del Sistema y Flujo de Trabajo
+- Creacion, edicion, envio a revision y eliminacion de retos por parte de usuarios con rol Empresa.
+- Revision administrativa de retos, con aprobacion, rechazo, cambio manual de estado y asignacion de consecutivo.
+- Registro de historial de cambios de estado para conservar trazabilidad del ciclo de vida de cada reto.
+- Registro de seguimientos sobre retos aprobados o activos.
+- Creacion, edicion, envio a revision y publicacion de integraciones academicas por parte de usuarios con rol Profesor.
+- Revision administrativa de integraciones academicas.
+- Vistas y plantillas HTML para formularios, paneles, detalles, estados y confirmaciones del modulo `retos`.
+- Reorganizacion de la configuracion Django en `config/settings/` con archivos separados para base, desarrollo y produccion.
+- Estructura inicial de apps de dominio bajo `apps/` para preparar el crecimiento modular del proyecto.
 
-La plataforma gestiona tres tipos de usuarios clave con flujos dinámicos e independientes:
+## Modelos incluidos
 
-* **Empresas:** Entidades encargadas de proponer, estructurar y publicar retos o hackatones basados en problemáticas reales del sector tecnológico.
-* **Profesores:** Actúan como mentores y evaluadores, realizando el seguimiento, revisión y calificación de las propuestas o soluciones entregadas por los alumnos.
-* **Estudiantes:** Usuarios finales que exploran el catálogo de retos activos, se postulan a las hackatones y cargan sus proyectos o soluciones directamente en la plataforma.
+- `Reto`: representa retos o hackatones creados por empresas, con estados como borrador, en revision, aprobado, rechazado, en curso, pausado, finalizado y cancelado.
+- `HistorialEstadoReto`: guarda cada cambio de estado de un reto, el usuario que lo realizo y el comentario asociado.
+- `SeguimientoReto`: registra sesiones, avances, observaciones y acuerdos sobre un reto.
+- `IntegracionAcademica`: conecta un reto aprobado o activo con una propuesta academica creada por un profesor.
 
----
+## Sistema de base de datos
 
-## Requisitos Previos
+La rama usa PostgreSQL como base de datos principal. La conexion se define en `config/settings/base.py` y se alimenta desde variables de entorno para evitar credenciales quemadas en el codigo.
 
-Antes de levantar el proyecto en tu máquina local, asegúrate de cumplir con lo siguiente:
-* **Python 3.10** o superior instalado.
-* **Git** configurado en tu sistema.
-* Entorno **WSL (Windows Subsystem for Linux)** si te encuentras desarrollando en Windows.
+Variables requeridas en `.env`:
 
----
+- `DB_NAME`: nombre de la base de datos.
+- `DB_USER`: usuario de PostgreSQL.
+- `DB_PASSWORD`: clave del usuario.
+- `DB_HOST`: host del servidor de base de datos, normalmente `localhost`.
+- `DB_PORT`: puerto de PostgreSQL. En `.env.example` se usa `5433`.
 
-## Instalación y Configuración Local
+El esquema se administra con migraciones de Django. En esta rama el modulo `retos` incluye su migracion inicial para crear las tablas de retos, historial de estados, seguimientos e integraciones academicas. Los modelos se relacionan con el usuario personalizado mediante `settings.AUTH_USER_MODEL`, por eso las tablas dependen tambien de las migraciones de `usuarios`.
 
-Sigue este orden de comandos en tu terminal para desplegar el entorno de desarrollo:
+Relaciones principales:
 
-### 1. Clonar el repositorio y acceder al directorio
-git clone https://github.com/MoroLitZ/retosean-django
-cd retosean-django
+- Un usuario Empresa puede tener muchos `Reto`.
+- Un `Reto` puede tener muchos registros de `HistorialEstadoReto`.
+- Un `Reto` puede tener muchos `SeguimientoReto`.
+- Un `Reto` puede tener muchas `IntegracionAcademica`.
+- Un usuario Profesor puede tener muchas `IntegracionAcademica`.
 
-### 2. Configurar el Entorno Virtual (Virtual Env)
-Para aislar las dependencias de Python del resto de tu sistema, crea y activa el entorno:
-python3 -m venv venv
-source venv/bin/activate
+Diagrama de relaciones:
 
-### 3. Instalar las dependencias oficiales
-Utiliza el archivo de requerimientos generado para instalar el framework Django y todos sus componentes adicionales con un solo comando:
-pip install -r requirements.txt
+```mermaid
+erDiagram
+    USUARIO ||--o{ RETO : crea
+    USUARIO ||--o{ INTEGRACION_ACADEMICA : crea
+    USUARIO ||--o{ HISTORIAL_ESTADO_RETO : realiza
+    USUARIO ||--o{ SEGUIMIENTO_RETO : registra
+    RETO ||--o{ HISTORIAL_ESTADO_RETO : tiene
+    RETO ||--o{ SEGUIMIENTO_RETO : tiene
+    RETO ||--o{ INTEGRACION_ACADEMICA : integra
 
-### 4. Preparar la Base de Datos (Migraciones)
-Aplica la estructura del modelo relacional de usuarios y roles a tu base de datos local:
+    USUARIO {
+        int id PK
+        string rol
+        string email
+        string username
+    }
+
+    RETO {
+        int id PK
+        int empresa_id FK
+        string tipo
+        string titulo
+        string estado
+        int consecutivo
+        datetime fecha_envio_revision
+        datetime fecha_aprobacion
+        datetime creado_en
+        datetime actualizado_en
+    }
+
+    HISTORIAL_ESTADO_RETO {
+        int id PK
+        int reto_id FK
+        int realizado_por_id FK
+        string estado_anterior
+        string estado_nuevo
+        text comentario
+        datetime fecha
+    }
+
+    SEGUIMIENTO_RETO {
+        int id PK
+        int reto_id FK
+        int creado_por_id FK
+        string tipo_sesion
+        date fecha_sesion
+        int porcentaje_avance
+        text avances
+        text observaciones
+        text acuerdos
+    }
+
+    INTEGRACION_ACADEMICA {
+        int id PK
+        int reto_id FK
+        int profesor_id FK
+        string facultad
+        string programa_academico
+        string estado
+        datetime fecha_envio_revision
+        datetime fecha_aprobacion
+        datetime creado_en
+        datetime actualizado_en
+    }
+```
+
+Flujo recomendado para trabajar con la base de datos:
+
+```bash
+python manage.py makemigrations
 python manage.py migrate
+python manage.py check
+```
 
-### 5. Crear una cuenta de Administrador (Opcional)
-Si necesitas acceder al panel de administración general de Django (/admin) para gestionar registros manualmente, crea un superusuario:
-python manage.py createsuperuser
+Cada cambio en `models.py` debe incluir su migracion correspondiente. Si dos ramas crean migraciones al mismo tiempo y Django detecta ramas paralelas en el historial, se debe resolver con:
 
-### 6. Encender el Servidor de Desarrollo
-Una vez todo esté configurado, ejecuta el backend de Django:
+```bash
+python manage.py makemigrations --merge
+python manage.py migrate
+```
+
+## Rutas principales
+
+- `/retos/mis-retos/`: listado de retos de la empresa.
+- `/retos/crear/`: creacion de retos.
+- `/retos/<id>/`: detalle del reto.
+- `/retos/<id>/seguimientos/`: historial de seguimientos del reto.
+- `/retos/admin/panel/`: panel administrativo de revision de retos.
+- `/retos/integraciones/`: listado de integraciones del profesor.
+- `/retos/integraciones/crear/`: creacion de integraciones academicas.
+- `/retos/admin/integraciones/`: panel administrativo de revision de integraciones.
+
+## Configuracion local
+
+1. Crear y activar un entorno virtual.
+2. Instalar dependencias:
+
+```bash
+pip install -r requirements.txt
+```
+
+3. Crear un archivo `.env` basado en `.env.example`.
+4. Configurar la base de datos PostgreSQL.
+5. Ejecutar migraciones:
+
+```bash
+python manage.py migrate
+```
+
+6. Levantar el servidor:
+
+```bash
 python manage.py runserver
+```
 
----
+## Settings
 
-## Reglas del Flujo de Trabajo (Base de Datos y Git)
+- Desarrollo: `config.settings.development`
+- Produccion: `config.settings.production`
 
-Para evitar conflictos de historial (NodeNotFoundError) o archivos de migración huérfanos entre los desarrolladores, el equipo debe seguir estrictamente estas pautas:
+## Notas para continuar
 
-1. **Antes de empezar a trabajar (Hacer siempre Git Pull):**
-   Cada vez que descargues la última versión de la rama principal, aplica de inmediato las migraciones que tus compañeros hayan subido:
-   git pull origin main
-   python manage.py migrate
-
-2. **Al modificar Modelos (models.py):**
-   Si agregas, editas o eliminas un campo en los modelos de una aplicación, debes generar los archivos de migración locales antes de hacer el commit y subirlos junto con el código:
-   python manage.py makemigrations
-   git add apps/usuarios/migrations/
-
-3. **¿Qué hacer si hay un conflicto de historial al hacer Pull?**
-   Si Django arroja un error indicando que dos personas crearon una migración con el mismo número (por ejemplo, dos versiones de la 0003), soluciónalo unificando el árbol con el comando de fusión:
-   python manage.py makemigrations --merge
-   python manage.py migrate
-
----
-
-## Acceso a la Aplicación
-
-Con el servidor corriendo localmente, abre tu navegador web de preferencia e ingresa a las siguientes direcciones:
-
-* **Plataforma Principal (Inicio de Sesión):** [http://127.0.0.1:8000/usuarios/login/](http://127.0.0.1:8000/usuarios/login/)
-* **Panel de Administración Global:** [http://127.0.0.1:8000/admin/](http://127.0.0.1:8000/admin/)
-
----
-
-## Estructura del Proyecto
-
-* apps/usuarios/: Módulo encargado del registro dinámico según rol, carga de documentación para empresas y control de perfiles.
-* config/: Directorio raíz de configuración global de Django (settings.py, urls.py).
+- Validar el flujo completo con usuarios Empresa, Profesor y Admin.
+- Agregar pruebas enfocadas para permisos, transiciones de estado y formularios.
+- Mantener las migraciones junto con cualquier cambio futuro en modelos.
+- Evitar secretos en el repositorio; usar `.env` para credenciales y variables de entorno.
