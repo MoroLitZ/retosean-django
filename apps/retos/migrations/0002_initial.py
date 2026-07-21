@@ -41,11 +41,6 @@ class Migration(migrations.Migration):
             field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='historial_estados', to='retos.reto'),
         ),
         migrations.AddField(
-            model_name='retoarchivo',
-            name='reto',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='archivos', to='retos.reto'),
-        ),
-        migrations.AddField(
             model_name='seguimientoreto',
             name='creado_por',
             field=models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='seguimientos_retos', to=settings.AUTH_USER_MODEL),
