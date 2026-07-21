@@ -54,7 +54,6 @@ class Reto(models.Model):
     def __str__(self):
         return self.titulo or f"Reto #{self.pk or 'nuevo'}"
 
-    @property
     def campos_faltantes_para_revision(self):
         """
         Calcula qué campos obligatorios están vacíos para enviar a revisión.

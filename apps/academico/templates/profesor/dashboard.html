@@ -22,7 +22,7 @@
         <div class="stat-icon-box" style="background: #dcfce7;"><i class="bi bi-journal-text" style="color:#16a34a;"></i></div>
         <span class="badge bg-light text-muted">Activos</span>
       </div>
-      <div style="font-size: 2rem; font-weight: 800; color: #111827; line-height: 1;">0</div>
+      <div style="font-size: 2rem; font-weight: 800; color: #111827; line-height: 1;">{{ cursos_activos|default:0 }}</div>
       <div style="font-size: 0.8rem; color: #6b7280; margin-top: 0.3rem;">Cursos activos</div>
     </div>
   </div>
@@ -32,7 +32,7 @@
         <div class="stat-icon-box" style="background: #fef3c7;"><i class="bi bi-trophy-fill" style="color:#d97706;"></i></div>
         <span class="badge bg-light text-muted">Vinculados</span>
       </div>
-      <div style="font-size: 2rem; font-weight: 800; color: #111827; line-height: 1;">0</div>
+      <div style="font-size: 2rem; font-weight: 800; color: #111827; line-height: 1;">{{ retos_asignados|default:0 }}</div>
       <div style="font-size: 0.8rem; color: #6b7280; margin-top: 0.3rem;">Retos asignados</div>
     </div>
   </div>
@@ -42,7 +42,7 @@
         <div class="stat-icon-box" style="background: #dbeafe;"><i class="bi bi-people-fill" style="color:#1d4ed8;"></i></div>
         <span class="badge bg-light text-muted">Total</span>
       </div>
-      <div style="font-size: 2rem; font-weight: 800; color: #111827; line-height: 1;">0</div>
+      <div style="font-size: 2rem; font-weight: 800; color: #111827; line-height: 1;">{{ total_estudiantes|default:0 }}</div>
       <div style="font-size: 0.8rem; color: #6b7280; margin-top: 0.3rem;">Mis estudiantes</div>
     </div>
   </div>
@@ -52,7 +52,7 @@
         <div class="stat-icon-box" style="background: #fee2e2;"><i class="bi bi-star-fill" style="color:#dc2626;"></i></div>
         <span class="badge bg-light text-muted">Pendientes</span>
       </div>
-      <div style="font-size: 2rem; font-weight: 800; color: #111827; line-height: 1;">0</div>
+      <div style="font-size: 2rem; font-weight: 800; color: #111827; line-height: 1;">{{ evaluaciones_pendientes|default:0 }}</div>
       <div style="font-size: 0.8rem; color: #6b7280; margin-top: 0.3rem;">Evaluaciones por hacer</div>
     </div>
   </div>

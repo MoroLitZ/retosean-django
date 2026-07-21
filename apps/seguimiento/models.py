@@ -43,7 +43,6 @@ class IntegracionAcademica(models.Model):
     def __str__(self):
         return f"{self.reto} - {self.profesor}"
 
-    @property
     def campos_faltantes_para_revision(self):
         campos = {
             "facultad": self.facultad,
