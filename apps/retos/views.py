@@ -365,7 +365,7 @@ def admin_integraciones(request):
     return render(request, 'retos/admin_integraciones.html', {
         'integraciones': paginator.get_page(request.GET.get('page')),
         'estado': estado,
-        'estados': IntegracionAcademica.ESTADO_CHOICES,
+        'estados': IntegracionAcademica.ESTADOS,
     })
 
 
@@ -382,7 +382,7 @@ def revisar_integracion(request, pk):
             messages.success(request, 'Integracion academica aprobada.')
         else:
             integracion.estado = 'rechazada'
-            messages.success(request, 'Integracion academica rechazada.')
+            messages.error(request, 'Integracion academica rechazada.')
         integracion.save()
         return redirect('retos:admin_integraciones')
     return render(request, 'retos/admin_revisar_integracion.html', {'integracion': integracion, 'form': form})
