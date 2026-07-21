@@ -19,6 +19,7 @@ class IntegracionAcademica(models.Model):
     nivel_formacion = models.CharField(max_length=120, blank=True)
     programa_academico = models.CharField(max_length=160, blank=True)
     ecosistema = models.CharField(max_length=140, blank=True)
+    descripcion = models.TextField(blank=True)
     alcance = models.TextField(blank=True)
     entregable_esperado = models.CharField(max_length=180, blank=True)
     cronograma_sesiones = models.TextField(blank=True)
@@ -34,6 +35,7 @@ class IntegracionAcademica(models.Model):
     fecha_aprobacion = models.DateTimeField(null=True, blank=True)
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
+    
 
     class Meta:
         db_table = "integraciones_academicas"

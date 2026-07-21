@@ -3,58 +3,73 @@
 {% block title %}Integracion academica{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-  <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+<div class="container py-4" style="max-width: 900px;">
+  <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
     <div>
-      <h1 class="h3">{{ integracion.reto }}</h1>
-      <p class="text-muted mb-0">{{ integracion.programa_academico|default:'Sin programa' }} · {{ integracion.get_estado_display }}</p>
+      <h1 class="h3 fw-bold mb-1" style="color: #111827;">{{ integracion.reto }}</h1>
+      <p class="text-muted small mb-0">{{ integracion.programa_academico|default:'Sin programa' }} &bull; <span class="badge bg-secondary">{{ integracion.get_estado_display }}</span></p>
     </div>
     <div class="d-flex flex-wrap gap-2">
       {% if user.rol == 'PROFESOR' and integracion.puede_editar_profesor %}
-      <a href="{% url 'retos:editar_integracion' integracion.pk %}" class="btn btn-outline-primary">Editar</a>
-      <a href="{% url 'retos:enviar_integracion_revision' integracion.pk %}" class="btn btn-primary">Enviar a aprobacion</a>
+      <a href="{% url 'retos:editar_integracion' integracion.pk %}" class="btn btn-outline-primary btn-sm px-3">Editar</a>
+      <a href="{% url 'retos:enviar_integracion_revision' integracion.pk %}" class="btn btn-primary btn-sm px-3">Enviar a aprobacion</a>
       {% endif %}
       {% if user.rol == 'PROFESOR' and integracion.estado == 'aprobada' %}
       <form method="post" action="{% url 'retos:publicar_integracion' integracion.pk %}">
         {% csrf_token %}
-        <button class="btn btn-success">Publicar</button>
+        <button class="btn btn-success btn-sm px-3">Publicar</button>
       </form>
       {% endif %}
       {% if user.is_superuser or user.rol == 'ADMIN' %}
-      <a href="{% url 'retos:admin_revisar_integracion' integracion.pk %}" class="btn btn-primary">Aprobar integracion</a>
+      <a href="{% url 'retos:admin_revisar_integracion' integracion.pk %}" class="btn btn-primary btn-sm px-3">Aprobar integracion</a>
       {% endif %}
     </div>
   </div>
 
-  {% if integracion.comentarios_revision %}
-  <div class="alert alert-info">{{ integracion.comentarios_revision }}</div>
-  {% endif %}
+  <!-- Comentarios de revisión (se oculta si está vacío o tiene solo un punto, y se pone rojo si está rechazada) -->
+  <div class="alert {% if integracion.estado == 'rechazada' %}alert-danger{% else %}alert-info{% endif %} shadow-sm d-flex align-items-center mb-4" role="alert">
+    <div>
+      <strong>Comentarios de revisión:</strong> {{ integracion.comentarios_revision }}
+    </div>
+  </div>
 
-  <div class="row g-3">
-    <div class="col-md-6"><div class="card"><div class="card-body">
-      <p><strong>Profesor:</strong> {{ integracion.profesor.get_full_name|default:integracion.profesor.username }}</p>
-      <p><strong>Facultad:</strong> {{ integracion.facultad|default:'-' }}</p>
-      <p><strong>Nivel:</strong> {{ integracion.nivel_formacion|default:'-' }}</p>
-      <p><strong>Programa:</strong> {{ integracion.programa_academico|default:'-' }}</p>
-      <p><strong>Ecosistema:</strong> {{ integracion.ecosistema|default:'-' }}</p>
-      <p><strong>Entregable esperado:</strong> {{ integracion.entregable_esperado|default:'-' }}</p>
-      <p><strong>Espacio fisico:</strong> {{ integracion.espacio_fisico|default:'-' }}</p>
-    </div></div></div>
-    <div class="col-md-6"><div class="card"><div class="card-body">
-      <h2 class="h5">Alcance</h2>
-      <p>{{ integracion.alcance|linebreaksbr|default:'-' }}</p>
-      <h2 class="h5">Cronograma</h2>
-      <p>{{ integracion.cronograma_sesiones|linebreaksbr|default:'-' }}</p>
-    </div></div></div>
-    <div class="col-12"><div class="card"><div class="card-body">
-      <h2 class="h5">Equipo de trabajo</h2>
-      <p><strong>Profesores:</strong><br>{{ integracion.equipo_profesores|linebreaksbr|default:'-' }}</p>
-      <p><strong>Estudiantes:</strong><br>{{ integracion.equipo_estudiantes|linebreaksbr|default:'-' }}</p>
-      <p><strong>Expertos invitados:</strong><br>{{ integracion.expertos_invitados|linebreaksbr|default:'-' }}</p>
-      <h2 class="h5">Requerimientos</h2>
-      <p><strong>Hacia la empresa:</strong><br>{{ integracion.requerimientos_empresa|linebreaksbr|default:'-' }}</p>
-      <p><strong>Internos:</strong><br>{{ integracion.requerimientos_internos|linebreaksbr|default:'-' }}</p>
-    </div></div></div>
+  <!-- Tarjeta Principal -->
+  <div class="card border-0 shadow-sm mb-4" style="border-radius: 12px;">
+    <div class="card-body p-4">
+      <h5 class="fw-semibold text-primary mb-3 fs-6">Información General</h5>
+      
+      <div class="row g-3 mb-4">
+        <div class="col-md-6">
+          <span class="text-muted small d-block">Profesor</span>
+          <span class="fw-medium text-dark">{{ integracion.profesor.get_full_name|default:integracion.profesor.username }}</span>
+        </div>
+        <div class="col-md-6">
+          <span class="text-muted small d-block">Facultad</span>
+          <span class="fw-medium text-dark">{{ integracion.facultad|default:'-' }}</span>
+        </div>
+        <div class="col-md-6">
+          <span class="text-muted small d-block">Nivel de formación</span>
+          <span class="fw-medium text-dark">{{ integracion.nivel_formacion|default:'-' }}</span>
+        </div>
+        <div class="col-md-6">
+          <span class="text-muted small d-block">Unidad de estudio</span>
+          <span class="fw-medium text-dark">{{ integracion.programa_academico|default:'-' }}</span>
+        </div>
+        <div class="col-12">
+          <span class="text-muted small d-block">Entregable esperado</span>
+          <span class="fw-medium text-dark">{{ integracion.entregable_esperado|default:'-' }}</span>
+        </div>
+      </div>
+
+      <hr class="text-muted opacity-25 my-4">
+
+      <h5 class="fw-semibold text-primary mb-2 fs-6">Descripción</h5>
+      <p class="text-secondary mb-0" style="white-space: pre-line;">{{ integracion.descripcion|default:'Sin descripción registrada.' }}</p>
+    </div>
+  </div>
+
+  <div class="mb-5">
+    <a href="{% url 'retos:mis_integraciones' %}" class="btn btn-outline-secondary px-4">Volver</a>
   </div>
 </div>
 {% endblock %}

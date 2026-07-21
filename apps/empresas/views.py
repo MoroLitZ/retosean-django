@@ -211,3 +211,52 @@ def lista_empresas(request):
         'empresas': empresas,
         'titulo': 'Empresas Aliadas'
     })
+    
+@login_required
+def procesar_listas_restrictivas(request, empresa_id):
+    """Permite al administrador registrar el resultado de listas restrictivas (Clinton/OFAC) y subir evidencia"""
+    if not request.user.is_staff:
+        messages.error(request, "Acceso denegado.")
+        return redirect('usuarios:login')
+
+    empresa = get_object_or_404(Empresa, id=empresa_id)
+
+    if request.method == 'POST':
+        estado_listas = request.POST.get('estado_listas_restrictivas')
+        evidencia = request.FILES.get('evidencia_listas')
+
+        if estado_listas in ['APROBADO', 'RECHAZADO', 'PENDIENTE']:
+            empresa.estado_listas_restrictivas = estado_listas
+            
+            # Si se adjunta una nueva evidencia, la guardamos
+            if evidencia:
+                empresa.evidencia_listas = evidencia
+            
+            # REGLA DE NEGOCIO: Si aparece en listas, rechazo global y bloqueo de cuenta
+            if estado_listas == 'RECHAZADO':
+                empresa.estado_validacion = 'RECHAZADA'
+                
+                # Rechazar automáticamente todos los documentos pendientes
+                DocumentoEmpresa.objects.filter(empresa=empresa).exclude(estado='VERIFICADO').update(
+                    estado='RECHAZADO',
+                    motivo_rechazo='Rechazado automáticamente por aparecer en listas restrictivas (Clinton/OFAC).'
+                )
+
+                # Inhabilitar la cuenta del usuario para que no pueda volver a iniciar sesión
+                if empresa.usuario:
+                    empresa.usuario.is_active = False
+                    empresa.usuario.save()
+                
+                messages.warning(request, f"La empresa {empresa.razon_social} fue rechazada por listas restrictivas y su cuenta ha sido inhabilitada.")
+            elif estado_listas == 'APROBADO':
+                messages.success(request, f"Verificación de listas restrictivas aprobada para {empresa.razon_social}.")
+                # Si por error estuvo rechazada antes y ahora se aprueba, podríamos reactivar el usuario opcionalmente:
+                if empresa.usuario and not empresa.usuario.is_active:
+                    empresa.usuario.is_active = True
+                    empresa.usuario.save()
+
+            empresa.save()
+        else:
+            messages.error(request, "Estado de listas no válido.")
+
+    return redirect('empresas:admin_revisar_documentacion', empresa_id=empresa.id)
