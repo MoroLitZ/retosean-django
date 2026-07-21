@@ -40,6 +40,24 @@ def solo_empresa(view_func):
     return rol_requerido('EMPRESA')(view_func)
 
 
+def solo_empresa_con_documentos(view_func):
+    """Verifica que la empresa tenga documentos legales aprobados antes de actuar."""
+    @rol_requerido('EMPRESA')
+    def _wrapped(request, *args, **kwargs):
+        from apps.empresas.services import puede_la_empresa_operar
+        empresa = getattr(request.user, 'empresa_perfil', None)
+        if not empresa or not puede_la_empresa_operar(empresa):
+            messages.error(
+                request,
+                'Tu empresa no tiene la documentación legal aprobada. '
+                'Sube los documentos requeridos (RUT y Cámara de Comercio) '
+                'y espera a que el administrador los verifique antes de publicar retos.'
+            )
+            return redirect('empresas:documentos')
+        return view_func(request, *args, **kwargs)
+    return _wrapped
+
+
 def solo_profesor(view_func):
     return rol_requerido('PROFESOR')(view_func)
 
@@ -86,7 +104,7 @@ def mis_retos(request):
     return render(request, 'retos/mis_retos.html', {'retos': retos})
 
 
-@solo_empresa
+@solo_empresa_con_documentos
 def crear_reto(request):
     form = RetoForm(request.POST or None, request.FILES or None)
     if request.method == 'POST' and form.is_valid():
@@ -102,7 +120,7 @@ def crear_reto(request):
     return render(request, 'retos/reto_form.html', {'form': form, 'titulo': 'Crear reto'})
 
 
-@solo_empresa
+@solo_empresa_con_documentos
 def editar_reto(request, pk):
     reto = get_object_or_404(Reto, pk=pk, empresa=request.user)
     if not reto.puede_editar_empresa:
@@ -124,7 +142,7 @@ def editar_reto(request, pk):
     return render(request, 'retos/reto_form.html', {'form': form, 'reto': reto, 'titulo': 'Editar reto'})
 
 
-@solo_empresa
+@solo_empresa_con_documentos
 def enviar_revision(request, pk):
     reto = get_object_or_404(Reto, pk=pk, empresa=request.user)
     if not reto.puede_editar_empresa:

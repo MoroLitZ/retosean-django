@@ -1,6 +1,9 @@
+import os
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 class Reto(models.Model):
     TIPO_CHOICES = [
@@ -51,7 +54,6 @@ class Reto(models.Model):
     def __str__(self):
         return self.titulo or f"Reto #{self.pk or 'nuevo'}"
 
-    @property
     def campos_faltantes_para_revision(self):
         """
         Calcula qué campos obligatorios están vacíos para enviar a revisión.
@@ -82,7 +84,7 @@ class Reto(models.Model):
 
 
 class HistorialEstadoReto(models.Model):
-    reto = models.ForeignKey(Reto, on_delete=models.CASCADE, related_name="historial_estados")
+    reto = models.ForeignKey('retos.Reto', on_delete=models.CASCADE, related_name="historial_estados")
     estado_anterior = models.CharField(max_length=20, blank=True)
     estado_nuevo = models.CharField(max_length=20, choices=Reto.ESTADO_CHOICES)
     comentario = models.TextField(blank=True)
@@ -103,3 +105,26 @@ class HistorialEstadoReto(models.Model):
 
     def __str__(self):
         return f"{self.reto} -> {self.estado_nuevo}"
+
+
+class RetoArchivo(models.Model):
+    reto = models.ForeignKey(Reto, on_delete=models.CASCADE, related_name="archivos")
+    archivo = models.FileField(upload_to="retos/soportes/")
+    nombre_original = models.CharField(max_length=255, blank=True)
+    tamano = models.PositiveBigIntegerField(default=0)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-creado_en"]
+        verbose_name = "Archivo de reto"
+        verbose_name_plural = "Archivos de reto"
+
+    def save(self, *args, **kwargs):
+        if self.archivo and not self.nombre_original:
+            self.nombre_original = os.path.basename(self.archivo.name)
+        if self.archivo and not self.tamano:
+            self.tamano = self.archivo.size
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.nombre_original or os.path.basename(self.archivo.name)
