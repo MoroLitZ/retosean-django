@@ -89,21 +89,6 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.CreateModel(
-            name='RetoArchivo',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('archivo', models.FileField(upload_to='retos/soportes/')),
-                ('nombre_original', models.CharField(blank=True, max_length=255)),
-                ('tamano', models.PositiveBigIntegerField(default=0)),
-                ('creado_en', models.DateTimeField(auto_now_add=True)),
-            ],
-            options={
-                'verbose_name': 'Archivo de reto',
-                'verbose_name_plural': 'Archivos de reto',
-                'ordering': ['-creado_en'],
-            },
-        ),
-        migrations.CreateModel(
             name='SeguimientoArchivo',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
