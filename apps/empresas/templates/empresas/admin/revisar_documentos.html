@@ -5,7 +5,7 @@
 {% block content %}
 <div class="card-panel">
     <div class="card-panel-header d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-file-text me-2 text-muted"></i>Documentos pendientes de revisión</span>
+        <span><i class="bi bi-file-text me-2 text-muted"></i>Documentos Pendientes de Revisión</span>
         <span class="badge bg-secondary">{{ pendientes|length }}</span>
     </div>
 
@@ -13,42 +13,51 @@
     <div class="p-0">
         <table class="table table-hover align-middle mb-0" style="font-size: 0.875rem;">
             <thead style="background: #f9fafb; border-bottom: 1px solid #e5e7eb;">
-                <tr>
-                    <th class="ps-4 py-3 text-muted">Empresa</th>
-                    <th class="py-3 text-muted">Tipo de documento</th>
-                    <th class="py-3 text-muted">Documento</th>
-                    <th class="pe-4 py-3 text-muted text-center">Acciones</th>
+                                <tr>
+                    <th class="ps-4 py-3 text-muted" style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 700;">Empresa</th>
+                    <th class="py-3 text-muted" style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 700;">Tipo de Documento</th>
+                    <th class="py-3 text-muted" style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 700;">Documento</th>
+                    <th class="pe-4 py-3 text-muted" style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 700; text-align: center;">Acciones</th>
                 </tr>
             </thead>
             <tbody>
                 {% for doc in pendientes %}
-                <tr>
-                    <td class="ps-4 fw-semibold">{{ doc.empresa.razon_social }}</td>
-                    <td class="text-muted">{{ doc.get_tipo_documento_display|default:doc.tipo_documento }}</td>
+                                <tr>
+                    <td class="ps-4 fw-semibold" style="color: #111827;">{{ doc.empresa.razon_social }}</td>
+                    <td style="color: #6b7280;">
+                        {% if doc.get_tipo_documento_display %}
+                            {{ doc.get_tipo_documento_display }}
+                        {% else %}
+                            {{ doc.tipo_documento }}
+                        {% endif %}
+                    </td>
                     <td>
                         {% if doc.archivo %}
-                        <a href="{{ doc.archivo.url }}" target="_blank" class="btn btn-sm btn-outline-primary">
-                            <i class="bi bi-eye me-1"></i>Ver archivo
-                        </a>
+                            <a href="{{ doc.archivo.url }}" target="_blank" class="btn btn-sm btn-outline-primary" style="font-size:0.78rem;">
+                                <i class="bi bi-eye me-1"></i>Ver Archivo
+                            </a>
                         {% else %}
-                        <span class="text-muted small"><i class="bi bi-file-x me-1"></i>Sin archivo</span>
+                            <span class="text-muted small"><i class="bi bi-file-x me-1"></i>Sin archivo</span>
                         {% endif %}
                     </td>
                     <td class="pe-4">
                         <div class="d-flex gap-2 justify-content-center">
-                            <form action="{% url 'empresas:procesar_aprobacion' doc.id %}" method="post">
+                            <!-- Botón Aprobar -->
+                            <form action="{% url 'empresas:procesar_aprobacion' doc.id %}" method="POST" style="display:inline;">
                                 {% csrf_token %}
                                 <input type="hidden" name="nuevo_estado" value="VERIFICADO">
-                                <button type="submit" class="btn btn-sm btn-success">
+                                <button type="submit" class="btn btn-sm" style="background: var(--ean-green); color: #fff; border: none; font-size: 0.78rem;">
                                     <i class="bi bi-check-circle me-1"></i>Aprobar
                                 </button>
                             </form>
-                            <form action="{% url 'empresas:procesar_aprobacion' doc.id %}" method="post">
+                            
+                            <!-- Botón Rechazar -->
+                            <form action="{% url 'empresas:procesar_aprobacion' doc.id %}" method="POST" style="display:inline;">
                                 {% csrf_token %}
                                 <input type="hidden" name="nuevo_estado" value="RECHAZADO">
-                                <div class="input-group input-group-sm">
-                                    <input type="text" name="motivo" placeholder="Motivo" required class="form-control" style="width: 120px;">
-                                    <button type="submit" class="btn btn-outline-danger">
+                                <div class="input-group input-group-sm" style="flex-wrap: nowrap;">
+                                    <input type="text" name="motivo" placeholder="Motivo" required class="form-control form-control-sm" style="width: 120px; font-size: 0.78rem;">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" style="font-size: 0.78rem;">
                                         <i class="bi bi-x-circle me-1"></i>Rechazar
                                     </button>
                                 </div>
@@ -62,9 +71,9 @@
     </div>
     {% else %}
     <div class="text-center py-5 text-muted">
-        <i class="bi bi-check2-all display-4 opacity-25"></i>
-        <p class="mt-3 mb-0 fw-semibold">No hay documentos pendientes de revisión.</p>
-        <p class="small">Todos los documentos han sido procesados.</p>
+        <i class="bi bi-check2-all display-4" style="opacity: 0.3;"></i>
+        <p class="mt-3 mb-0 fw-semibold" style="color: #374151;">No hay documentos pendientes de revisión.</p>
+        <p class="small" style="color: #9ca3af;">Todos los documentos han sido procesados.</p>
     </div>
     {% endif %}
 </div>
