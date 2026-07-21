@@ -21,6 +21,13 @@ class Empresa(models.Model):
     ('VERIFICADA', 'Verificada'),
     ('RECHAZADA', 'Rechazada'),]
     estado_validacion = models.CharField(max_length=20, choices=ESTADO_VALIDACION, default='PENDIENTE')
+    ESTADO_LISTAS = [
+        ('PENDIENTE', 'Pendiente de revisión'),
+        ('APROBADO', 'No aparece en listas'),
+        ('RECHAZADO', 'Aparece en listas restrictivas'),
+    ]
+    estado_listas_restrictivas = models.CharField(max_length=20, choices=ESTADO_LISTAS, default='PENDIENTE')
+    evidencia_listas = models.FileField(upload_to="evidencias_listas/", null=True, blank=True)
     fecha_ultima_actualizacion = models.DateTimeField(auto_now=True)
     observaciones_admin = models.TextField(null=True, blank=True)
     

@@ -18,18 +18,34 @@ def _url_para_usuario(user):
         'PROFESOR':   'usuarios:profesor_dashboard',
         'ESTUDIANTE': 'usuarios:estudiante_dashboard',
     }.get(user.rol, 'usuarios:perfil')
+    
 def vista_login(request):
     if request.user.is_authenticated:
         return redirect(_url_para_usuario(request.user))
 
-    form = LoginForm(request, data=request.POST or None)
     if request.method == 'POST':
+        # Capturamos el identificador ingresado (suele llamarse 'username' o 'email' en el form)
+        username_ingresado = request.POST.get('username') or request.POST.get('email')
+        
+        # Verificamos si el usuario existe y está inactivo
+        if username_ingresado:
+            usuario_db = Usuario.objects.filter(username=username_ingresado).first() or Usuario.objects.filter(email=username_ingresado).first()
+            if usuario_db and not usuario_db.is_active:
+                messages.error(request, 'Tu cuenta se encuentra inhabilitada debido a que la empresa aparece en listas restrictivas (Clinton/OFAC).')
+                form = LoginForm(request, data=request.POST)
+                return render(request, 'usuarios/login.html', {'form': form})
+
+        # Flujo normal si la cuenta está activa o los datos son incorrectos
+        form = LoginForm(request, data=request.POST)
         if form.is_valid():
             user = form.get_user()
             login(request, user)
             return redirect(_url_para_usuario(user))
         else:
             messages.error(request, 'Usuario o contraseña incorrectos.')
+    else:
+        form = LoginForm()
+
     return render(request, 'usuarios/login.html', {'form': form})
 
 

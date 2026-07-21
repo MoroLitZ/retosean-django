@@ -2,6 +2,38 @@ from django import forms
 
 from .models import Reto
 from apps.seguimiento.models import IntegracionAcademica, SeguimientoReto
+from apps.unidades_estudio.models import UnidadEstudio
+
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024
+MAX_UPLOAD_SIZE_MB = 50
+
+
+class MultipleFileInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
+
+
+class MultipleFileField(forms.FileField):
+    widget = MultipleFileInput
+
+    def clean(self, data, initial=None):
+        files = data or []
+        if not isinstance(files, (list, tuple)):
+            files = [files]
+        cleaned_files = []
+        errors = []
+        for uploaded_file in files:
+            if uploaded_file.size > MAX_UPLOAD_SIZE:
+                errors.append(
+                    forms.ValidationError(
+                        '%(name)s supera el limite de %(max_size)s MB.',
+                        params={'name': uploaded_file.name, 'max_size': MAX_UPLOAD_SIZE_MB},
+                    )
+                )
+            else:
+                cleaned_files.append(super().clean(uploaded_file, initial))
+        if errors:
+            raise forms.ValidationError(errors)
+        return cleaned_files
 
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024
 MAX_UPLOAD_SIZE_MB = 50
@@ -133,32 +165,25 @@ class SeguimientoRetoForm(BootstrapModelForm):
 
 
 class IntegracionAcademicaForm(BootstrapModelForm):
+    
+    unidad_estudio = forms.ModelChoiceField(
+        queryset=UnidadEstudio.objects.all().order_by('nombre'),
+        label='Unidad de Estudio',
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    
     class Meta:
         model = IntegracionAcademica
         fields = [
             'reto',
             'facultad',
             'nivel_formacion',
-            'programa_academico',
-            'ecosistema',
-            'alcance',
+            'unidad_estudio',
+            'descripcion',
             'entregable_esperado',
-            'cronograma_sesiones',
-            'equipo_profesores',
-            'equipo_estudiantes',
-            'expertos_invitados',
-            'requerimientos_empresa',
-            'requerimientos_internos',
-            'espacio_fisico',
         ]
         widgets = {
-            'alcance': forms.Textarea(attrs={'rows': 4}),
-            'cronograma_sesiones': forms.Textarea(attrs={'rows': 4}),
-            'equipo_profesores': forms.Textarea(attrs={'rows': 3}),
-            'equipo_estudiantes': forms.Textarea(attrs={'rows': 3}),
-            'expertos_invitados': forms.Textarea(attrs={'rows': 3}),
-            'requerimientos_empresa': forms.Textarea(attrs={'rows': 3}),
-            'requerimientos_internos': forms.Textarea(attrs={'rows': 3}),
+            'descripcion': forms.Textarea(attrs={'rows': 4}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -166,7 +191,21 @@ class IntegracionAcademicaForm(BootstrapModelForm):
         self.fields['reto'].queryset = Reto.objects.filter(
             estado__in=['aprobado', 'en_curso', 'pausado']
         ).order_by('titulo')
-
+        
+        if 'unidad_estudio' in self.fields and hasattr(UnidadEstudio, 'objects'):
+            self.fields['unidad_estudio'].queryset = UnidadEstudio.objects.all()
+            
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        unidad_seleccionada = self.cleaned_data.get('unidad_estudio')
+        
+        if unidad_seleccionada:
+            # Guarda el nombre de la unidad de estudio en el campo de texto de la base de datos de 'seguimiento'
+            instance.programa_academico = str(unidad_seleccionada.nombre)
+            
+        if commit:
+            instance.save()
+        return instance
 
 class RevisionIntegracionForm(forms.Form):
     accion = forms.ChoiceField(
