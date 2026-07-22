@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('retos', '0004_remove_integracionacademica_retos_integ_profeso_190c3b_idx_and_more'),
+        ('retos', '0003_retoarchivo'),
         ('seguimiento', '0003_alter_seguimientoreto_tipo_sesion_seguimientoarchivo'),
     ]
 
