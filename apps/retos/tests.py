@@ -1,8 +1,11 @@
+from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.exceptions import ValidationError
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
+from django.urls import reverse
 
 from .forms import MAX_UPLOAD_SIZE, RetoForm, SeguimientoRetoForm
+from .models import Reto
 
 
 class MultipleFileUploadTests(SimpleTestCase):
@@ -33,3 +36,47 @@ class MultipleFileUploadTests(SimpleTestCase):
         self.assertFalse(field.required)
         self.assertTrue(field.widget.allow_multiple_selected)
         self.assertEqual(field.clean([]), [])
+
+
+class EmpresaSeguimientoAccessTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        user_model = get_user_model()
+        cls.owner = user_model.objects.create_user(
+            username="empresa_propietaria",
+            password="test-password",
+            rol="EMPRESA",
+        )
+        cls.other_empresa = user_model.objects.create_user(
+            username="otra_empresa",
+            password="test-password",
+            rol="EMPRESA",
+        )
+        cls.reto = Reto.objects.create(
+            empresa=cls.owner,
+            titulo="Reto con seguimiento",
+        )
+
+    def test_owner_sees_seguimiento_button_and_can_open_page(self):
+        self.client.force_login(self.owner)
+
+        detail_response = self.client.get(reverse("retos:detalle", args=[self.reto.pk]))
+        seguimiento_url = reverse("retos:seguimientos", args=[self.reto.pk])
+
+        self.assertContains(detail_response, seguimiento_url)
+        self.assertEqual(self.client.get(seguimiento_url).status_code, 200)
+        self.assertEqual(
+            self.client.get(
+                reverse("retos:agregar_seguimiento", args=[self.reto.pk])
+            ).status_code,
+            200,
+        )
+
+    def test_other_empresa_cannot_open_seguimiento(self):
+        self.client.force_login(self.other_empresa)
+
+        response = self.client.get(
+            reverse("retos:seguimientos", args=[self.reto.pk])
+        )
+
+        self.assertEqual(response.status_code, 403)

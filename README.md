@@ -23,9 +23,10 @@ Esta rama implementa el flujo base para que empresas, profesores y administrador
 
 ## Sistema de base de datos
 
-La rama usa PostgreSQL como base de datos principal. La conexion se define en `config/settings/base.py` y se alimenta desde variables de entorno para evitar credenciales quemadas en el codigo.
-
-Variables requeridas en `.env`:
+El entorno de desarrollo usa SQLite por defecto para que el proyecto pueda
+iniciarse sin instalar ni configurar un servidor de base de datos. Produccion
+usa PostgreSQL. Para usar PostgreSQL tambien en desarrollo, configure
+`DB_ENGINE=postgresql` y las siguientes variables en `.env`:
 
 - `DB_NAME`: nombre de la base de datos.
 - `DB_USER`: usuario de PostgreSQL.
@@ -146,15 +147,15 @@ python manage.py migrate
 pip install -r requirements.txt
 ```
 
-3. Crear un archivo `.env` basado en `.env.example`.
-4. Configurar la base de datos PostgreSQL.
-5. Ejecutar migraciones:
+3. Opcionalmente, crear un archivo `.env` basado en `.env.example`. Solo es
+   necesario configurar PostgreSQL si se desea usarlo en desarrollo.
+4. Ejecutar migraciones:
 
 ```bash
 python manage.py migrate
 ```
 
-6. Levantar el servidor:
+5. Levantar el servidor:
 
 ```bash
 python manage.py runserver

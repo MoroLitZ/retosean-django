@@ -61,7 +61,7 @@
               <i class="bi bi-arrow-repeat me-1"></i>Cambiar Estado
             </a>
           {% endif %}
-          {% if user.is_superuser or user.rol == 'PROFESOR' %}
+          {% if user.is_superuser or user.rol == 'ADMIN' or user.rol == 'PROFESOR' or user.rol == 'EMPRESA' and reto.empresa_id == user.pk %}
             <a href="{% url 'retos:seguimientos' reto.pk %}" class="btn btn-sm btn-outline-secondary">
               <i class="bi bi-graph-up me-1"></i>Seguimiento
             </a>
