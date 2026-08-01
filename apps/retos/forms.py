@@ -35,6 +35,37 @@ class MultipleFileField(forms.FileField):
             raise forms.ValidationError(errors)
         return cleaned_files
 
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024
+MAX_UPLOAD_SIZE_MB = 50
+
+
+class MultipleFileInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
+
+
+class MultipleFileField(forms.FileField):
+    widget = MultipleFileInput
+
+    def clean(self, data, initial=None):
+        files = data or []
+        if not isinstance(files, (list, tuple)):
+            files = [files]
+        cleaned_files = []
+        errors = []
+        for uploaded_file in files:
+            if uploaded_file.size > MAX_UPLOAD_SIZE:
+                errors.append(
+                    forms.ValidationError(
+                        '%(name)s supera el limite de %(max_size)s MB.',
+                        params={'name': uploaded_file.name, 'max_size': MAX_UPLOAD_SIZE_MB},
+                    )
+                )
+            else:
+                cleaned_files.append(super().clean(uploaded_file, initial))
+        if errors:
+            raise forms.ValidationError(errors)
+        return cleaned_files
+
 
 class BootstrapModelForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
