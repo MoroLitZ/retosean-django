@@ -260,3 +260,25 @@ def procesar_listas_restrictivas(request, empresa_id):
             messages.error(request, "Estado de listas no válido.")
 
     return redirect('empresas:admin_revisar_documentacion', empresa_id=empresa.id)
+
+@login_required
+def elegir_modo_convenio(request):
+    # Asumimos que la empresa está vinculada al usuario (ajusta si tu relación es diferente)
+    empresa = getattr(request.user, 'empresa_perfil', None)
+    if not empresa:
+        messages.error(request, 'No tienes un perfil de empresa asociado.')
+        return redirect('home') # O la ruta principal que uses
+
+    if request.method == 'POST':
+        opcion = request.POST.get('opcion')
+        if opcion == 'si_convenio':
+            # Quiere convenio -> Lo mandamos a subir sus documentos legales
+            return redirect('empresas:documentos') # Ajusta el nombre de la URL de documentos si es distinto
+        elif opcion == 'no_convenio':
+            # No quiere convenio -> Marcamos que renunció y lo mandamos a crear el reto directamente
+            empresa.renuncio_a_convenio = True
+            empresa.save()
+            messages.success(request, 'Has seleccionado publicar de forma directa sin convenio.')
+            return redirect('retos:crear') # Ajusta el nombre de la URL para crear retos
+            
+    return render(request, 'empresas/elegir_convenio.html')

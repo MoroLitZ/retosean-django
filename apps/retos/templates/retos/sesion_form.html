@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4" style="max-width: 600px;">
+  <div class="card shadow-sm border-0 p-4">
+    <h2 class="h4 mb-3 fw-bold">Registrar Sesión Académica</h2>
+    <p class="text-muted small mb-4">
+      Programa una sesión en el cronograma (inicio, seguimiento, preselección o evaluación).
+    </p>
+
+    <form method="post">
+      {% csrf_token %}
+      {{ form.as_p }}
+      
+      <div class="d-flex justify-content-between mt-4">
+        <a href="{% url 'retos:detalle_integracion' integracion.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+        <button type="submit" class="btn btn-primary">Guardar Sesión</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

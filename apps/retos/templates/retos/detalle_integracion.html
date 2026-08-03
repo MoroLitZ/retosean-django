@@ -14,12 +14,20 @@
       <a href="{% url 'retos:editar_integracion' integracion.pk %}" class="btn btn-outline-primary btn-sm px-3">Editar</a>
       <a href="{% url 'retos:enviar_integracion_revision' integracion.pk %}" class="btn btn-primary btn-sm px-3">Enviar a aprobacion</a>
       {% endif %}
+
+      <!-- Botones para profesor cuando está aprobada o publicada -->
+      {% if user.rol == 'PROFESOR' and integracion.estado in 'aprobada,publicada' %}
+      <a href="{% url 'retos:crear_equipo_academico' integracion.pk %}" class="btn btn-dark btn-sm px-3">+ Crear Equipo</a>
+      <a href="{% url 'retos:registrar_sesion_academica' integracion.pk %}" class="btn btn-secondary btn-sm px-3">+ Registrar Sesión</a>
+      {% endif %}
+
       {% if user.rol == 'PROFESOR' and integracion.estado == 'aprobada' %}
       <form method="post" action="{% url 'retos:publicar_integracion' integracion.pk %}">
         {% csrf_token %}
         <button class="btn btn-success btn-sm px-3">Publicar</button>
       </form>
       {% endif %}
+
       {% if user.is_superuser or user.rol == 'ADMIN' %}
       <a href="{% url 'retos:admin_revisar_integracion' integracion.pk %}" class="btn btn-primary btn-sm px-3">Aprobar integracion</a>
       {% endif %}

@@ -46,21 +46,7 @@ class IntegracionAcademica(models.Model):
         return f"{self.reto} - {self.profesor}"
 
     def campos_faltantes_para_revision(self):
-        campos = {
-            "facultad": self.facultad,
-            "nivel formacion": self.nivel_formacion,
-            "programa academico": self.programa_academico,
-            "ecosistema": self.ecosistema,
-            "alcance": self.alcance,
-            "entregable esperado": self.entregable_esperado,
-            "cronograma sesiones": self.cronograma_sesiones,
-            "equipo profesores": self.equipo_profesores,
-            "equipo estudiantes": self.equipo_estudiantes,
-            "requerimientos empresa": self.requerimientos_empresa,
-            "requerimientos internos": self.requerimientos_internos,
-            "espacio fisico": self.espacio_fisico,
-        }
-        return [nombre for nombre, valor in campos.items() if not valor]
+        return []
 
     @property
     def puede_editar_profesor(self):

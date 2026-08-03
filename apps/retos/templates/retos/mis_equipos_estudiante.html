@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block title %}Mis Equipos Académicos{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 900px;">
+  <h2 class="fw-bold mb-4">Mis Equipos Académicos y Retos</h2>
+  
+  {% if equipos %}
+    <div class="list-group">
+      {% for equipo in equipos %}
+        <div class="list-group-item list-group-item-action p-4 mb-3 shadow-sm border-0" style="border-radius: 12px;">
+          <h5 class="fw-bold text-primary">{{ equipo.nombre_equipo }}</h5>
+          <p class="mb-2"><strong>Reto asociado:</strong> {{ equipo.reto.titulo }}</p>
+          <a href="{% url 'retos:detalle' equipo.reto.pk %}" class="btn btn-primary btn-sm px-3">Ver Detalle del Reto</a>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="alert alert-info">Aún no has sido incorporado a ningún equipo académico.</div>
+  {% endif %}
+</div>
+{% endblock %}
