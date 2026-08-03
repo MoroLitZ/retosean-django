@@ -6,7 +6,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('retos', '0003_retoarchivo'),
+        ('retos', '0002_initial'),
     ]
 
     operations = [
