@@ -87,11 +87,13 @@ def _puede_ver_reto(user, reto):
         reto.esta_aprobado_o_activo or reto.integraciones.filter(profesor=user).exists()
     ):
         return True
-    # NUEVA VALIDACIÓN PARA ESTUDIANTES:
+    # Estudiante: puede ver retos activos/aprobados (explorar y postularse)
+    # o retos donde forma parte de un equipo academico asignado
     if user.rol == 'ESTUDIANTE':
-        # Verifica si el estudiante forma parte de algún equipo académico asignado a este reto
+        from .models import EquipoRetoAcademico
+        if reto.esta_aprobado_o_activo:
+            return True
         return EquipoRetoAcademico.objects.filter(reto=reto, estudiantes=user).exists()
-        
     return False
 
 
@@ -134,7 +136,11 @@ def crear_reto(request):
         if request.POST.get('accion') == 'enviar':
             return redirect('retos:enviar_revision', pk=reto.pk)
         return redirect('retos:mis_retos')
-    return render(request, 'retos/reto_form.html', {'form': form, 'titulo': 'Crear reto'})
+    return render(request, 'retos/reto_form.html', {
+        'form': form,
+        'titulo': 'Crear reto',
+        'programas_por_facultad': _programas_por_facultad(),
+    })
 
 
 @solo_empresa_con_documentos
@@ -156,7 +162,21 @@ def editar_reto(request, pk):
         if request.POST.get('accion') == 'enviar':
             return redirect('retos:enviar_revision', pk=reto.pk)
         return redirect('retos:detalle', pk=reto.pk)
-    return render(request, 'retos/reto_form.html', {'form': form, 'reto': reto, 'titulo': 'Editar reto'})
+    return render(request, 'retos/reto_form.html', {
+        'form': form,
+        'reto': reto,
+        'titulo': 'Editar reto',
+        'programas_por_facultad': _programas_por_facultad(),
+    })
+
+
+def _programas_por_facultad():
+    """Construye {facultad_id: [programa_id, ...]} para el selector dependiente."""
+    from apps.academico.models import Programa
+    data = {}
+    for p in Programa.objects.select_related('facultad').all():
+        data.setdefault(str(p.facultad_id), []).append(str(p.pk))
+    return data
 
 
 @solo_empresa_con_documentos
@@ -198,7 +218,10 @@ def detalle_reto(request, pk):
     reto = get_object_or_404(Reto.objects.select_related('empresa'), pk=pk)
     if not _puede_ver_reto(request.user, reto):
         raise PermissionDenied('No tienes acceso a este reto.')
-    return render(request, 'retos/detalle_reto.html', {'reto': reto})
+    es_favorito = False
+    if request.user.is_authenticated:
+        es_favorito = reto.favoritos.filter(usuario=request.user).exists()
+    return render(request, 'retos/detalle_reto.html', {'reto': reto, 'es_favorito': es_favorito})
 
 
 @solo_administrador

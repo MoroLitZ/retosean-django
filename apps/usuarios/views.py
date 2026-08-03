@@ -154,11 +154,19 @@ def dashboard_estudiante(request):
     if request.user.rol != 'ESTUDIANTE':
         return redirect(_url_para_usuario(request.user))
     from apps.retos.models import Reto
-    from apps.seguimiento.models import IntegracionAcademica
-    retos_disponibles = Reto.objects.filter(estado__in=['publicado', 'abierto']).count()
-    mis_postulaciones = IntegracionAcademica.objects.filter(profesor=request.user).count()
-    entregables_pendientes = 0  # TODO: conectar con modelo de entregables
-    certificados = 0  # TODO: conectar con modelo de certificados
+    from apps.participaciones.models import Postulacion
+    from apps.evaluacion.models import Entregable
+    retos_disponibles = Reto.objects.filter(estado__in=['aprobado', 'en_curso']).count()
+    mis_postulaciones = Postulacion.objects.filter(estudiante=request.user).count()
+    entregables_pendientes = Entregable.objects.filter(
+        estudiante=request.user, estado__in=['ENVIADO', 'EN_REVISION']
+    ).count()
+    certificados = 0
+    retos_finalizados = Reto.objects.filter(estado='finalizado')
+    if retos_finalizados.exists():
+        certificados = Postulacion.objects.filter(
+            estudiante=request.user, estado='ACEPTADA', reto__in=retos_finalizados
+        ).count()
     return render(request, 'estudiante/dashboard.html', {
         'retos_disponibles': retos_disponibles,
         'mis_postulaciones': mis_postulaciones,

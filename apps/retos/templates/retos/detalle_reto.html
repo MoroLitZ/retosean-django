@@ -28,24 +28,24 @@
             {% endif %}
           </div>
           <h1 style="font-size: 1.6rem; font-weight: 800; color: #111827; margin: 0 0 0.4rem;">
-            {{ reto.titulo|default:'Borrador sin título' }}
+            {{ reto.titulo|default:'Borrador sin t\u00edtulo' }}
           </h1>
           <p style="color: #6b7280; font-size: 0.875rem; margin: 0;">
             <i class="bi bi-building me-1"></i>
             {{ reto.empresa.get_full_name|default:reto.empresa.username }}
-            &nbsp;·&nbsp;
-            <i class="bi bi-geo-alt me-1"></i>{{ reto.area|default:'Sin área' }}
+            &nbsp;&middot;&nbsp;
+            <i class="bi bi-geo-alt me-1"></i>{{ reto.area|default:'Sin \u00e1rea' }}
           </p>
         </div>
 
-        <!-- Acciones según rol -->
+        <!-- Acciones seg\u00fan rol -->
         <div class="d-flex flex-wrap gap-2">
           {% if user.rol == 'EMPRESA' and reto.puede_editar_empresa %}
             <a href="{% url 'retos:editar' reto.pk %}" class="btn btn-sm btn-outline-secondary">
               <i class="bi bi-pencil me-1"></i>Editar
             </a>
             <a href="{% url 'retos:enviar_revision' reto.pk %}" class="btn btn-sm" style="background: var(--accent); color: #fff; border: none;">
-              <i class="bi bi-send me-1"></i>Enviar a Revisión
+              <i class="bi bi-send me-1"></i>Enviar a Revisi&oacute;n
             </a>
             <a href="{% url 'retos:eliminar' reto.pk %}" class="btn btn-sm btn-outline-danger">
               <i class="bi bi-trash me-1"></i>Eliminar
@@ -64,6 +64,13 @@
           {% if user.is_superuser or user.rol == 'PROFESOR' %}
             <a href="{% url 'retos:seguimientos' reto.pk %}" class="btn btn-sm btn-outline-secondary">
               <i class="bi bi-graph-up me-1"></i>Seguimiento
+            </a>
+          {% endif %}
+          {% if user.rol == 'ESTUDIANTE' %}
+            <a href="{% url 'participaciones:toggle_favorito' reto.pk %}"
+               class="btn btn-sm btn-outline-warning"
+               title="{% if es_favorito %}Quitar de favoritos{% else %}A\u00f1adir a favoritos{% endif %}">
+              <i class="bi {% if es_favorito %}bi-star-fill{% else %}bi-star{% endif %} me-1"></i>Favorito
             </a>
           {% endif %}
         </div>
@@ -91,18 +98,18 @@
   {% if reto.comentarios_revision %}
     <div class="alert alert-info d-flex gap-2 mb-4">
       <i class="bi bi-info-circle-fill mt-1"></i>
-      <div><strong>Comentario de revisión:</strong> {{ reto.comentarios_revision }}</div>
+      <div><strong>Comentario de revisi&oacute;n:</strong> {{ reto.comentarios_revision }}</div>
     </div>
   {% endif %}
 
-  <!-- CTA postulación para estudiantes -->
+  <!-- CTA postulaci\u00f3n para estudiantes -->
   {% if user.rol == 'ESTUDIANTE' and reto.estado == 'aprobado' %}
     <div class="mb-4 p-4 rounded-3 d-flex flex-wrap justify-content-between align-items-center gap-3"
          style="background: var(--accent-light); border: 1.5px solid var(--accent);">
       <div>
-        <h5 style="font-weight: 800; color: #111827; margin: 0 0 0.3rem;">¿Te interesa este reto?</h5>
+        <h5 style="font-weight: 800; color: #111827; margin: 0 0 0.3rem;">&iquest;Te interesa este reto?</h5>
         <p style="color: #374151; font-size: 0.875rem; margin: 0;">
-          Postúlate para que un docente evalúe tu perfil y te asigne al proyecto.
+          Post&uacute;late para que un docente eval&uacute;e tu perfil y te asigne al proyecto.
         </p>
       </div>
       <a href="{% url 'participaciones:postular_a_reto' reto.id %}"
@@ -117,19 +124,18 @@
     <!-- Columna principal -->
     <div class="col-lg-8">
 
-      <!-- Descripción y criterios -->
       <div class="card-panel mb-4">
         <div class="card-panel-header">
-          <i class="bi bi-file-text me-2 text-muted"></i>Descripción del Reto
+          <i class="bi bi-file-text me-2 text-muted"></i>Descripci&oacute;n del Reto
         </div>
         <div class="p-4">
-          <p style="color: #374151; line-height: 1.75; white-space: pre-line;">{{ reto.descripcion|linebreaksbr|default:'Sin descripción.' }}</p>
+          <p style="color: #374151; line-height: 1.75; white-space: pre-line;">{{ reto.descripcion|linebreaksbr|default:'Sin descripci&oacute;n.' }}</p>
         </div>
       </div>
 
       <div class="card-panel mb-4">
         <div class="card-panel-header">
-          <i class="bi bi-clipboard-check me-2 text-muted"></i>Criterios de Evaluación
+          <i class="bi bi-clipboard-check me-2 text-muted"></i>Criterios de Evaluaci&oacute;n
         </div>
         <div class="p-4">
           <p style="color: #374151; line-height: 1.75; white-space: pre-line;">{{ reto.criterios_evaluacion|linebreaksbr|default:'Sin criterios definidos.' }}</p>
@@ -157,14 +163,14 @@
                 {% for item in reto.historial_estados.all %}
                 <tr>
                   <td class="ps-4 text-muted">{{ item.fecha|date:'d/m/Y H:i' }}</td>
-                  <td><span class="badge bg-secondary bg-opacity-25 text-secondary">{{ item.estado_anterior|default:'—' }}</span></td>
+                  <td><span class="badge bg-secondary bg-opacity-25 text-secondary">{{ item.estado_anterior|default:'-' }}</span></td>
                   <td>
                     <span class="badge {% if item.estado_nuevo == 'aprobado' %}bg-success{% elif item.estado_nuevo == 'rechazado' %}bg-danger{% elif item.estado_nuevo == 'en_revision' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
                       {{ item.get_estado_nuevo_display }}
                     </span>
                   </td>
-                  <td style="color: #374151;">{{ item.realizado_por|default:'—' }}</td>
-                  <td class="pe-4 text-muted">{{ item.comentario|default:'—' }}</td>
+                  <td style="color: #374151;">{{ item.realizado_por|default:'-' }}</td>
+                  <td class="pe-4 text-muted">{{ item.comentario|default:'-' }}</td>
                 </tr>
                 {% empty %}
                 <tr>
@@ -182,10 +188,9 @@
     <!-- Columna lateral -->
     <div class="col-lg-4">
 
-      <!-- Info del reto -->
       <div class="card-panel mb-4">
         <div class="card-panel-header">
-          <i class="bi bi-info-circle me-2 text-muted"></i>Información
+          <i class="bi bi-info-circle me-2 text-muted"></i>Informaci&oacute;n
         </div>
         <div class="p-4">
           <dl style="margin: 0;">
@@ -195,13 +200,25 @@
                 {{ reto.empresa.get_full_name|default:reto.empresa.username }}
               </dd>
             </div>
+            {% if reto.facultad %}
             <div class="mb-3">
-              <dt style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: #9ca3af;">Área</dt>
-              <dd style="color: #111827; font-weight: 500; margin: 0.2rem 0 0; font-size: 0.9rem;">{{ reto.area|default:'—' }}</dd>
+              <dt style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: #9ca3af;">Facultad</dt>
+              <dd style="color: #111827; font-weight: 500; margin: 0.2rem 0 0; font-size: 0.9rem;">{{ reto.facultad.nombre }}</dd>
+            </div>
+            {% endif %}
+            {% if reto.programa %}
+            <div class="mb-3">
+              <dt style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: #9ca3af;">Programa</dt>
+              <dd style="color: #111827; font-weight: 500; margin: 0.2rem 0 0; font-size: 0.9rem;">{{ reto.programa.nombre }}</dd>
+            </div>
+            {% endif %}
+            <div class="mb-3">
+              <dt style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: #9ca3af;">&Aacute;rea</dt>
+              <dd style="color: #111827; font-weight: 500; margin: 0.2rem 0 0; font-size: 0.9rem;">{{ reto.area|default:'-' }}</dd>
             </div>
             <div class="mb-3">
-              <dt style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: #9ca3af;">Nivel Académico</dt>
-              <dd style="color: #111827; font-weight: 500; margin: 0.2rem 0 0; font-size: 0.9rem;">{{ reto.nivel_academico|default:'—' }}</dd>
+              <dt style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: #9ca3af;">Nivel Acad&eacute;mico</dt>
+              <dd style="color: #111827; font-weight: 500; margin: 0.2rem 0 0; font-size: 0.9rem;">{{ reto.nivel_academico|default:'-' }}</dd>
             </div>
             {% if reto.fecha_inicio_tentativa %}
             <div class="mb-3">
@@ -211,13 +228,13 @@
             {% endif %}
             {% if reto.fecha_fin_tentativa %}
             <div class="mb-3">
-              <dt style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: #9ca3af;">Fecha de Finalización</dt>
+              <dt style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: #9ca3af;">Fecha de Finalizaci&oacute;n</dt>
               <dd style="color: #111827; font-weight: 500; margin: 0.2rem 0 0; font-size: 0.9rem;">{{ reto.fecha_fin_tentativa|date:'d/m/Y' }}</dd>
             </div>
             {% endif %}
             {% if reto.fecha_limite_postulacion %}
             <div class="mb-3">
-              <dt style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: #9ca3af;">Límite de Postulación</dt>
+              <dt style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: #9ca3af;">L&iacute;mite de Postulaci&oacute;n</dt>
               <dd style="margin: 0.2rem 0 0;">
                 <span class="badge bg-warning text-dark px-2">
                   <i class="bi bi-calendar-event me-1"></i>{{ reto.fecha_limite_postulacion|date:'d/m/Y' }}
@@ -252,11 +269,11 @@
         </div>
       </div>
 
-      <!-- Acceso rápido estudiante -->
+      <!-- Acceso r\u00e1pido estudiante -->
       {% if user.rol == 'ESTUDIANTE' %}
         <div class="card-panel">
           <div class="card-panel-header">
-            <i class="bi bi-lightning me-2 text-muted"></i>Acciones Rápidas
+            <i class="bi bi-lightning me-2 text-muted"></i>Acciones R&aacute;pidas
           </div>
           <div class="p-4 d-grid gap-2">
             <a href="{% url 'academico:mis_postulaciones' %}" class="btn btn-outline-secondary btn-sm">
@@ -266,7 +283,7 @@
               <i class="bi bi-cloud-arrow-up me-1"></i>Mis Entregables
             </a>
             <a href="{% url 'academico:explorar_retos' %}" class="btn btn-outline-secondary btn-sm">
-              <i class="bi bi-search me-1"></i>Explorar Más Retos
+              <i class="bi bi-search me-1"></i>Explorar M&aacute;s Retos
             </a>
           </div>
         </div>

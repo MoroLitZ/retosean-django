@@ -28,11 +28,43 @@
       </div>
     {% endfor %}
 
-    <div class="col-12 d-flex gap-2 mt-4">
+        <div class="col-12 d-flex gap-2 mt-4">
       <button type="submit" name="accion" value="guardar" class="btn btn-secondary">Guardar borrador</button>
       <button type="submit" name="accion" value="enviar" class="btn btn-primary">Enviar a aprobacion</button>
       <a href="{% url 'retos:mis_retos' %}" class="btn btn-outline-secondary">Volver</a>
     </div>
   </form>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  // {facultad_id: [programa_id, ...]}
+  const programasPorFacultad = {{ programas_por_facultad|safe }};
+  const facultadSel = document.getElementById('id_facultad');
+  const programaSel = document.getElementById('id_programa');
+
+  if (facultadSel && programaSel) {
+    // Guardar todas las opciones posibles (value -> texto) inicialmente
+    const options = Array.from(programaSel.options).map(o => ({ value: o.value, text: o.text }));
+
+    function filtrarProgramas() {
+      const facId = facultadSel.value;
+      // indice inverso programa -> facultad
+      const idsDeFacultad = (programasPorFacultad[facId] || []).map(String);
+      programaSel.innerHTML = '<option value="">Seleccione un programa...</option>';
+      options.forEach(o => {
+        if (!o.value) return;
+        // un programa pertenece a esta facultad si esta en la lista, o no hay facultad seleccionada
+        if (!facId || idsDeFacultad.includes(o.value)) {
+          const op = document.createElement('option');
+          op.value = o.value; op.text = o.text;
+          programaSel.appendChild(op);
+        }
+      });
+    }
+    facultadSel.addEventListener('change', filtrarProgramas);
+    if (!facultadSel.value) filtrarProgramas();
+  }
+});
+</script>
 {% endblock %}
