@@ -31,6 +31,20 @@ class Reto(models.Model):
     descripcion = models.TextField(blank=True)
     area = models.CharField(max_length=120, blank=True)
     nivel_academico = models.CharField(max_length=120, blank=True)
+    facultad = models.ForeignKey(
+        "academico.Facultad",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="retos",
+    )
+    programa = models.ForeignKey(
+        "academico.Programa",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="retos",
+    )
     fecha_inicio_tentativa = models.DateField(null=True, blank=True)
     fecha_fin_tentativa = models.DateField(null=True, blank=True)
     fecha_limite_postulacion = models.DateField(null=True, blank=True)

@@ -63,6 +63,8 @@ class RetoForm(BootstrapModelForm):
             'descripcion',
             'area',
             'nivel_academico',
+            'facultad',
+            'programa',
             'fecha_inicio_tentativa',
             'fecha_fin_tentativa',
             'fecha_limite_postulacion',
@@ -82,6 +84,15 @@ class RetoForm(BootstrapModelForm):
             # puedes personalizar el checkbox si deseas así:
             'tiene_convenio_institucional': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from apps.academico.models import Facultad, Programa
+        self.fields['facultad'].queryset = Facultad.objects.all().order_by('nombre')
+        self.fields['programa'].queryset = Programa.objects.filter(
+            facultad_id=self.instance.facultad_id
+        ).order_by('nombre') if self.instance and self.instance.facultad_id else Programa.objects.all().order_by('nombre')
+
 
 
 class RevisionRetoForm(forms.Form):

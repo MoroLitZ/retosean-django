@@ -18,6 +18,7 @@
                         <th class="ps-4 py-3 text-muted" style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 700;">Reto</th>
                         <th class="py-3 text-muted" style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 700;">Fecha de Postulación</th>
                         <th class="py-3 text-muted" style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 700;">Estado</th>
+                        <th class="py-3 text-muted" style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 700;">Motivaci&oacute;n / Habilidades</th>
                         <th class="pe-4 py-3 text-muted" style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 700;">Acción</th>
                     </tr>
                 </thead>
@@ -41,6 +42,13 @@
                                 </span>
                             {% endif %}
                         </td>
+                        <td style="color: #4b5563; max-width: 260px;">
+                            <small>
+                                {% if p.motivacion %}<span class="d-block"><strong>Motivaci&oacute;n:</strong> {{ p.motivacion|truncatechars:90 }}</span>{% endif %}
+                                {% if p.habilidades %}<span class="d-block"><strong>Habilidades:</strong> {{ p.habilidades|truncatechars:90 }}</span>{% endif %}
+                                {% if not p.motivacion and not p.habilidades %}<span class="text-muted">Sin detalles.</span>{% endif %}
+                            </small>
+                        </td>
                         <td class="pe-4">
                             <div class="d-flex gap-2">
                                 <a href="{% url 'retos:detalle' p.reto.id %}" class="btn btn-sm btn-outline-secondary" style="font-size: 0.78rem;">
@@ -56,7 +64,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="4" class="text-center py-5">
+                        <td colspan="5" class="text-center py-5">
                             <i class="bi bi-search" style="font-size: 2.5rem; color: #d1d5db;"></i>
                             <p class="mt-3 fw-semibold" style="color: #374151;">No te has postulado a ningún reto todavía.</p>
                             <a href="{% url 'academico:explorar_retos' %}" class="btn btn-sm mt-1" style="background: var(--accent); color: #fff; border: none;">

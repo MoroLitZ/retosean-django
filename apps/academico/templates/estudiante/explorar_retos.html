@@ -4,34 +4,141 @@
 {% block page_title %}{{ titulo }}{% endblock %}
 
 {% block content %}
-<div class="card-panel">
+<div class="card-panel mb-4">
     <div class="card-panel-header">
-        <span>Buscador de Retos Disponibles</span>
+        <span><i class="bi bi-funnel me-2 text-muted"></i>Filtros de b&#250;squeda</span>
     </div>
     <div class="p-4">
-        <p class="page-subtitle mb-4">Inscríbete en retos empresariales activos para vincularlos a tus proyectos de aula o prácticas.</p>
-        
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold">Buscar</label>
+                <input type="text" name="q" value="{{ filtros.q }}" class="form-control" placeholder="T&#237;tulo del reto...">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold">Facultad</label>
+                <select name="facultad" id="filtro-facultad" class="form-select">
+                    <option value="">Todas</option>
+                    {% for f in facultades %}
+                        <option value="{{ f.id }}" {% if filtros.facultad == f.id|stringformat:'s' %}selected{% endif %}>{{ f.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold">Programa</label>
+                <select name="programa" id="filtro-programa" class="form-select">
+                    <option value="">Todos</option>
+                    {% for p in programas %}
+                        <option value="{{ p.id }}" data-facultad="{{ p.facultad_id }}" {% if filtros.programa == p.id|stringformat:'s' %}selected{% endif %}>{{ p.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold">Tipo</label>
+                <select name="tipo" class="form-select">
+                    <option value="">Todos</option>
+                    {% for t in tipos %}
+                        <option value="{{ t.0 }}" {% if filtros.tipo == t.0 %}selected{% endif %}>{{ t.1 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold">&#193;rea</label>
+                <input type="text" name="area" value="{{ filtros.area }}" class="form-control" placeholder="Ej: Tecnolog&#237;a">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold">Nivel acad&#233;mico</label>
+                <input type="text" name="nivel" value="{{ filtros.nivel }}" class="form-control" placeholder="Ej: Pregrado">
+            </div>
+            <div class="col-md-6 d-flex gap-2">
+                <button type="submit" class="btn" style="background: var(--accent); color: #fff; border: none;">
+                    <i class="bi bi-search me-1"></i>Filtrar
+                </button>
+                <a href="{% url 'academico:explorar_retos' %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-x-circle me-1"></i>Limpiar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card-panel">
+    <div class="card-panel-header">
+        <span>Retos Disponibles ({{ retos.paginator.count|default:0 }})</span>
+    </div>
+    <div class="p-4">
         <div class="row g-3">
             {% for reto in retos %}
             <div class="col-md-4">
-                <div class="card card-stat h-100 d-flex flex-column justify-content-between">
-                    <div>
-                        <span class="badge bg-primary mb-2">{{ reto.get_dificultad_display|default:"General" }}</span>
-                        <h5 class="fw-bold text-dark">{{ reto.titulo }}</h5>
-                        <p class="text-muted small">{{ reto.descripcion|truncatechars:120 }}</p>
-                    </div>
-                    <div class="mt-3">
-                        <a href="{% url 'retos:detalle' pk=reto.id %}" class="btn btn-sm btn-outline-primary w-100">Ver Detalles del Reto</a>
+                <div class="card card-stat h-100 d-flex flex-column">
+                    <div class="p-3 d-flex flex-column flex-grow-1">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <span class="badge bg-primary mb-2">{{ reto.get_tipo_display }}</span>
+                            {% if user.rol == 'ESTUDIANTE' %}
+                            <a href="{% url 'participaciones:toggle_favorito' reto.id %}"
+                               class="btn btn-sm p-0 border-0 bg-transparent"
+                               title="{% if reto.id in favoritos_ids %}Quitar de favoritos{% else %}A&#241;adir a favoritos{% endif %}">
+                                <i class="bi {% if reto.id in favoritos_ids %}bi-star-fill text-warning{% else %}bi-star text-muted{% endif %}" style="font-size: 1.15rem;"></i>
+                            </a>
+                            {% endif %}
+                        </div>
+                        <h5 class="fw-bold text-dark mb-1">{{ reto.titulo|default:'Sin t&#237;tulo' }}</h5>
+                        <p class="text-muted small mb-2">
+                            <i class="bi bi-building me-1"></i>{{ reto.empresa.get_full_name|default:reto.empresa.username }}
+                        </p>
+                        <p class="text-muted small mb-2 flex-grow-1">{{ reto.descripcion|truncatechars:110 }}</p>
+                        <div class="small text-muted mb-2">
+                            {% if reto.facultad %}<span class="d-block"><i class="bi bi-mortarboard me-1"></i>{{ reto.facultad.nombre }}</span>{% endif %}
+                            {% if reto.area %}<span class="d-block"><i class="bi bi-geo-alt me-1"></i>{{ reto.area }}</span>{% endif %}
+                        </div>
+                        <a href="{% url 'retos:detalle' reto.id %}" class="btn btn-sm btn-outline-primary w-100">Ver Detalles</a>
                     </div>
                 </div>
             </div>
             {% empty %}
             <div class="col-12 text-center p-5 text-muted">
                 <i class="bi bi-search display-3"></i>
-                <p class="mt-3 fw-medium">No hay retos vigentes en este momento. Vuelve más tarde.</p>
+                <p class="mt-3 fw-medium">No hay retos que coincidan con tus filtros. Ajusta la b&#250;squeda o vuelve m&#225;s tarde.</p>
             </div>
             {% endfor %}
         </div>
+
+        {% if retos.has_other_pages %}
+        <nav class="mt-4">
+            <ul class="pagination justify-content-center">
+                {% if retos.has_previous %}
+                <li class="page-item"><a class="page-link" href="?page={{ retos.previous_page_number }}&{{ querystring }}">&laquo;</a></li>
+                {% endif %}
+                <li class="page-item disabled"><span class="page-link">P&#225;gina {{ retos.number }} de {{ retos.paginator.num_pages }}</span></li>
+                {% if retos.has_next %}
+                <li class="page-item"><a class="page-link" href="?page={{ retos.next_page_number }}&{{ querystring }}">&raquo;</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const facSel = document.getElementById('filtro-facultad');
+    const progSel = document.getElementById('filtro-programa');
+    if (facSel && progSel) {
+        const todas = Array.from(progSel.options).map(o => ({ value: o.value, text: o.text, fac: o.getAttribute('data-facultad') }));
+        function filtrar() {
+            const facId = facSel.value;
+            progSel.innerHTML = '<option value="">Todos</option>';
+            todas.forEach(o => {
+                if (!o.value) return;
+                if (!facId || o.fac === facId) {
+                    const op = document.createElement('option');
+                    op.value = o.value; op.text = o.text;
+                    progSel.appendChild(op);
+                }
+            });
+        }
+        facSel.addEventListener('change', filtrar);
+        filtrar();
+    }
+});
+</script>
 {% endblock %}
