@@ -3,19 +3,32 @@
 {% block title %}{{ titulo }}{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
+<div class="container mt-4" style="max-width: 900px;">
   <h1 class="h3 mb-3">{{ titulo }}</h1>
   <form method="post" enctype="multipart/form-data" class="row g-3">
     {% csrf_token %}
     {% for field in form %}
-    <div class="col-md-{% if field.name == 'descripcion' or field.name == 'premios' or field.name == 'criterios_evaluacion' or field.name == 'archivos' %}12{% else %}6{% endif %}">
-      <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-      {{ field }}
-      {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
-      {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
-    </div>
+      <!-- Si es el campo de convenio o campos grandes, que ocupen todo el ancho (col-12) -->
+      <div class="col-md-{% if field.name == 'descripcion' or field.name == 'premios' or field.name == 'criterios_evaluacion' or field.name == 'archivos' or field.name == 'tiene_convenio_institucional' %}12{% else %}6{% endif %}">
+        
+        {% if field.name == 'tiene_convenio_institucional' %}
+          <!-- Estilo especial tipo switch o checkbox amigable para el convenio -->
+          <div class="form-check form-switch mt-2">
+            {{ field }}
+            <label class="form-check-label fw-medium" for="{{ field.id_for_label }}">{{ field.label }}</label>
+          </div>
+        {% else %}
+          <!-- Renderizado normal para el resto de campos -->
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+        {% endif %}
+
+        {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+        {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+      </div>
     {% endfor %}
-    <div class="col-12 d-flex gap-2">
+
+    <div class="col-12 d-flex gap-2 mt-4">
       <button type="submit" name="accion" value="guardar" class="btn btn-secondary">Guardar borrador</button>
       <button type="submit" name="accion" value="enviar" class="btn btn-primary">Enviar a aprobacion</button>
       <a href="{% url 'retos:mis_retos' %}" class="btn btn-outline-secondary">Volver</a>

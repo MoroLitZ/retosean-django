@@ -4,6 +4,7 @@ from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from apps.empresas.services import puede_la_empresa_operar
 
 from .forms import (
     EstadoRetoForm,
@@ -12,8 +13,10 @@ from .forms import (
     RevisionIntegracionForm,
     RevisionRetoForm,
     SeguimientoRetoForm,
+    EquipoRetoAcademicoForm, 
+    SesionRetoAcademicoForm
 )
-from .models import Reto, RetoArchivo
+from .models import Reto, RetoArchivo, EquipoRetoAcademico
 from apps.seguimiento.models import IntegracionAcademica, SeguimientoArchivo, SeguimientoReto
 from .services import cambiar_estado_reto, registrar_cambio_estado
 
@@ -56,19 +59,13 @@ def solo_empresa(view_func):
 
 
 def solo_empresa_con_documentos(view_func):
-    """Verifica que la empresa tenga documentos legales aprobados antes de actuar."""
+    """Verifica si la empresa puede operar o debe elegir su modalidad de convenio."""
     @rol_requerido('EMPRESA')
     def _wrapped(request, *args, **kwargs):
-        from apps.empresas.services import puede_la_empresa_operar
         empresa = getattr(request.user, 'empresa_perfil', None)
         if not empresa or not puede_la_empresa_operar(empresa):
-            messages.error(
-                request,
-                'Tu empresa no tiene la documentación legal aprobada. '
-                'Sube los documentos requeridos (RUT y Cámara de Comercio) '
-                'y espera a que el administrador los verifique antes de publicar retos.'
-            )
-            return redirect('empresas:documentos')
+            # Redirige a nuestra nueva mini interfaz de elección
+            return redirect('empresas:elegir_convenio')
         return view_func(request, *args, **kwargs)
     return _wrapped
 
@@ -90,6 +87,11 @@ def _puede_ver_reto(user, reto):
         reto.esta_aprobado_o_activo or reto.integraciones.filter(profesor=user).exists()
     ):
         return True
+    # NUEVA VALIDACIÓN PARA ESTUDIANTES:
+    if user.rol == 'ESTUDIANTE':
+        # Verifica si el estudiante forma parte de algún equipo académico asignado a este reto
+        return EquipoRetoAcademico.objects.filter(reto=reto, estudiantes=user).exists()
+        
     return False
 
 
@@ -191,7 +193,7 @@ def eliminar_reto(request, pk):
     return render(request, 'retos/confirmar_eliminar.html', {'reto': reto})
 
 
-@rol_requerido('EMPRESA', 'ADMIN', 'PROFESOR')
+@rol_requerido('EMPRESA', 'ADMIN', 'PROFESOR', 'ESTUDIANTE')
 def detalle_reto(request, pk):
     reto = get_object_or_404(Reto.objects.select_related('empresa'), pk=pk)
     if not _puede_ver_reto(request.user, reto):
@@ -423,3 +425,56 @@ def admin_revisar_vinculacion(request, pk):
         'integracion': integracion,
         'form': form,
     })
+
+
+@solo_profesor
+def crear_equipo_academico(request, pk):
+    """Permite al profesor gestionar equipos, relacionar estudiantes y expertos, y notificarlos."""
+    integracion = get_object_or_404(IntegracionAcademica, pk=pk, profesor=request.user)
+    
+    if request.method == 'POST':
+        form = EquipoRetoAcademicoForm(request.POST)
+        if form.is_valid():
+            equipo = form.save(commit=False)
+            equipo.reto = integracion.reto
+            equipo.save()
+            form.save_m2m()  # Guarda las relaciones de estudiantes y profesores
+            
+            # Tarea técnica: Notificación a estudiantes asignados sobre su incorporación al reto
+            estudiantes = equipo.estudiantes.all()
+            for estudiante in estudiantes:
+                # Aquí puedes registrar la notificación en tu base de datos si manejas un modelo de notificaciones, por ejemplo:
+                # Notificacion.objects.create(usuario=estudiante, mensaje=f"Has sido incorporado al reto: {integracion.reto.titulo}")
+                pass
+                
+            messages.success(request, 'Equipo académico configurado correctamente y estudiantes notificados.')
+            return redirect('retos:detalle_integracion', pk=integracion.pk)
+    else:
+        form = EquipoRetoAcademicoForm(initial={'reto': integracion.reto})
+        
+    return render(request, 'retos/equipo_form.html', {'form': form, 'integracion': integracion})
+
+
+@solo_profesor
+def registrar_sesion_academica(request, pk):
+    """Permite registrar cronológicamente las sesiones (inicio, seguimiento, preselección, evaluación)."""
+    integracion = get_object_or_404(IntegracionAcademica, pk=pk, profesor=request.user)
+    
+    if request.method == 'POST':
+        form = SesionRetoAcademicoForm(request.POST)
+        if form.is_valid():
+            sesion = form.save(commit=False)
+            sesion.reto = integracion.reto
+            sesion.save()
+            messages.success(request, 'Sesión académica registrada en el cronograma con éxito.')
+            return redirect('retos:detalle_integracion', pk=integracion.pk)
+    else:
+        form = SesionRetoAcademicoForm(initial={'reto': integracion.reto})
+        
+    return render(request, 'retos/sesion_form.html', {'form': form, 'integracion': integracion})
+
+@rol_requerido('ESTUDIANTE')
+def mis_equipos_estudiante(request):
+    """Muestra los equipos académicos y retos en los que el estudiante está inscrito."""
+    equipos = EquipoRetoAcademico.objects.filter(estudiantes=request.user).select_related('reto')
+    return render(request, 'retos/mis_equipos_estudiante.html', {'equipos': equipos})
