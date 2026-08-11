@@ -25,23 +25,21 @@
                         <p class="text-muted small mb-0">{{ reto.descripcion }}</p>
                     </div>
 
-                    {% if entregable %}
+                    {% if entregables_subidos %}
                         <div class="card mt-3 bg-light border-0 shadow-sm">
                             <div class="card-body">
-                                <h6 class="fw-bold text-dark mb-3"><i class="bi bi-info-circle-fill text-info"></i> Estado de tu Entrega</h6>
-                                <p class="mb-2"><strong>Estado:</strong> 
-                                    <span class="badge {% if entregable.estado == 'ENVIADO' %}bg-info text-dark{% elif entregable.estado == 'REVISADO' %}bg-success{% else %}bg-secondary{% endif %}">
-                                        {{ entregable.estado }}
-                                    </span>
-                                </p>
-                                {% if entregable.archivo %}
-                                    <p class="mb-0 text-truncate">
-                                        <strong>Archivo actual:</strong> <br>
-                                        <a href="{{ entregable.archivo.url }}" target="_blank" class="text-primary small">
-                                            <i class="bi bi-file-earmark-arrow-down"></i> Ver documento cargado
-                                        </a>
-                                    </p>
-                                {% endif %}
+                                <h6 class="fw-bold text-dark mb-3"><i class="bi bi-info-circle-fill text-info"></i> Tus entregas y evaluaciones</h6>
+                                {% for entregable in entregables_subidos %}
+                                <div class="border-bottom pb-3 mb-3">
+                                  <strong>{{ entregable.titulo }}</strong>
+                                  <span class="badge {% if entregable.estado == 'CALIFICADO' %}bg-success{% else %}bg-info text-dark{% endif %}">{{ entregable.get_estado_display }}</span>
+                                  {% if entregable.nota != None %}<div>Nota: <strong>{{ entregable.nota }} / {{ entregable.puntaje_maximo }}</strong></div>{% endif %}
+                                  {% if entregable.comentario_profesor %}<p class="small mb-1"><strong>Retroalimentacion:</strong> {{ entregable.comentario_profesor }}</p>{% endif %}
+                                  <a href="{{ entregable.archivo.url }}" target="_blank" class="small">Ver archivo</a>
+                                  {% for item in entregable.historial_comentarios.all %}<div class="small text-muted">{{ item.creado_en|date:'d/m/Y H:i' }} · {{ item.autor }}: {{ item.comentario }}</div>{% endfor %}
+                                  <form method="post" action="{% url 'evaluacion:comentario' entregable.pk %}" class="d-flex gap-2 mt-2">{% csrf_token %}<input class="form-control form-control-sm" name="comentario" required placeholder="Responder"><button class="btn btn-sm btn-outline-primary">Enviar</button></form>
+                                </div>
+                                {% endfor %}
                             </div>
                         </div>
                     {% endif %}
