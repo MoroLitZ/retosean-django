@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block title %}Evaluacion de entregables{% endblock %}
+{% block page_title %}Evaluacion de entregables{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div><h2 class="page-title">Evaluacion formal</h2><p class="page-subtitle">Usa puntaje libre o una rubrica configurada para cada reto.</p></div>
+</div>
+{% for e in entregables %}
+<section class="card-panel mb-4">
+  <div class="card-panel-header">
+    <span>{{ e.titulo }} · {{ e.reto.titulo }}</span>
+    <span class="badge {% if e.estado == 'CALIFICADO' %}bg-success{% else %}bg-warning text-dark{% endif %}">{{ e.get_estado_display }}</span>
+  </div>
+  <div class="p-4">
+    <div class="row g-4">
+      <div class="col-lg-5">
+        <p><strong>Estudiante:</strong> {{ e.estudiante.get_full_name|default:e.estudiante.username }}</p>
+        <p><strong>Equipo:</strong> {{ e.equipo|default:'Sin equipo asignado' }}</p>
+        <p><strong>Fecha:</strong> {{ e.fecha_entrega|date:'d/m/Y H:i' }}</p>
+        {% if e.archivo %}<a class="btn btn-outline-primary btn-sm" href="{{ e.archivo.url }}" target="_blank">Descargar entregable</a>{% endif %}
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'evaluacion:crear_rubrica' e.reto_id %}">Nueva rubrica</a>
+      </div>
+      <div class="col-lg-7">
+        <form method="post" action="{% url 'evaluacion:calificar' e.pk %}">
+          {% csrf_token %}
+          <label class="form-label fw-semibold">Modalidad</label>
+          <select class="form-select mb-3 rubric-select" name="rubrica">
+            <option value="">Puntaje libre (maximo {{ e.puntaje_maximo }})</option>
+            {% for r in rubricas %}{% if r.reto_id == e.reto_id %}<option value="{{ r.pk }}">Rubrica: {{ r.nombre }} ({{ r.puntaje_maximo }} puntos)</option>{% endif %}{% endfor %}
+          </select>
+          <div class="free-score mb-3">
+            <label class="form-label">Nota</label>
+            <input class="form-control" type="number" name="nota" min="0" max="{{ e.puntaje_maximo }}" step="0.01" value="{{ e.nota|default:'' }}">
+          </div>
+          {% for r in rubricas %}{% if r.reto_id == e.reto_id %}
+          <div class="rubric-fields border rounded p-3 mb-3 d-none" data-rubric="{{ r.pk }}">
+            <strong>{{ r.nombre }}</strong>
+            {% for c in r.criterios.all %}<label class="form-label mt-2 mb-1">{{ c.nombre }} (0–{{ c.puntaje_maximo }})</label><input class="form-control form-control-sm" type="number" name="criterio_{{ c.pk }}" min="0" max="{{ c.puntaje_maximo }}" step="0.01">{% endfor %}
+          </div>
+          {% endif %}{% endfor %}
+          <label class="form-label">Retroalimentacion</label>
+          <textarea class="form-control mb-3" name="comentario" rows="3">{{ e.comentario_profesor|default:'' }}</textarea>
+          <button class="btn btn-ean" type="submit">Guardar evaluacion</button>
+        </form>
+      </div>
+    </div>
+    <hr>
+    <h6>Historial de interacciones</h6>
+    {% for item in e.historial_comentarios.all %}<div class="small border-start border-3 ps-3 mb-2"><strong>{{ item.autor.get_full_name|default:item.autor.username }}</strong> · {{ item.creado_en|date:'d/m/Y H:i' }}<br>{{ item.comentario }}</div>{% empty %}<p class="text-muted small">Sin comentarios registrados.</p>{% endfor %}
+    <form method="post" action="{% url 'evaluacion:comentario' e.pk %}" class="d-flex gap-2 mt-3">{% csrf_token %}<input class="form-control" name="comentario" required placeholder="Agregar comentario al historial"><button class="btn btn-outline-primary">Comentar</button></form>
+  </div>
+</section>
+{% empty %}<div class="alert alert-info">No hay entregables para los retos que tienes vinculados.</div>{% endfor %}
+{% endblock %}
+{% block extra_js %}<script>
+document.querySelectorAll('.rubric-select').forEach(select => select.addEventListener('change', () => {
+  const form = select.closest('form');
+  form.querySelector('.free-score').classList.toggle('d-none', Boolean(select.value));
+  form.querySelectorAll('.rubric-fields').forEach(box => box.classList.toggle('d-none', box.dataset.rubric !== select.value));
+}));
+</script>{% endblock %}

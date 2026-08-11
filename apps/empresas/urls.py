@@ -11,6 +11,8 @@ urlpatterns = [
     path('postulaciones/<int:postulacion_id>/gestionar/', views.gestionar_postulacion, name='gestionar_postulacion'),
     path('documentos/',     views.panel_documentos_empresa,   name='documentos'),
     path('indicadores/',    views.indicadores_empresa,        name='indicadores_empresa'),
+    path('seguimiento/', views.seguimiento_avance, name='seguimiento_avance'),
+    path('seguimiento/<int:reto_id>/', views.seguimiento_avance, name='seguimiento_reto'),
     
     # Admin - Gestión de documentos
     path('admin/empresas/',  views.lista_empresas,    name='lista_empresas'),

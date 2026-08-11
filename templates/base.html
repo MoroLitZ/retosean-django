@@ -392,7 +392,7 @@
                         <i class="bi bi-link-45deg"></i> Vinculaciones
           </a>
         </li>
-                        <li class="nav-item">
+        <li class="nav-item">
           <a href="{% url 'usuarios:reportes_admin' %}" class="nav-link {% if request.resolver_match.url_name == 'reportes_admin' %}active{% endif %}">
             <i class="bi bi-bar-chart-line"></i> Reportes
           </a>
@@ -437,6 +437,12 @@
             <i class="bi bi-bar-chart"></i> Indicadores
           </a>
         </li>
+        <li class="nav-item"><a href="{% url 'cierre:panel' %}" class="nav-link {% if request.resolver_match.namespace == 'cierre' %}active{% endif %}"><i class="bi bi-flag"></i> Cierre de retos</a></li>
+        <li class="nav-item">
+          <a href="{% url 'empresas:seguimiento_avance' %}" class="nav-link {% if request.resolver_match.url_name == 'seguimiento_avance' or request.resolver_match.url_name == 'seguimiento_reto' %}active{% endif %}">
+            <i class="bi bi-activity"></i> Seguimiento
+          </a>
+        </li>
 
       {% elif user.rol == 'PROFESOR' %}
         {# ── PROFESOR ── #}
@@ -467,7 +473,7 @@
           </a>
         </li>
         <li class="nav-item">
-          <a href="{% url 'seguimiento:evaluaciones' %}" class="nav-link {% if request.resolver_match.url_name == 'evaluaciones' %}active{% endif %}">
+          <a href="{% url 'evaluacion:panel_profesor' %}" class="nav-link {% if request.resolver_match.namespace == 'evaluacion' %}active{% endif %}">
             <i class="bi bi-star-half"></i> Evaluaciones
           </a>
         </li>
@@ -513,6 +519,7 @@
       {% endif %}
 
       <li class="mt-1"><div class="nav-section-label">Cuenta</div></li>
+      {% if not user.is_superuser and user.rol != 'ADMIN' %}<li class="nav-item"><a href="{% url 'cierre:mis_encuestas' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_encuestas' or request.resolver_match.url_name == 'responder_encuesta' %}active{% endif %}"><i class="bi bi-chat-square-heart"></i> Encuestas</a></li>{% endif %}
       <li class="nav-item">
         <a href="{% url 'usuarios:perfil' %}" class="nav-link {% if request.resolver_match.url_name == 'perfil' %}active{% endif %}">
           <i class="bi bi-person-circle"></i> Mi Perfil

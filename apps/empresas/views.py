@@ -7,6 +7,7 @@ from .forms import CargarDocumentoForm
 from apps.retos.models import Reto
 from apps.participaciones.models import Postulacion as PostulacionReto
 from apps.evaluacion.models import Entregable
+from apps.seguimiento.models import SeguimientoReto
 from apps.usuarios.views import _url_para_usuario
 from .services import puede_la_empresa_operar
 
@@ -154,6 +155,27 @@ def indicadores_empresa(request):
         'retos_recientes': retos.order_by('-id')[:5],
     }
     return render(request, 'empresas/indicadores.html', context)
+
+
+@login_required(login_url='usuarios:login')
+def seguimiento_avance(request, reto_id=None):
+    """Panel exclusivamente de lectura para el seguimiento de la empresa."""
+    if request.user.rol != 'EMPRESA':
+        return redirect(_url_para_usuario(request.user))
+    retos = Reto.objects.filter(empresa=request.user).prefetch_related('entregables__estudiante')
+    reto = get_object_or_404(retos, pk=reto_id) if reto_id else retos.first()
+    seguimientos = SeguimientoReto.objects.none()
+    porcentaje = 0
+    entregables = Entregable.objects.none()
+    if reto:
+        seguimientos = reto.seguimientos.select_related('creado_por').prefetch_related('archivos').order_by('-fecha_sesion', '-creado_en')
+        ultimo = seguimientos.first()
+        porcentaje = ultimo.porcentaje_avance if ultimo else 0
+        entregables = reto.entregables.select_related('estudiante', 'equipo').order_by('-fecha_entrega')
+    return render(request, 'empresas/seguimiento_avance.html', {
+        'retos': retos, 'reto': reto, 'seguimientos': seguimientos,
+        'porcentaje': porcentaje, 'entregables': entregables,
+    })
 
 
 @login_required(login_url='usuarios:login')

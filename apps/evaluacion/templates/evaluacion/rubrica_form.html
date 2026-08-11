@@ -1,0 +1,4 @@
+{% extends 'base.html' %}
+{% block title %}Nueva rubrica{% endblock %}
+{% block page_title %}Nueva rubrica{% endblock %}
+{% block content %}<div class="card-panel"><div class="card-panel-header">Configurar rubrica</div><div class="p-4"><form method="post">{% csrf_token %}{{ form.as_p }}<button class="btn btn-ean">Crear rubrica</button> <a class="btn btn-outline-secondary" href="{% url 'evaluacion:panel_profesor' %}">Cancelar</a></form></div></div>{% endblock %}
