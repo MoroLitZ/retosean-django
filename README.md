@@ -127,6 +127,86 @@ python manage.py makemigrations --merge
 python manage.py migrate
 ```
 
+## Sprints 6 y 7: evaluacion, seguimiento y cierre formal
+
+El commit `030e717` completa el ciclo academico y administrativo de los retos.
+La implementacion cubre la evaluacion formal de entregables, el monitoreo de
+avance por parte de la empresa y el cierre documentado del reto.
+
+### Sprint 6 - Evaluacion y seguimiento
+
+- Los entregables pueden asociarse al reto, estudiante y equipo participante.
+- Un estudiante puede registrar varios entregables parciales o finales usando
+  un nombre diferente para cada entrega.
+- Al cargar nuevamente un entregable con el mismo nombre, se actualiza el
+  archivo y vuelve al estado pendiente de evaluacion.
+- El profesor vinculado al reto dispone de un panel para descargar, revisar,
+  calificar y retroalimentar cada entregable.
+- La calificacion puede usar una escala libre configurable por entregable o una
+  rubrica con multiples criterios y puntajes maximos.
+- La nota, el estado y la retroalimentacion quedan visibles para el estudiante.
+- Los comentarios de profesores y estudiantes se conservan como un historial
+  ordenado por fecha y usuario.
+- La empresa cuenta con una vista de seguimiento de solo lectura que muestra el
+  porcentaje de avance, la bitacora y los entregables parciales/finales.
+- La empresa no puede modificar calificaciones ni registrar cambios en el
+  seguimiento academico. Los intentos directos mediante `POST` son rechazados.
+
+Modelos principales agregados o ampliados:
+
+- `Entregable`: equipo, titulo, tipo parcial/final y puntaje maximo.
+- `Rubrica` y `CriterioRubrica`: configuracion de evaluacion por reto.
+- `Evaluacion` y `EvaluacionCriterio`: resultado general y detalle por criterio.
+- `ComentarioEntregable`: trazabilidad de comentarios e interacciones.
+
+### Sprint 7 - Cierre formal del reto
+
+- El administrador dispone de un panel con los retos aprobados, activos,
+  pausados o finalizados.
+- La agenda de cierre registra fecha, espacio, recursos, invitados y actividades.
+- El cierre permite cargar el acta y uno o varios entregables finales.
+- Se pueden registrar premios y reconocimientos para estudiantes participantes.
+- Antes de finalizar se valida que exista una agenda completa, acta de cierre y
+  al menos un entregable final.
+- La finalizacion se ejecuta en una transaccion: cambia el reto a `finalizado`,
+  registra el cambio en el historial, genera encuestas y notifica a la empresa,
+  profesores y estudiantes participantes.
+- Cada participante puede responder o actualizar su encuesta de satisfaccion
+  con una calificacion de 1 a 5 y un comentario.
+- La operacion es idempotente: repetir la finalizacion no duplica encuestas ni
+  notificaciones.
+
+Modelos principales agregados o ampliados:
+
+- `AgendaCierre`: logistica completa del evento de cierre.
+- `CierreReto`: acta, responsable y fecha efectiva de cierre.
+- `EntregableFinal`: documentacion final asociada al cierre.
+- `Reconocimiento`: premios por estudiante.
+- `EncuestaSatisfaccion`: retroalimentacion individual de los participantes.
+
+### Permisos implementados
+
+| Accion | Administrador | Profesor | Empresa | Estudiante |
+| --- | --- | --- | --- | --- |
+| Configurar rubrica y calificar | No | Si, en retos vinculados | No | No |
+| Consultar avance empresarial | No | No | Si, solo retos propios | No |
+| Modificar seguimiento academico | Si | Si | No | No |
+| Gestionar y finalizar cierre | Si | No | No | No |
+| Responder encuesta asignada | No | Si | Si | Si |
+
+### Verificacion
+
+La entrega incluye migraciones para `evaluacion` y `cierre`, registros en el
+administrador de Django y pruebas de integracion para calificaciones, permisos,
+seguimiento empresarial, cierre, notificaciones y encuestas. Al generar el
+commit se ejecutaron correctamente los 15 tests del proyecto:
+
+```bash
+python manage.py test
+python manage.py makemigrations --check --dry-run
+python manage.py check
+```
+
 ## Rutas principales
 
 - `/retos/mis-retos/`: listado de retos de la empresa.
@@ -137,6 +217,12 @@ python manage.py migrate
 - `/retos/integraciones/`: listado de integraciones del profesor.
 - `/retos/integraciones/crear/`: creacion de integraciones academicas.
 - `/retos/admin/integraciones/`: panel administrativo de revision de integraciones.
+- `/evaluacion/profesor/`: panel de evaluacion y calificacion del profesor.
+- `/evaluacion/profesor/reto/<id>/rubrica/`: configuracion de rubrica.
+- `/empresas/seguimiento/`: monitoreo de avance de la empresa.
+- `/cierre/admin/`: panel administrativo de cierre.
+- `/cierre/admin/reto/<id>/`: agenda, documentos y formalizacion del cierre.
+- `/cierre/encuestas/`: encuestas asignadas al participante autenticado.
 
 ## Configuracion local
 
