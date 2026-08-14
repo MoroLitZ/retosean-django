@@ -1,7 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout, get_user_model
 from django.contrib import messages
-from .forms import LoginForm, RegistroEmpresaForm, RegistroAcademicoForm
+from .forms import LoginForm, RegistroEmpresaForm, RegistroAcademicoForm, EditarPerfilForm
 from django.contrib.auth.decorators import login_required
 from .models import Usuario
 from apps.empresas.models import Empresa
@@ -90,6 +90,16 @@ def vista_perfil(request):
     }
 
     return render(request, 'usuarios/perfil.html', context)
+
+
+@login_required(login_url='usuarios:login')
+def vista_editar_perfil(request):
+    form = EditarPerfilForm(request.POST or None, instance=request.user)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Perfil actualizado correctamente.')
+        return redirect('usuarios:perfil')
+    return render(request, 'usuarios/editar_perfil.html', {'form': form})
 
 
 

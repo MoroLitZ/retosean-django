@@ -65,12 +65,13 @@ class RetoForm(BootstrapModelForm):
             'nivel_academico',
             'facultad',
             'programa',
+            'ecosistema',
             'fecha_inicio_tentativa',
             'fecha_fin_tentativa',
             'fecha_limite_postulacion',
             'premios',
             'criterios_evaluacion',
-            'tiene_convenio_institucional', # <--- ¡Agregado aquí!
+            'tiene_convenio_institucional',
             'archivos',
         ]
         widgets = {
@@ -80,19 +81,20 @@ class RetoForm(BootstrapModelForm):
             'descripcion': forms.Textarea(attrs={'rows': 4}),
             'premios': forms.Textarea(attrs={'rows': 3}),
             'criterios_evaluacion': forms.Textarea(attrs={'rows': 4}),
-            # Como BootstrapModelForm suele dar estilos automáticos, 
-            # puedes personalizar el checkbox si deseas así:
             'tiene_convenio_institucional': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        from apps.academico.models import Facultad, Programa
-        self.fields['facultad'].queryset = Facultad.objects.all().order_by('nombre')
-        self.fields['programa'].queryset = Programa.objects.filter(
-            facultad_id=self.instance.facultad_id
-        ).order_by('nombre') if self.instance and self.instance.facultad_id else Programa.objects.all().order_by('nombre')
-
+        from apps.academico.models import Facultad, Programa, Ecosistema
+        if 'facultad' in self.fields:
+            self.fields['facultad'].queryset = Facultad.objects.all().order_by('nombre')
+        if 'programa' in self.fields:
+            self.fields['programa'].queryset = Programa.objects.filter(
+                facultad_id=self.instance.facultad_id
+            ).order_by('nombre') if self.instance and self.instance.facultad_id else Programa.objects.all().order_by('nombre')
+        if 'ecosistema' in self.fields:
+            self.fields['ecosistema'].queryset = Ecosistema.objects.all().order_by('nombre')
 
 
 class RevisionRetoForm(forms.Form):
