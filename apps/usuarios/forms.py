@@ -24,15 +24,74 @@ class LoginForm(AuthenticationForm):
         return username
 
 
+CARRERA_CHOICES = [
+    ("", "Seleccione un programa"),
+    ("Administracion de Empresas", "Administración de Empresas"),
+    ("Administracion de Negocios Internacionales", "Administración de Negocios Internacionales"),
+    ("Ingenieria de Sistemas", "Ingeniería de Sistemas"),
+    ("Ingenieria Industrial", "Ingeniería Industrial"),
+    ("Ingenieria Ambiental", "Ingeniería Ambiental"),
+    ("Ingenieria Quimica", "Ingeniería Química"),
+    ("Ingenieria Biomedica", "Ingeniería Biomédica"),
+    ("Ciencias Ambientales", "Ciencias Ambientales"),
+    ("Ciencias de Datos", "Ciencias de Datos"),
+    ("Artes Visuales", "Artes Visuales"),
+    ("Diseño Industrial", "Diseño Industrial"),
+    ("Mercadeo", "Mercadeo"),
+    ("Finanzas", "Finanzas"),
+]
+
+SEMESTRE_CHOICES = [(str(i), f"{i}") for i in range(1, 11)]
+
+FACULTAD_CHOICES = [
+    ("", "Seleccione una facultad"),
+    ("Facultad de Ingeniería y Ciencias Básicas", "Facultad de Ingeniería y Ciencias Básicas"),
+    ("Facultad de Administración, Finanzas y Ciencias Económicas", "Facultad de Administración, Finanzas y Ciencias Económicas"),
+    ("Facultad de Derecho", "Facultad de Derecho"),
+    ("Facultad de Humanidades y Ciencias Sociales", "Facultad de Humanidades y Ciencias Sociales"),
+    ("Facultad de Diseño", "Facultad de Diseño"),
+]
+
+ESPECIALIDAD_CHOICES = [
+    ("", "Seleccione una especialidad"),
+    ("Ingeniería de Software", "Ingeniería de Software"),
+    ("Sistemas de Información", "Sistemas de Información"),
+    ("Inteligencia Artificial", "Inteligencia Artificial"),
+    ("Gestión de Operaciones", "Gestión de Operaciones"),
+    ("Finanzas Corporativas", "Finanzas Corporativas"),
+    ("Marketing Digital", "Marketing Digital"),
+    ("Innovación y Emprendimiento", "Innovación y Emprendimiento"),
+    ("Sostenibilidad y Ambiente", "Sostenibilidad y Ambiente"),
+    ("Diseño y Creatividad", "Diseño y Creatividad"),
+    ("Otra", "Otra"),
+]
+
+
 class RegistroAcademicoForm(UserCreationForm):
     rol = forms.ChoiceField(
         choices=[("ESTUDIANTE", "Estudiante"), ("PROFESOR", "Profesor")],
         widget=forms.Select(attrs={"class": "form-select", "id": "select-rol"})
     )
-    carrera = forms.CharField(max_length=100, required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
-    semestre = forms.IntegerField(required=False, widget=forms.NumberInput(attrs={"class": "form-control"}))
-    facultad = forms.CharField(max_length=100, required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
-    especialidad = forms.CharField(max_length=100, required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
+    carrera = forms.ChoiceField(
+        choices=CARRERA_CHOICES,
+        required=False,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    semestre = forms.ChoiceField(
+        choices=SEMESTRE_CHOICES,
+        required=False,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    facultad = forms.ChoiceField(
+        choices=FACULTAD_CHOICES,
+        required=False,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    especialidad = forms.ChoiceField(
+        choices=ESPECIALIDAD_CHOICES,
+        required=False,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
 
     class Meta(UserCreationForm.Meta):
         model = Usuario
@@ -50,12 +109,35 @@ class RegistroAcademicoForm(UserCreationForm):
         if commit:
             user.save()
             if user.rol == "ESTUDIANTE":
+                from apps.academico.models import Programa
+                programa_nombre = self.cleaned_data.get("carrera")
+                programa = None
+                if programa_nombre:
+                    programa = Programa.objects.filter(
+                        nombre__iexact=programa_nombre
+                    ).first()
+                semestre = self.cleaned_data.get("semestre") or 1
+                try:
+                    semestre_int = int(semestre)
+                except (TypeError, ValueError):
+                    semestre_int = 1
                 Estudiante.objects.create(
                     usuario=user,
+                    programa=programa,
+                    semestre=semestre_int,
                 )
             elif user.rol == "PROFESOR":
+                from apps.academico.models import Facultad
+                facultad_nombre = self.cleaned_data.get("facultad")
+                facultad = None
+                if facultad_nombre:
+                    facultad = Facultad.objects.filter(
+                        nombre__iexact=facultad_nombre
+                    ).first()
                 Profesor.objects.create(
                     usuario=user,
+                    facultad=facultad,
+                    especialidad=self.cleaned_data.get("especialidad") or "",
                 )
         return user
 
@@ -121,3 +203,125 @@ class EntregableForm(forms.ModelForm):
             "archivo": "Selecciona tu archivo de evidencia",
             "comentario_estudiante": "Comentarios adicionales",
         }
+
+
+class EditarPerfilForm(forms.ModelForm):
+    """Formulario para editar datos basicos del perfil del usuario."""
+    primera_carrera = forms.ChoiceField(
+        choices=CARRERA_CHOICES,
+        required=False,
+        label="Carrera / Programa",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    semestre = forms.ChoiceField(
+        choices=SEMESTRE_CHOICES,
+        required=False,
+        label="Semestre",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    facultad = forms.ChoiceField(
+        choices=FACULTAD_CHOICES,
+        required=False,
+        label="Facultad",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    especialidad = forms.ChoiceField(
+        choices=ESPECIALIDAD_CHOICES,
+        required=False,
+        label="Especialidad",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    razon_social = forms.CharField(
+        required=False,
+        label="Razón Social",
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+    )
+    sector_industrial = forms.CharField(
+        required=False,
+        label="Sector Industrial",
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+    )
+
+    class Meta:
+        model = Usuario
+        fields = ["first_name", "last_name", "email", "telefono"]
+        widgets = {
+            "first_name": forms.TextInput(attrs={"class": "form-control"}),
+            "last_name": forms.TextInput(attrs={"class": "form-control"}),
+            "email": forms.EmailInput(attrs={"class": "form-control"}),
+            "telefono": forms.TextInput(attrs={"class": "form-control"}),
+        }
+        labels = {
+            "first_name": "Nombre",
+            "last_name": "Apellido",
+            "email": "Correo electrónico",
+            "telefono": "Teléfono",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Cargar valores iniciales desde los perfiles por rol
+        user = kwargs.get("instance")
+        if user:
+            perfil_est = getattr(user, "perfil_estudiante", None)
+            perfil_prof = getattr(user, "perfil_profesor", None)
+            empresa = getattr(user, "empresa_perfil", None)
+            if perfil_est:
+                if perfil_est.programa:
+                    self.fields["primera_carrera"].initial = perfil_est.programa.nombre
+                self.fields["semestre"].initial = str(perfil_est.semestre or "")
+            if perfil_prof:
+                if perfil_prof.facultad:
+                    self.fields["facultad"].initial = perfil_prof.facultad.nombre
+                self.fields["especialidad"].initial = perfil_prof.especialidad or ""
+            if empresa:
+                self.fields["razon_social"].initial = empresa.razon_social
+                self.fields["sector_industrial"].initial = empresa.sector_industrial
+
+    def clean_email(self):
+        email = self.cleaned_data.get("email")
+        if self.instance and self.instance.rol in ("ESTUDIANTE", "PROFESOR") and email:
+            if not email.endswith("@universidadean.edu.co"):
+                raise forms.ValidationError("Estudiantes y profesores deben usar su correo institucional (@universidadean.edu.co).")
+        return email
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        if commit:
+            user.save()
+            # Guardar datos específicos del perfil
+            if user.rol == "ESTUDIANTE":
+                from apps.academico.models import Programa
+                perfil = getattr(user, "perfil_estudiante", None)
+                if not perfil:
+                    perfil = Estudiante.objects.create(usuario=user)
+                programa_nombre = self.cleaned_data.get("primera_carrera")
+                if programa_nombre:
+                    perfil.programa = Programa.objects.filter(
+                        nombre__iexact=programa_nombre
+                    ).first()
+                semestre = self.cleaned_data.get("semestre") or 1
+                try:
+                    perfil.semestre = int(semestre)
+                except (TypeError, ValueError):
+                    perfil.semestre = 1
+                perfil.save()
+            elif user.rol == "PROFESOR":
+                from apps.academico.models import Facultad
+                perfil = getattr(user, "perfil_profesor", None)
+                if not perfil:
+                    perfil = Profesor.objects.create(usuario=user)
+                facultad_nombre = self.cleaned_data.get("facultad")
+                if facultad_nombre:
+                    perfil.facultad = Facultad.objects.filter(
+                        nombre__iexact=facultad_nombre
+                    ).first()
+                perfil.especialidad = self.cleaned_data.get("especialidad") or ""
+                perfil.save()
+            elif user.rol == "EMPRESA":
+                empresa = getattr(user, "empresa_perfil", None)
+                if empresa:
+                    empresa.razon_social = self.cleaned_data.get("razon_social") or empresa.razon_social
+                    empresa.sector_industrial = self.cleaned_data.get("sector_industrial") or empresa.sector_industrial
+                    empresa.save()
+        return user

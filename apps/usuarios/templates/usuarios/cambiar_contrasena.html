@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}Cambiar Contraseña{% endblock %}
+{% block page_title %}Cambiar Mi Contraseña{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-0" style="max-width: 600px;">
+  <div class="card-panel">
+    <div class="card-panel-header">
+      <i class="bi bi-shield-lock me-2 text-muted"></i> Cambiar Contraseña
+    </div>
+    <div class="p-4">
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger py-2 mb-3">
+            {% for e in form.non_field_errors %}<div>{{ e }}</div>{% endfor %}
+          </div>
+        {% endif %}
+
+        {% for field in form %}
+          <div class="mb-3">
+            <label class="form-label fw-semibold">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+
+        <div class="d-flex gap-2 mt-4">
+          <button type="submit" class="btn" style="background: var(--accent); color: #fff; border: none;">
+            <i class="bi bi-check-lg me-1"></i> Cambiar contraseña
+          </button>
+          <a href="{% url 'usuarios:perfil' %}" class="btn btn-outline-secondary">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -67,7 +67,7 @@
       <div class="card-panel mb-3">
         <div class="card-panel-header">
           <span><i class="bi bi-person me-2 text-muted"></i>Información Personal</span>
-          <a href="#" class="btn btn-sm btn-outline-secondary" style="font-size: 0.78rem;">
+          <a href="{% url 'usuarios:editar_perfil' %}" class="btn btn-sm btn-outline-secondary" style="font-size: 0.78rem;">
             <i class="bi bi-pencil me-1"></i>Editar
           </a>
         </div>
@@ -142,7 +142,7 @@
               <p style="font-weight: 600; color: #374151; font-size: 0.875rem; margin: 0;">Contraseña</p>
               <p style="font-size: 0.8rem; color: #9ca3af; margin: 0.1rem 0 0;">••••••••••••</p>
             </div>
-            <a href="#" class="btn btn-sm btn-outline-secondary" style="font-size: 0.78rem;">Cambiar</a>
+            <a href="{% url 'usuarios:cambiar_contrasena' %}" class="btn btn-sm btn-outline-secondary" style="font-size: 0.78rem;">Cambiar</a>
           </div>
         </div>
       </div>

@@ -272,7 +272,7 @@ def cambiar_estado(request, pk):
     return render(request, 'retos/admin_cambiar_estado.html', {'reto': reto, 'form': form})
 
 
-@profesor_o_admin
+@rol_requerido('EMPRESA', 'PROFESOR', 'ADMIN')
 def seguimientos_reto(request, pk):
     reto = get_object_or_404(Reto.objects.select_related('empresa'), pk=pk)
     if not _puede_ver_reto(request.user, reto):
@@ -280,7 +280,7 @@ def seguimientos_reto(request, pk):
     return render(request, 'retos/seguimientos.html', {'reto': reto})
 
 
-@profesor_o_admin
+@rol_requerido('EMPRESA', 'PROFESOR', 'ADMIN')
 def agregar_seguimiento(request, pk):
     reto = get_object_or_404(Reto, pk=pk)
     if not _puede_ver_reto(request.user, reto):
