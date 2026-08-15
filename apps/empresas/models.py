@@ -30,6 +30,7 @@ class Empresa(models.Model):
     evidencia_listas = models.FileField(upload_to="evidencias_listas/", null=True, blank=True)
     fecha_ultima_actualizacion = models.DateTimeField(auto_now=True)
     observaciones_admin = models.TextField(null=True, blank=True)
+    renuncio_a_convenio = models.BooleanField(default=False)
     
     usuario = models.OneToOneField(
         "usuarios.Usuario",

@@ -31,6 +31,15 @@ class Reto(models.Model):
     descripcion = models.TextField(blank=True)
     area = models.CharField(max_length=120, blank=True)
     nivel_academico = models.CharField(max_length=120, blank=True)
+    facultad = models.ForeignKey(
+        "academico.Facultad", on_delete=models.SET_NULL, null=True, blank=True, related_name="retos"
+    )
+    programa = models.ForeignKey(
+        "academico.Programa", on_delete=models.SET_NULL, null=True, blank=True, related_name="retos"
+    )
+    ecosistema = models.ForeignKey(
+        "academico.Ecosistema", on_delete=models.SET_NULL, null=True, blank=True, related_name="retos"
+    )
     fecha_inicio_tentativa = models.DateField(null=True, blank=True)
     fecha_fin_tentativa = models.DateField(null=True, blank=True)
     fecha_limite_postulacion = models.DateField(null=True, blank=True)
@@ -44,6 +53,7 @@ class Reto(models.Model):
     fecha_aprobacion = models.DateTimeField(null=True, blank=True)
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
+    tiene_convenio_institucional = models.BooleanField(default=False)
 
     class Meta:
         db_table = "retos"
@@ -128,3 +138,60 @@ class RetoArchivo(models.Model):
 
     def __str__(self):
         return self.nombre_original or os.path.basename(self.archivo.name)
+
+
+class IntegracionAcademica(models.Model):
+    reto = models.OneToOneField(Reto, on_delete=models.CASCADE, related_name='integracion_academica')
+    facultad = models.CharField(max_length=150, blank=True)
+    programa = models.CharField(max_length=150, blank=True)
+    nivel_formacion = models.CharField(max_length=100, blank=True)
+    asignatura = models.CharField(max_length=150, blank=True)
+    alcance = models.TextField(blank=True, help_text="Definición del alcance académico del reto")
+    entregable_esperado = models.TextField(blank=True, help_text="Qué debe entregar exactamente el equipo de estudiantes")
+
+    class Meta:
+        db_table = "integracion_academica"
+        verbose_name = "Integración Académica"
+        verbose_name_plural = "Integraciones Académicas"
+
+    def __str__(self):
+        return f"Integracion para: {self.reto.titulo} ({self.asignatura})"
+
+
+class EquipoRetoAcademico(models.Model):
+    reto = models.ForeignKey(Reto, on_delete=models.CASCADE, related_name='equipos_academicos')
+    nombre_equipo = models.CharField(max_length=100)
+    profesores = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='equipos_academicos_profesor', blank=True)
+    estudiantes = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='equipos_academicos_estudiante', blank=True)
+    expertos_invitados = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='equipos_academicos_experto', blank=True)
+
+    class Meta:
+        db_table = "equipos_reto_academico"
+        verbose_name = "Equipo de Reto Académico"
+        verbose_name_plural = "Equipos de Reto Académico"
+
+    def __str__(self):
+        return f"{self.nombre_equipo} - {self.reto.titulo}"
+
+
+class SesionRetoAcademico(models.Model):
+    TIPO_SESION_CHOICES = [
+        ('inicio', 'Inicio'),
+        ('seguimiento', 'Seguimiento'),
+        ('preseleccion', 'Preselección'),
+        ('evaluacion', 'Evaluación'),
+    ]
+    reto = models.ForeignKey(Reto, on_delete=models.CASCADE, related_name='sesiones_academicas')
+    tipo = models.CharField(max_length=20, choices=TIPO_SESION_CHOICES)
+    fecha_hora = models.DateTimeField()
+    enlace_reunion = models.URLField(blank=True, null=True)
+    observaciones = models.TextField(blank=True)
+
+    class Meta:
+        db_table = "sesiones_reto_academico"
+        ordering = ["fecha_hora"]
+        verbose_name = "Sesión Académica de Reto"
+        verbose_name_plural = "Sesiones Académicas de Reto"
+
+    def __str__(self):
+        return f"Sesion ({self.get_tipo_display()}) - {self.reto.titulo}"

@@ -13,6 +13,9 @@ class Postulacion(models.Model):
     fecha_postulacion = models.DateTimeField(auto_now_add=True)
     estado = models.CharField(max_length=20, choices=ESTADOS, default="PENDIENTE")
     motivacion = models.TextField(blank=True)
+    programa = models.CharField(max_length=150, blank=True, help_text="Programa academico del estudiante")
+    semestre = models.IntegerField(null=True, blank=True)
+    habilidades = models.TextField(blank=True, help_text="Habilidades y conocimientos relevantes")
 
     class Meta:
         db_table = "postulaciones"
