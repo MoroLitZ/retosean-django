@@ -1,0 +1,4 @@
+{% extends 'base.html' %}
+{% block title %}Cierre de retos{% endblock %}
+{% block page_title %}Cierre de retos{% endblock %}
+{% block content %}<div class="card-panel"><div class="card-panel-header">Retos disponibles para cierre</div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Reto</th><th>Empresa</th><th>Estado</th><th></th></tr></thead><tbody>{% for reto in retos %}<tr><td>{{ reto.titulo }}</td><td>{{ reto.empresa }}</td><td>{{ reto.get_estado_display }}</td><td><a class="btn btn-sm btn-outline-primary" href="{% url 'cierre:gestionar' reto.pk %}">{% if reto.estado == 'finalizado' %}Ver cierre{% else %}Gestionar cierre{% endif %}</a></td></tr>{% empty %}<tr><td colspan="4" class="text-muted">No hay retos listos para cierre.</td></tr>{% endfor %}</tbody></table></div></div>{% endblock %}

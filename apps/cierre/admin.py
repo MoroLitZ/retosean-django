@@ -1,3 +1,5 @@
 from django.contrib import admin
 
-# Register your models here.
+from .models import AgendaCierre, CierreReto, EncuestaSatisfaccion, EntregableFinal, Reconocimiento
+
+admin.site.register([AgendaCierre, CierreReto, EntregableFinal, Reconocimiento, EncuestaSatisfaccion])

@@ -1,3 +1,5 @@
 from django.contrib import admin
 
-# Register your models here.
+from .models import ComentarioEntregable, CriterioRubrica, Entregable, Evaluacion, EvaluacionCriterio, Rubrica
+
+admin.site.register([Entregable, Evaluacion, Rubrica, CriterioRubrica, EvaluacionCriterio, ComentarioEntregable])

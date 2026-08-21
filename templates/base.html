@@ -387,9 +387,14 @@
                         <i class="bi bi-trophy"></i> Retos
           </a>
         </li>
-        <li class="nav-item">
+                <li class="nav-item">
           <a href="{% url 'retos:admin_vinculaciones' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'admin_vinculaciones' or request.resolver_match.url_name == 'admin_revisar_vinculacion' %}active{% endif %}">
                         <i class="bi bi-link-45deg"></i> Vinculaciones
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="{% url 'cierre:panel' %}" class="nav-link {% if request.resolver_match.namespace == 'cierre' and request.resolver_match.url_name == 'panel' %}active{% endif %}">
+            <i class="bi bi-flag"></i> Cierre de Retos
           </a>
         </li>
                         <li class="nav-item">
@@ -432,9 +437,14 @@
             <i class="bi bi-file-earmark-text"></i> Documentos Legales
           </a>
         </li>
-        <li class="nav-item">
+                <li class="nav-item">
           <a href="{% url 'empresas:indicadores_empresa' %}" class="nav-link {% if request.resolver_match.url_name == 'indicadores_empresa' %}active{% endif %}">
             <i class="bi bi-bar-chart"></i> Indicadores
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="{% url 'cierre:mis_encuestas' %}" class="nav-link {% if request.resolver_match.namespace == 'cierre' and request.resolver_match.url_name == 'mis_encuestas' %}active{% endif %}">
+            <i class="bi bi-chat-square-text"></i> Mis Encuestas
           </a>
         </li>
 
@@ -472,15 +482,25 @@
           </a>
         </li>
                 <li class="nav-item">
-          <a href="{% url 'seguimiento:entregables_profesor' %}" class="nav-link {% if request.resolver_match.url_name == 'entregables_profesor' %}active{% endif %}">
-            <i class="bi bi-folder-check"></i> Entregables
-          </a>
-        </li>
-        <li class="nav-item">
-          <a href="{% url 'unidades_estudio:lista' %}" class="nav-link {% if request.resolver_match.namespace == 'unidades_estudio' %}active{% endif %}">
-            <i class="bi bi-journal-bookmark-fill"></i> Unidades de Estudio
-          </a>
-        </li>
+                  <a href="{% url 'seguimiento:entregables_profesor' %}" class="nav-link {% if request.resolver_match.url_name == 'entregables_profesor' %}active{% endif %}">
+                    <i class="bi bi-folder-check"></i> Entregables
+                  </a>
+                </li>
+                <li class="nav-item">
+                  <a href="{% url 'evaluacion:panel_profesor' %}" class="nav-link {% if request.resolver_match.namespace == 'evaluacion' and request.resolver_match.url_name == 'panel_profesor' %}active{% endif %}">
+                    <i class="bi bi-clipboard2-check"></i> Evaluación Formal
+                  </a>
+                </li>
+                <li class="nav-item">
+                  <a href="{% url 'cierre:mis_encuestas' %}" class="nav-link {% if request.resolver_match.namespace == 'cierre' and request.resolver_match.url_name == 'mis_encuestas' %}active{% endif %}">
+                    <i class="bi bi-chat-square-text"></i> Mis Encuestas
+                  </a>
+                </li>
+                <li class="nav-item">
+                  <a href="{% url 'unidades_estudio:lista' %}" class="nav-link {% if request.resolver_match.namespace == 'unidades_estudio' %}active{% endif %}">
+                    <i class="bi bi-journal-bookmark-fill"></i> Unidades de Estudio
+                  </a>
+                </li>
 
       {% elif user.rol == 'ESTUDIANTE' %}
         {# ── ESTUDIANTE ── #}
@@ -500,9 +520,14 @@
             <i class="bi bi-send"></i> Mis Postulaciones
           </a>
         </li>
-        <li class="nav-item">
+                <li class="nav-item">
           <a href="{% url 'participaciones:mis_entregables' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_entregables' %}active{% endif %}">
             <i class="bi bi-folder2-open"></i> Mis Entregables
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="{% url 'cierre:mis_encuestas' %}" class="nav-link {% if request.resolver_match.namespace == 'cierre' and request.resolver_match.url_name == 'mis_encuestas' %}active{% endif %}">
+            <i class="bi bi-chat-square-text"></i> Mis Encuestas
           </a>
         </li>
         <li class="nav-item">

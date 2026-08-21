@@ -126,16 +126,27 @@ def mis_entregables(request, reto_id=None):
         if request.method == 'POST':
             form = EntregableForm(request.POST, request.FILES)
             if form.is_valid():
-                # CORRECCIÃN: Actualizar o Crear para evitar IntegrityError
-                entregable, created = Entregable.objects.update_or_create(
+                # Usa titulo del formulario (o default del modelo) para respetar
+                # el unique_together (reto, estudiante, titulo).
+                titulo = form.cleaned_data.get('titulo') or 'Entregable del reto'
+                entregable, created = Entregable.objects.get_or_create(
                     reto=reto,
                     estudiante=request.user,
+                    titulo=titulo,
                     defaults={
                         'archivo': form.cleaned_data['archivo'],
+                        'es_final': form.cleaned_data.get('es_final', False),
+                        'comentario_estudiante': form.cleaned_data.get('comentario_estudiante', ''),
                         'estado': 'ENVIADO',
                     }
                 )
-                messages.success(request, 'Â¡Entregable guardado con Ã©xito!')
+                if not created:
+                    entregable.archivo = form.cleaned_data['archivo']
+                    entregable.es_final = form.cleaned_data.get('es_final', False)
+                    entregable.comentario_estudiante = form.cleaned_data.get('comentario_estudiante', '')
+                    entregable.estado = 'ENVIADO'
+                    entregable.save()
+                messages.success(request, 'Entregable guardado con exito!')
                 return redirect('participaciones:mis_entregables_reto', reto_id=reto.id)
         else:
             form = EntregableForm()

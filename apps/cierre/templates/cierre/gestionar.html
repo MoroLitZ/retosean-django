@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% block title %}Cierre · {{ reto.titulo }}{% endblock %}
+{% block page_title %}Cierre formal del reto{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4"><div><h2 class="page-title">{{ reto.titulo }}</h2><p class="page-subtitle">Agenda, documentos, reconocimientos y encuestas de cierre.</p></div><span class="badge {% if reto.estado == 'finalizado' %}bg-success{% else %}bg-warning text-dark{% endif %}">{{ reto.get_estado_display }}</span></div>
+<div class="row g-4">
+ <div class="col-lg-7">
+  <div class="card-panel mb-4"><div class="card-panel-header">Agenda y acta</div><div class="p-4"><form method="post" enctype="multipart/form-data">{% csrf_token %}<input type="hidden" name="accion" value="guardar"><h6>Logistica</h6>{{ agenda_form.as_p }}<h6>Documentacion</h6>{{ cierre_form.as_p }}<button class="btn btn-ean">Guardar borrador</button></form></div></div>
+  <div class="card-panel"><div class="card-panel-header">Entregables finales</div><div class="p-4"><form method="post" enctype="multipart/form-data" action="{% url 'cierre:agregar_entregable' reto.pk %}">{% csrf_token %}{{ entregable_form.as_p }}<button class="btn btn-outline-primary">Cargar entregable</button></form><hr>{% for item in cierre.entregables_finales.all %}<a href="{{ item.archivo.url }}" target="_blank" class="d-block">{{ item.nombre }} · {{ item.creado_en|date:'d/m/Y' }}</a>{% empty %}<span class="text-muted">Sin entregables finales.</span>{% endfor %}</div></div>
+ </div>
+ <div class="col-lg-5">
+  <div class="card-panel mb-4"><div class="card-panel-header">Premios y reconocimientos</div><div class="p-4"><form method="post" action="{% url 'cierre:agregar_reconocimiento' reto.pk %}">{% csrf_token %}{{ reconocimiento_form.as_p }}<button class="btn btn-outline-primary">Registrar</button></form><hr>{% for item in cierre.reconocimientos.all %}<div class="mb-2"><strong>{{ item.nombre_destinatario }}</strong><br><span class="small">{{ item.descripcion }}</span></div>{% empty %}<span class="text-muted">Sin reconocimientos.</span>{% endfor %}</div></div>
+  <div class="card-panel"><div class="card-panel-header">Formalizacion</div><div class="p-4">{% if reto.estado == 'finalizado' %}<div class="alert alert-success">Cierre formal completado. Encuestas generadas: {{ cierre.encuestas.count }}.</div>{% else %}<p class="small text-muted">Finalizar cambia el estado, registra la trazabilidad, genera las encuestas y notifica a todos los participantes.</p><form method="post" action="{% url 'cierre:finalizar' reto.pk %}" onsubmit="return confirm('¿Finalizar formalmente este reto?')">{% csrf_token %}<button class="btn btn-danger w-100">Finalizar reto</button></form>{% endif %}</div></div>
+ </div>
+</div>{% endblock %}
