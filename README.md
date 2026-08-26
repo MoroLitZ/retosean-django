@@ -171,3 +171,15 @@ python manage.py runserver
 - Agregar pruebas enfocadas para permisos, transiciones de estado y formularios.
 - Mantener las migraciones junto con cualquier cambio futuro en modelos.
 - Evitar secretos en el repositorio; usar `.env` para credenciales y variables de entorno.
+
+
+
+## **⚙️ Configuración y Ejecución de Celery y Redis**
+
+Este proyecto utiliza Celery junto con Redis para procesar tareas en segundo plano (como el envío de correos electrónicos y la generación de notificaciones internas para la campanita).
+
+1. Requisitos previos (Redis) Asegúrate de tener Redis instalado en tu sistema o entorno de desarrollo (WSL/Linux): sudo apt update && sudo apt install redis-server \-y  
+2. Iniciar el servidor Redis Inicia el demonio de Redis manualmente o verifica que esté respondiendo: redis-server \--daemonize yes redis-cli ping (Debe responder con PONG)  
+3. Ejecutar el Worker de Celery En una pestaña independiente de la terminal, activa tu entorno virtual y arranca el worker de Celery apuntando al módulo de configuración config: source venv/bin/activate celery \-A config worker \-l info  
+4. Correr el servidor de Django En otra pestaña de la terminal, ejecuta el servidor web de forma habitual: python manage.py runserver
+

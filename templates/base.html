@@ -576,11 +576,44 @@
     <i class="bi bi-list"></i>
   </button>
   <h1 class="page-heading">{% block page_title %}Dashboard{% endblock %}</h1>
+  
   {% if user.is_authenticated %}
-  <span class="topbar-email d-none d-lg-inline">{{ user.email }}</span>
-  <a href="{% url 'usuarios:logout' %}" class="btn btn-sm btn-outline-danger d-none d-md-flex align-items-center gap-1" style="font-size:0.8rem;">
-    <i class="bi bi-box-arrow-right"></i> Salir
-  </a>
+  <div class="d-flex align-items-center gap-3">
+    
+    <!-- Campanita de Notificaciones In-App -->
+    <div class="dropdown">
+      <a class="nav-link position-relative text-dark px-2" href="#" id="navbarDropdownNotif" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 1.15rem;">
+        <i class="bi bi-bell-fill"></i>
+        {% if total_no_leidas > 0 %}
+          <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.6rem;">
+            {{ total_no_leidas }}
+          </span>
+        {% endif %}
+      </a>
+      <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2" aria-labelledby="navbarDropdownNotif" style="width: 320px; border-radius: 12px;">
+        <li><h6 class="dropdown-header fw-bold text-dark border-bottom pb-2">Notificaciones</h6></li>
+        
+        {% for notif in notificaciones_no_leidas %}
+          <li>
+            <a class="dropdown-item py-2 text-wrap border-bottom" href="{% if notif.link %}{{ notif.link }}{% else %}#{% endif %}">
+              <div class="fw-semibold text-primary small">{{ notif.titulo }}</div>
+              <div class="text-muted" style="font-size: 0.82rem;">{{ notif.mensaje|truncatechars:45 }}</div>
+              <div class="text-muted" style="font-size: 0.68rem;">{{ notif.creada_en|date:"d M, H:i" }}</div>
+            </a>
+          </li>
+        {% empty %}
+          <li><span class="dropdown-item text-muted text-center py-3 small">No tienes notificaciones nuevas</span></li>
+        {% endfor %}
+        
+        <li><a class="dropdown-item text-center text-primary fw-bold small pt-2" href="#">Ver todas</a></li>
+      </ul>
+    </div>
+
+    <span class="topbar-email d-none d-lg-inline">{{ user.email }}</span>
+    <a href="{% url 'usuarios:logout' %}" class="btn btn-sm btn-outline-danger d-none d-md-flex align-items-center gap-1" style="font-size:0.8rem;">
+      <i class="bi bi-box-arrow-right"></i> Salir
+    </a>
+  </div>
   {% endif %}
 </header>
 

@@ -4,7 +4,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from .models import UnidadEstudio
-
+from .tasks import enviar_correo_nueva_unidad
 
 def _puede_gestionar(user):
     return user.is_superuser or user.rol == "ADMIN" or user.rol == "PROFESOR"
@@ -80,13 +80,16 @@ def crear_unidad(request):
             )
 
             UnidadEstudio.objects.create(
-                codigo=codigo,
-                nombre=nombre,
-                programa=programa,
-                periodo=periodo,
-                ciclo=ciclo,
-                archivo=archivo,
-            )
+                    codigo=codigo,
+                    nombre=nombre,
+                    programa=programa,
+                    periodo=periodo,
+                    ciclo=ciclo,
+                    archivo=archivo,
+                )
+            
+            enviar_correo_nueva_unidad.delay(codigo, nombre)
+            
             messages.success(request, f"Unidad de estudio '{codigo} - {nombre}' creada correctamente.")
             return redirect("unidades_estudio:lista")
 
@@ -103,7 +106,7 @@ def crear_unidad(request):
             "ciclo": request.POST.get("ciclo", ""),
             "archivo": None,
         })(),
-    })
+    })    
 
 
 @login_required(login_url="usuarios:login")
