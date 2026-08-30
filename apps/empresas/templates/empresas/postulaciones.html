@@ -44,7 +44,7 @@
       <div class="card-panel-header">
         <span><i class="bi bi-people me-2 text-muted"></i>
           Postulaciones
-          {% if estado_filtro == 'PENDIENTE' %}pendientes{% elif estado_filtro == 'ACEPTADA' %}aceptadas{% elif estado_filtro == 'RECHAZADA' %}rechazadas{% endif %}
+          {% if estado_filtro == 'PENDIENTE' %}pendientes{% elif estado_filtro == 'ACEPTADA' %}aceptadas{% elif estado_filtro == 'RECHAZADA' %}rechazadas{% elif estado_filtro == 'RETIRADA' %}retiradas{% endif %}
         </span>
         <span class="badge bg-secondary">{{ postulaciones|length }}</span>
       </div>
@@ -75,7 +75,7 @@
                 </td>
                 <td class="text-muted small">{{ p.fecha_postulacion|date:"d/m/Y H:i" }}</td>
                 <td>
-                  <span class="badge {% if p.estado == 'PENDIENTE' %}bg-warning text-dark{% elif p.estado == 'ACEPTADA' %}bg-success{% else %}bg-danger{% endif %}">
+                  <span class="badge {% if p.estado == 'PENDIENTE' %}bg-warning text-dark{% elif p.estado == 'ACEPTADA' %}bg-success{% elif p.estado == 'RETIRADA' %}bg-secondary{% else %}bg-danger{% endif %}">
                     {{ p.get_estado_display }}
                   </span>
                 </td>
@@ -111,7 +111,7 @@
         <div class="text-center py-5 text-muted">
           <i class="bi bi-inbox display-4 opacity-25"></i>
           <p class="mt-3 mb-0">No hay postulaciones
-            {% if estado_filtro == 'PENDIENTE' %}pendientes{% elif estado_filtro == 'ACEPTADA' %}aceptadas{% elif estado_filtro == 'RECHAZADA' %}rechazadas{% endif %}
+            {% if estado_filtro == 'PENDIENTE' %}pendientes{% elif estado_filtro == 'ACEPTADA' %}aceptadas{% elif estado_filtro == 'RECHAZADA' %}rechazadas{% elif estado_filtro == 'RETIRADA' %}retiradas{% endif %}
             en este momento.
           </p>
         </div>
@@ -187,7 +187,7 @@
   // Mantener tab activo al filtrar por URL
   const hash = window.location.hash;
   if (hash) {
-    const tab = document.querySelector(`[data-bs-target="${hash}-pane"]`);
+    const tab = document.querySelector(`[data-bs-target="${hash}-tab-pane"]`);
     if (tab) new bootstrap.Tab(tab).show();
   }
 </script>

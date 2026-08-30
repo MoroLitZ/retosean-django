@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+
+{% block title %}Reportes{% endblock %}
+{% block page_title %}Generación de Informes y Reportes{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card-panel">
+      <div class="card-panel-header d-flex justify-content-between align-items-center">
+        <span>Constructor de reportes</span>
+        <a href="{% url 'reportes:historial' %}" class="btn btn-sm btn-outline-light">
+          <i class="bi bi-clock-history"></i> Historial
+        </a>
+      </div>
+
+      <div class="p-4">
+        <form method="post">
+          {% csrf_token %}
+
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+          {% endif %}
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label for="{{ form.reporte.id_for_label }}" class="form-label small fw-semibold text-secondary">
+                {{ form.reporte.label }}
+              </label>
+              {{ form.reporte }}
+              {{ form.reporte.errors }}
+            </div>
+            <div class="col-md-3">
+              <label for="{{ form.formato.id_for_label }}" class="form-label small fw-semibold text-secondary">
+                {{ form.formato.label }}
+              </label>
+              {{ form.formato }}
+            </div>
+            <div class="col-md-3">
+              <label for="{{ form.periodo.id_for_label }}" class="form-label small fw-semibold text-secondary">
+                {{ form.periodo.label }}
+              </label>
+              {{ form.periodo }}
+            </div>
+          </div>
+
+          <div class="row g-3 mb-3" id="rango-personalizado">
+            <div class="col-md-3">
+              <label for="{{ form.desde.id_for_label }}" class="form-label small fw-semibold text-secondary">Desde</label>
+              {{ form.desde }}
+            </div>
+            <div class="col-md-3">
+              <label for="{{ form.hasta.id_for_label }}" class="form-label small fw-semibold text-secondary">Hasta</label>
+              {{ form.hasta }}
+            </div>
+          </div>
+
+          <h6 class="fw-bold text-dark mt-4 mb-2">Filtros</h6>
+          <div class="row g-3 mb-3">
+            {% for campo in form %}
+              {% if campo.name in 'facultad,programa,empresa,estado,estado_postulacion,estado_empresa' %}
+                <div class="col-md-4">
+                  <label for="{{ campo.id_for_label }}" class="form-label small fw-semibold text-secondary">
+                    {{ campo.label }}
+                  </label>
+                  {{ campo }}
+                </div>
+              {% endif %}
+            {% endfor %}
+          </div>
+
+          <h6 class="fw-bold text-dark mt-4 mb-1">Variables a incluir</h6>
+          <p class="text-muted small mb-2">{{ form.columnas.help_text }}</p>
+          <div class="row g-2 mb-4 p-3 bg-light rounded">
+            {% for opcion in form.columnas %}
+              <div class="col-md-4 col-sm-6">
+                <div class="form-check">
+                  {{ opcion.tag }}
+                  <label class="form-check-label small" for="{{ opcion.id_for_label }}">
+                    {{ opcion.choice_label }}
+                  </label>
+                </div>
+              </div>
+            {% empty %}
+              <p class="text-muted small mb-0">Selecciona un reporte y vuelve a cargar para elegir variables.</p>
+            {% endfor %}
+          </div>
+
+          <button type="submit" class="btn btn-primary fw-bold">
+            <i class="bi bi-download"></i> Generar y descargar
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card-panel">
+      <div class="card-panel-header">Reportes disponibles</div>
+      <div class="p-3">
+        {% for d in definiciones %}
+          <div class="mb-3 pb-3 {% if not forloop.last %}border-bottom{% endif %}">
+            <h6 class="fw-bold text-dark mb-1">
+              <i class="bi bi-file-earmark-bar-graph text-primary"></i> {{ d.nombre }}
+            </h6>
+            <p class="text-muted small mb-0">{{ d.descripcion }}</p>
+          </div>
+        {% endfor %}
+        <p class="text-muted small mb-0">
+          <i class="bi bi-info-circle"></i>
+          El PDF va en horizontal y se limita a 2000 filas; para listados largos usa Excel.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    // El reporte define sus variables: al cambiarlo recargamos el formulario.
+    const selectorReporte = document.getElementById('{{ form.reporte.id_for_label }}');
+    if (selectorReporte) {
+      selectorReporte.addEventListener('change', function () {
+        selectorReporte.form.method = 'get';
+        selectorReporte.form.submit();
+      });
+    }
+
+    // El rango manual solo tiene sentido con periodo personalizado.
+    const selectorPeriodo = document.getElementById('{{ form.periodo.id_for_label }}');
+    const rango = document.getElementById('rango-personalizado');
+    function alternarRango() {
+      if (!selectorPeriodo || !rango) return;
+      rango.style.display = selectorPeriodo.value === 'custom' ? '' : 'none';
+    }
+    if (selectorPeriodo) selectorPeriodo.addEventListener('change', alternarRango);
+    alternarRango();
+  })();
+</script>
+{% endblock %}

@@ -25,26 +25,70 @@
                         <p class="text-muted small mb-0">{{ reto.descripcion }}</p>
                     </div>
 
-                    {% if entregable %}
+                    {% for entregable in entregables_subidos %}
                         <div class="card mt-3 bg-light border-0 shadow-sm">
                             <div class="card-body">
-                                <h6 class="fw-bold text-dark mb-3"><i class="bi bi-info-circle-fill text-info"></i> Estado de tu Entrega</h6>
-                                <p class="mb-2"><strong>Estado:</strong> 
-                                    <span class="badge {% if entregable.estado == 'ENVIADO' %}bg-info text-dark{% elif entregable.estado == 'REVISADO' %}bg-success{% else %}bg-secondary{% endif %}">
-                                        {{ entregable.estado }}
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <h6 class="fw-bold text-dark mb-0">
+                                        <i class="bi bi-file-earmark-text text-info"></i> {{ entregable.titulo }}
+                                    </h6>
+                                    <span class="badge {% if entregable.estado == 'CALIFICADO' %}bg-success{% elif entregable.estado == 'EN_REVISION' %}bg-warning text-dark{% else %}bg-info text-dark{% endif %}">
+                                        {{ entregable.get_estado_display }}
                                     </span>
-                                </p>
+                                </div>
+
+                                {% if entregable.es_final %}
+                                    <span class="badge bg-dark mb-2">Entrega final</span>
+                                {% endif %}
+
                                 {% if entregable.archivo %}
-                                    <p class="mb-0 text-truncate">
-                                        <strong>Archivo actual:</strong> <br>
+                                    <p class="mb-2 text-truncate">
                                         <a href="{{ entregable.archivo.url }}" target="_blank" class="text-primary small">
                                             <i class="bi bi-file-earmark-arrow-down"></i> Ver documento cargado
                                         </a>
                                     </p>
                                 {% endif %}
+
+                                <p class="text-muted small mb-3">
+                                    Enviado el {{ entregable.fecha_entrega|date:"d/m/Y H:i" }}
+                                </p>
+
+                                {% if entregable.nota is not None %}
+                                    <div class="p-3 bg-white rounded border-start border-success border-3 mb-2">
+                                        <span class="text-muted text-uppercase small fw-bold">Calificación</span>
+                                        <h3 class="fw-bold text-success mb-0">
+                                            {{ entregable.nota }} <small class="text-muted fs-6">/ {{ entregable.puntaje_maximo }}</small>
+                                        </h3>
+                                    </div>
+                                {% else %}
+                                    <div class="alert alert-light border small mb-2 py-2">
+                                        <i class="bi bi-hourglass-split"></i> Aún sin calificar.
+                                    </div>
+                                {% endif %}
+
+                                {% if entregable.comentario_profesor %}
+                                    <div class="mb-2">
+                                        <span class="text-muted text-uppercase small fw-bold">Retroalimentación del docente</span>
+                                        <p class="mb-0 small">{{ entregable.comentario_profesor|linebreaksbr }}</p>
+                                    </div>
+                                {% endif %}
+
+                                {% if entregable.historial_comentarios.all %}
+                                    <hr class="my-2">
+                                    <span class="text-muted text-uppercase small fw-bold">Historial de comentarios</span>
+                                    <ul class="list-unstyled mb-0 mt-2">
+                                        {% for comentario in entregable.historial_comentarios.all %}
+                                            <li class="small mb-2">
+                                                <strong>{{ comentario.autor.get_full_name|default:comentario.autor.username }}</strong>
+                                                <span class="text-muted">· {{ comentario.creado_en|date:"d/m/Y H:i" }}</span><br>
+                                                {{ comentario.comentario|linebreaksbr }}
+                                            </li>
+                                        {% endfor %}
+                                    </ul>
+                                {% endif %}
                             </div>
                         </div>
-                    {% endif %}
+                    {% endfor %}
                 </div>
 
                 <div class="col-md-7">

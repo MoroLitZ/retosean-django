@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block title %}Configurar hackathon{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="card-panel">
+  <div class="card-panel-header">Datos del hackathon</div>
+  <div class="p-4">
+    <form method="post">
+      {% csrf_token %}
+      {% for campo in form %}
+        <div class="mb-3">
+          <label for="{{ campo.id_for_label }}" class="form-label small fw-semibold text-secondary">
+            {{ campo.label }}
+          </label>
+          {{ campo }}
+          {% if campo.errors %}<div class="text-danger small mt-1">{{ campo.errors }}</div>{% endif %}
+        </div>
+      {% endfor %}
+      {% if not form.instance.pk %}
+      <p class="text-muted small">
+        Al guardar se crean automáticamente las cuatro etapas del modelo:
+        inscripción, desarrollo, presentación y premiación.
+      </p>
+      {% endif %}
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary fw-bold">
+          <i class="bi bi-check-circle-fill"></i>
+          {% if form.instance.pk %}Guardar cambios{% else %}Crear hackathon{% endif %}
+        </button>
+        {% if form.instance.pk %}
+        <a href="{% url 'hackaton:detalle' form.instance.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+        {% else %}
+        <a href="{% url 'retos:detalle' reto.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

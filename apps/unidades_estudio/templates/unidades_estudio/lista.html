@@ -41,6 +41,13 @@
           {% endif %}
         </div>
       </div>
+      <div class="col-md-4 col-lg-3">
+        <label class="form-label small fw-semibold mb-1">Estado</label>
+        <select name="activo" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="1" {% if filtro_activo == "1" %}selected{% endif %}>Solo activas</option>
+          <option value="0" {% if filtro_activo == "0" %}selected{% endif %}>Todas</option>
+        </select>
+      </div>
     </form>
   </div>
 

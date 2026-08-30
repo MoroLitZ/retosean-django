@@ -23,10 +23,12 @@
           <td>{{ integracion.reto }}</td>
           <td>{{ integracion.profesor.get_full_name|default:integracion.profesor.username }}</td>
           <td>{{ integracion.programa_academico|default:'-' }}</td>
-          <td>{{ integracion.get_estado_display }}</td>
+          <td>{% include 'retos/_estado_badge.html' with estado=integracion.estado etiqueta=integracion.get_estado_display %}</td>
           <td class="text-end">
             <a href="{% url 'retos:detalle_integracion' integracion.pk %}" class="btn btn-sm btn-outline-secondary">Ver</a>
+            {% if integracion.estado == 'en_revision' %}
             <a href="{% url 'retos:admin_revisar_integracion' integracion.pk %}" class="btn btn-sm btn-primary">Aprobar integracion</a>
+            {% endif %}
           </td>
         </tr>
         {% empty %}

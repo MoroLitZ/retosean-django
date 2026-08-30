@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+
+{% block title %}Registro de actividad{% endblock %}
+{% block page_title %}Registro de Actividad{% endblock %}
+
+{% block content %}
+<div class="card-panel">
+  <div class="card-panel-header d-flex justify-content-between align-items-center">
+    <span>Accesos y cambios sobre las cuentas</span>
+    <a href="{% url 'usuarios:lista_usuarios' %}" class="btn btn-sm btn-outline-light">
+      <i class="bi bi-people"></i> Usuarios
+    </a>
+  </div>
+
+  <div class="p-3 border-bottom">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-sm-6 col-md-4">
+        <label for="accion" class="form-label small fw-semibold text-secondary mb-1">Tipo de acción</label>
+        <select name="accion" id="accion" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">Todas</option>
+          {% for valor, nombre in acciones %}
+            <option value="{{ valor }}" {% if accion == valor %}selected{% endif %}>{{ nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </form>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th class="ps-4">Fecha</th>
+          <th>Acción</th>
+          <th>Cuenta</th>
+          <th>Detalle</th>
+          <th>Realizado por</th>
+          <th class="pe-4">IP</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in registros %}
+          <tr>
+            <td class="ps-4 text-muted small text-nowrap">{{ r.creado_en|date:"d/m/Y H:i" }}</td>
+            <td>
+              <span class="badge {% if r.accion == 'LOGIN' %}bg-success{% elif r.accion == 'LOGIN_FALLIDO' %}bg-danger{% elif r.accion == 'LOGOUT' %}bg-secondary{% else %}bg-info text-dark{% endif %}">
+                {{ r.get_accion_display }}
+              </span>
+            </td>
+            <td class="small fw-semibold text-dark">
+              {{ r.usuario.username|default:r.identificador|default:"-" }}
+            </td>
+            <td class="small text-muted">{{ r.detalle|default:"-"|truncatechars:80 }}</td>
+            <td class="small text-muted">{{ r.realizado_por.username|default:"-" }}</td>
+            <td class="pe-4 small text-muted">{{ r.ip|default:"-" }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" class="text-center text-muted py-5">
+              <i class="bi bi-journal-x d-block mb-2" style="font-size:2.5rem;"></i>
+              Sin registros de actividad.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if registros.has_other_pages %}
+    <nav class="p-3 border-top">
+      <ul class="pagination pagination-sm justify-content-center mb-0">
+        {% if registros.has_previous %}
+          <li class="page-item">
+            <a class="page-link" href="?accion={{ accion }}&page={{ registros.previous_page_number }}">Anterior</a>
+          </li>
+        {% endif %}
+        <li class="page-item disabled">
+          <span class="page-link">{{ registros.number }} de {{ registros.paginator.num_pages }}</span>
+        </li>
+        {% if registros.has_next %}
+          <li class="page-item">
+            <a class="page-link" href="?accion={{ accion }}&page={{ registros.next_page_number }}">Siguiente</a>
+          </li>
+        {% endif %}
+      </ul>
+    </nav>
+  {% endif %}
+</div>
+{% endblock %}

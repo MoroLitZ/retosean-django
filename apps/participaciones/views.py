@@ -1,31 +1,51 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_POST
 
 from apps.retos.models import Reto
-from apps.retos.views import rol_requerido
 from apps.participaciones.models import Postulacion as PostulacionReto
 from apps.participaciones.models import RetoFavorito
 from apps.participaciones.forms import PostulacionForm
 from apps.evaluacion.models import Entregable
 from apps.usuarios.forms import EntregableForm
-from apps.usuarios.views import _url_para_usuario
+from apps.usuarios.decorators import solo_estudiante
 
 
-@rol_requerido('ESTUDIANTE')
+@solo_estudiante
 def postular_a_reto(request, reto_id):
-    """Formulario de postulaci\u00f3n del estudiante a un reto"""
-    reto = get_object_or_404(Reto, pk=reto_id, estado='aprobado')
+    """Formulario de postulacion del estudiante a un reto.
 
-    postulacion, creada = PostulacionReto.objects.get_or_create(
-        reto=reto,
-        estudiante=request.user,
-        defaults={'estado': 'PENDIENTE'},
-    )
+    Se aceptan tambien los retos 'en_curso': son los que el explorador lista
+    junto a los aprobados, y exigir solo 'aprobado' daba un 404 desde ahi.
+    """
+    reto = get_object_or_404(Reto, pk=reto_id, estado__in=['aprobado', 'en_curso'])
 
-    if not creada and postulacion.estado == 'ACEPTADA':
+    if reto.fecha_limite_postulacion and reto.fecha_limite_postulacion < timezone.localdate():
+        messages.error(
+            request,
+            'La fecha limite de postulacion de este reto fue el '
+            + reto.fecha_limite_postulacion.strftime('%d/%m/%Y') + '.'
+        )
+        return redirect('retos:detalle', pk=reto.id)
+
+    postulacion = PostulacionReto.objects.filter(reto=reto, estudiante=request.user).first()
+
+    if postulacion and postulacion.estado == 'ACEPTADA':
         messages.info(request, 'Ya fuiste aceptado en este reto. No es necesario volver a postularte.')
         return redirect('retos:detalle', pk=reto.id)
+
+    # Una postulacion ya resuelta no se reabre editando el formulario:
+    # antes form.save() la devolvia a PENDIENTE sin ningun control.
+    if postulacion and postulacion.estado == 'RECHAZADA':
+        messages.error(request, 'Tu postulacion a este reto fue rechazada y no puede reenviarse.')
+        return redirect('academico:mis_postulaciones')
+
+    creada = postulacion is None
+    if creada:
+        postulacion = PostulacionReto(reto=reto, estudiante=request.user, estado='PENDIENTE')
 
     inicial = {}
     perfil = getattr(request.user, 'perfil_estudiante', None)
@@ -56,33 +76,44 @@ def postular_a_reto(request, reto_id):
 
 
 def _notificar_nueva_postulacion(reto, estudiante):
-    """Notifica a la empresa del reto y a los administradores sobre una nueva postulaci\u00f3n."""
-    from apps.notificaciones.models import Notificacion
+    """Avisa a la empresa, a los profesores del reto y a los administradores."""
+    from django.urls import reverse
+
+    from apps.notificaciones.services import notificar, notificar_admins, notificar_muchos
     from apps.usuarios.models import Usuario
 
-    destino_empresa = reto.empresa
-    if destino_empresa and destino_empresa != estudiante:
-        Notificacion.objects.create(
-            usuario=destino_empresa,
-            tipo='EXITO',
-            titulo='Nueva postulaci\u00f3n recibida',
-            mensaje=(estudiante.get_full_name() or estudiante.username)
-                    + ' se ha postulado a tu reto "' + reto.titulo + '".',
-            link='/retos/' + str(reto.id) + '/',
-        )
+    nombre = estudiante.get_full_name() or estudiante.username
+    link = reverse('retos:detalle', kwargs={'pk': reto.pk})
+    clave = f'postulacion-nueva:{reto.pk}:{estudiante.pk}'
 
-    for admin in Usuario.objects.filter(is_superuser=True).exclude(pk=estudiante.pk):
-        Notificacion.objects.create(
-            usuario=admin,
-            tipo='INFO',
-            titulo='Nueva postulaci\u00f3n de estudiante',
-            mensaje=(estudiante.get_full_name() or estudiante.username)
-                    + ' se postul\u00f3 al reto "' + reto.titulo + '".',
-            link='/retos/' + str(reto.id) + '/',
-        )
+    notificar(
+        reto.empresa, 'POSTULACION_NUEVA',
+        titulo='Nueva postulacion recibida',
+        mensaje=f'{nombre} se ha postulado a tu reto "{reto.titulo}".',
+        tipo='EXITO', link=link, clave_dedupe=clave,
+    )
+
+    # El mensaje al estudiante promete que un docente revisara su perfil,
+    # asi que el docente de la integracion tambien tiene que enterarse.
+    profesores = Usuario.objects.filter(
+        integraciones__reto=reto,
+        integraciones__estado__in=['aprobada', 'publicada'],
+    ).distinct().exclude(pk=estudiante.pk)
+    notificar_muchos(
+        profesores, 'POSTULACION_NUEVA',
+        mensaje=f'{nombre} se postulo al reto "{reto.titulo}" que integraste a tu curso.',
+        link=link, clave_dedupe=clave,
+    )
+
+    notificar_admins(
+        'POSTULACION_NUEVA',
+        mensaje=f'{nombre} se postulo al reto "{reto.titulo}".',
+        excluir=estudiante, link=link, clave_dedupe=clave,
+    )
 
 
-@rol_requerido('ESTUDIANTE')
+@require_POST
+@solo_estudiante
 def toggle_favorito(request, reto_id):
     """Marca o desmarca un reto como favorito del estudiante."""
     reto = get_object_or_404(Reto, pk=reto_id)
@@ -92,37 +123,141 @@ def toggle_favorito(request, reto_id):
     else:
         favorito.delete()
         messages.success(request, 'Reto eliminado de favoritos.')
-    referer = request.META.get('HTTP_REFERER', '')
-    return redirect(referer or 'academico:explorar_retos')
+
+    # Solo volvemos al origen si es una URL interna: un HTTP_REFERER externo
+    # convertiria esta vista en un open redirect.
+    destino = request.POST.get('next') or request.META.get('HTTP_REFERER', '')
+    if destino and url_has_allowed_host_and_scheme(
+        destino, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        return redirect(destino)
+    return redirect('academico:explorar_retos')
 
 
-@rol_requerido('ESTUDIANTE')
-def panel_entregables(request):
-    """Panel rÃ¡pido de postulaciones aceptadas"""
-    postulaciones_aceptadas = PostulacionReto.objects.filter(
-        estudiante=request.user,
-        estado='ACEPTADA'
-    ).select_related('reto')
+@solo_estudiante
+def mis_favoritos(request):
+    """Retos que el estudiante marco con la estrella (HU11).
 
-    return render(request, 'usuarios/mis_entregables.html', {
-        'postulaciones': postulaciones_aceptadas
+    La estrella existia desde el Sprint 5 y el dashboard contaba los favoritos,
+    pero no habia ninguna pantalla donde verlos.
+    """
+    favoritos = (
+        RetoFavorito.objects
+        .filter(usuario=request.user)
+        .select_related('reto', 'reto__empresa', 'reto__facultad', 'reto__programa')
+        .order_by('-fecha')
+    )
+    postulados = set(
+        PostulacionReto.objects
+        .filter(estudiante=request.user)
+        .values_list('reto_id', flat=True)
+    )
+    return render(request, 'participaciones/mis_favoritos.html', {
+        'titulo': 'Mis Retos Favoritos',
+        'favoritos': favoritos,
+        'postulados': postulados,
     })
 
 
-@login_required(login_url='usuarios:login')
+@require_POST
+@solo_estudiante
+def retirar_postulacion(request, reto_id):
+    """El estudiante retira una postulacion que aun no ha sido resuelta."""
+    postulacion = get_object_or_404(
+        PostulacionReto, reto_id=reto_id, estudiante=request.user
+    )
+    if postulacion.estado != 'PENDIENTE':
+        messages.error(
+            request,
+            'Solo puedes retirar una postulacion que siga pendiente de respuesta.'
+        )
+        return redirect('academico:mis_postulaciones')
+
+    postulacion.estado = 'RETIRADA'
+    postulacion.save(update_fields=['estado'])
+    _notificar_postulacion_retirada(postulacion)
+    messages.success(
+        request,
+        f'Retiraste tu postulacion al reto "{postulacion.reto.titulo}".'
+    )
+    return redirect('academico:mis_postulaciones')
+
+
+def _notificar_postulacion_retirada(postulacion):
+    from django.urls import reverse
+
+    from apps.notificaciones.services import notificar
+
+    estudiante = postulacion.estudiante
+    nombre = estudiante.get_full_name() or estudiante.username
+    notificar(
+        postulacion.reto.empresa, 'POSTULACION_GESTIONADA',
+        titulo='Postulacion retirada',
+        mensaje=f'{nombre} retiro su postulacion al reto "{postulacion.reto.titulo}".',
+        tipo='ADVERTENCIA',
+        link=reverse('empresas:postulaciones'),
+        clave_dedupe=f'postulacion:{postulacion.pk}:RETIRADA',
+    )
+
+
+@solo_estudiante
+def panel_entregables(request):
+    """Indice de retos donde el estudiante fue aceptado, para entrar a entregar.
+
+    Apuntaba a 'usuarios/mis_entregables.html', plantilla que no existe: devolvia
+    un 500 a quien llegara por URL. La plantilla del estudiante ya resuelve este
+    caso cuando no se le pasa un reto concreto, asi que se reutiliza en lugar de
+    duplicarla.
+    """
+    postulaciones_aceptadas = (
+        PostulacionReto.objects
+        .filter(estudiante=request.user, estado='ACEPTADA')
+        .select_related('reto', 'reto__empresa')
+        .order_by('-fecha_postulacion')
+    )
+
+    return render(request, 'estudiante/mis_entregables.html', {
+        'titulo': 'Mis Entregables',
+        'postulaciones': postulaciones_aceptadas,
+    })
+
+
+def _estudiante_participa_en(usuario, reto):
+    """El estudiante solo participa si fue aceptado o si el profesor lo puso en un equipo."""
+    from apps.retos.models import EquipoRetoAcademico
+
+    if PostulacionReto.objects.filter(
+        reto=reto, estudiante=usuario, estado='ACEPTADA'
+    ).exists():
+        return True
+    return EquipoRetoAcademico.objects.filter(reto=reto, estudiantes=usuario).exists()
+
+
+@solo_estudiante
 def mis_entregables(request, reto_id=None):
-    if request.user.rol != 'ESTUDIANTE':
-        return redirect(_url_para_usuario(request.user))
-    
     reto = None
     entregables_subidos = []
     form = None
-    todas_mis_postulaciones = PostulacionReto.objects.filter(estudiante=request.user).select_related('reto')
+    # Solo los retos donde fue aceptado: son los unicos donde puede entregar.
+    todas_mis_postulaciones = PostulacionReto.objects.filter(
+        estudiante=request.user, estado='ACEPTADA'
+    ).select_related('reto')
+
+    if not reto_id and request.method == 'POST':
+        # Sin reto no hay a que asociar el archivo: antes el POST se descartaba
+        # en silencio y el estudiante creia haber entregado.
+        messages.error(request, 'Elige primero el reto al que quieres subir el entregable.')
+        return redirect('participaciones:mis_entregables')
 
     if reto_id:
-        reto = get_object_or_404(Reto, pk=reto_id, estado='aprobado')
-        # ... (tu lÃ³gica de validaciÃ³n de acceso se mantiene igual) ...
-        
+        reto = get_object_or_404(Reto, pk=reto_id, estado__in=['aprobado', 'en_curso'])
+        if not _estudiante_participa_en(request.user, reto):
+            messages.error(
+                request,
+                'Solo puedes subir entregables a retos en los que fuiste aceptado.'
+            )
+            return redirect('participaciones:mis_entregables')
+
         if request.method == 'POST':
             form = EntregableForm(request.POST, request.FILES)
             if form.is_valid():
@@ -146,12 +281,18 @@ def mis_entregables(request, reto_id=None):
                     entregable.comentario_estudiante = form.cleaned_data.get('comentario_estudiante', '')
                     entregable.estado = 'ENVIADO'
                     entregable.save()
+                _notificar_entregable_recibido(reto, request.user, entregable)
                 messages.success(request, 'Entregable guardado con exito!')
                 return redirect('participaciones:mis_entregables_reto', reto_id=reto.id)
         else:
             form = EntregableForm()
             
-        entregables_subidos = Entregable.objects.filter(reto=reto, estudiante=request.user).order_by('-fecha_entrega')
+        entregables_subidos = (
+            Entregable.objects
+            .filter(reto=reto, estudiante=request.user)
+            .prefetch_related('historial_comentarios__autor')
+            .order_by('-fecha_entrega')
+        )
 
     return render(request, 'estudiante/mis_entregables.html', {
         'titulo': 'Mis Entregables',
@@ -160,3 +301,20 @@ def mis_entregables(request, reto_id=None):
         'entregables_subidos': entregables_subidos,
         'postulaciones': todas_mis_postulaciones
     })
+
+
+def _notificar_entregable_recibido(reto, estudiante, entregable):
+    """Avisa a los profesores que integraron el reto que hay algo por calificar."""
+    from django.urls import reverse
+
+    from apps.notificaciones.services import notificar_muchos
+    from apps.usuarios.models import Usuario
+
+    profesores = Usuario.objects.filter(integraciones__reto=reto).distinct()
+    nombre = estudiante.get_full_name() or estudiante.username
+    notificar_muchos(
+        profesores, 'ENTREGABLE_RECIBIDO',
+        mensaje=f'{nombre} subio el entregable "{entregable.titulo}" del reto "{reto.titulo}".',
+        link=reverse('evaluacion:panel_profesor'),
+        clave_dedupe=f'entregable-recibido:{entregable.pk}:{entregable.actualizado_en:%Y%m%d%H%M}',
+    )

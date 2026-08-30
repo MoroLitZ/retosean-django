@@ -1,173 +1,168 @@
-# Rama Caicedo - Modulo de Retos e Integraciones
+# RetosEAN — Sistema de Control de Retos Universidad–Empresa
 
-Esta rama implementa el flujo base para que empresas, profesores y administradores gestionen retos, hackatones, integraciones academicas y seguimientos dentro de la plataforma Retos EAN.
+Plataforma Django + PostgreSQL que conecta empresas, docentes y estudiantes de la
+Universidad EAN alrededor de retos empresariales: la empresa publica el reto, el
+administrador lo aprueba, un docente lo integra a su curso, los estudiantes se
+postulan y entregan, el docente evalúa y el administrador cierra el ciclo emitiendo
+certificados.
 
-## Alcance principal
+## Estado por historia de usuario
 
-- Creacion, edicion, envio a revision y eliminacion de retos por parte de usuarios con rol Empresa.
-- Revision administrativa de retos, con aprobacion, rechazo, cambio manual de estado y asignacion de consecutivo.
-- Registro de historial de cambios de estado para conservar trazabilidad del ciclo de vida de cada reto.
-- Registro de seguimientos sobre retos aprobados o activos.
-- Creacion, edicion, envio a revision y publicacion de integraciones academicas por parte de usuarios con rol Profesor.
-- Revision administrativa de integraciones academicas.
-- Vistas y plantillas HTML para formularios, paneles, detalles, estados y confirmaciones del modulo `retos`.
-- Reorganizacion de la configuracion Django en `config/settings/` con archivos separados para base, desarrollo y produccion.
-- Estructura inicial de apps de dominio bajo `apps/` para preparar el crecimiento modular del proyecto.
+| Sprint | HU | Módulo | Estado |
+|---|---|---|---|
+| 1 | HU13 Usuarios y roles | `usuarios` | Registro multirol, login, decoradores compartidos, importación masiva CSV/Excel, bitácora de actividad |
+| 2 | HU01 / HU00 Empresas y documentación | `empresas` | Registro, carga de documentos con validación de vigencia, verificación por admin, listas restrictivas |
+| 3 | HU02 / HU04 Ciclo del reto | `retos` | Borrador → revisión → aprobación con consecutivo e historial de estados |
+| 4 | HU03 Integración académica | `retos` + `seguimiento` | Integración por docente, equipos, sesiones y flujo de publicación |
+| 5 | HU10 / HU11 Participación | `academico` + `participaciones` | Explorador filtrable, favoritos, postulación con validaciones |
+| 6 | HU12 / HU14 Evaluación y seguimiento | `evaluacion` + `seguimiento` | Rúbricas o puntaje libre, historial de comentarios, avance visible para la empresa |
+| 7 | HU08 Cierre | `cierre` | Agenda, acta, entregables finales, reconocimientos y encuesta |
+| 8 | HU15 Notificaciones | `notificaciones` | Motor central, campana in-app, correo, preferencias y recordatorios |
+| 9 | HU05 / HU06 / HU07 | `dashboard`, `reportes`, `presupuesto` | KPIs con Chart.js, reportes PDF/Excel y control presupuestal con alerta al 80% |
+| 10 | HU09 / HU16 | `hackaton`, `academico` | Hackathon completo (etapas, inscripción, jurados, ranking) y certificados con verificación pública |
 
-## Modelos incluidos
-
-- `Reto`: representa retos o hackatones creados por empresas, con estados como borrador, en revision, aprobado, rechazado, en curso, pausado, finalizado y cancelado.
-- `HistorialEstadoReto`: guarda cada cambio de estado de un reto, el usuario que lo realizo y el comentario asociado.
-- `SeguimientoReto`: registra sesiones, avances, observaciones y acuerdos sobre un reto.
-- `IntegracionAcademica`: conecta un reto aprobado o activo con una propuesta academica creada por un profesor.
-
-## Sistema de base de datos
-
-La rama usa PostgreSQL como base de datos principal. La conexion se define en `config/settings/base.py` y se alimenta desde variables de entorno para evitar credenciales quemadas en el codigo.
-
-Variables requeridas en `.env`:
-
-- `DB_NAME`: nombre de la base de datos.
-- `DB_USER`: usuario de PostgreSQL.
-- `DB_PASSWORD`: clave del usuario.
-- `DB_HOST`: host del servidor de base de datos, normalmente `localhost`.
-- `DB_PORT`: puerto de PostgreSQL. En `.env.example` se usa `5433`.
-
-El esquema se administra con migraciones de Django. En esta rama el modulo `retos` incluye su migracion inicial para crear las tablas de retos, historial de estados, seguimientos e integraciones academicas. Los modelos se relacionan con el usuario personalizado mediante `settings.AUTH_USER_MODEL`, por eso las tablas dependen tambien de las migraciones de `usuarios`.
-
-Relaciones principales:
-
-- Un usuario Empresa puede tener muchos `Reto`.
-- Un `Reto` puede tener muchos registros de `HistorialEstadoReto`.
-- Un `Reto` puede tener muchos `SeguimientoReto`.
-- Un `Reto` puede tener muchas `IntegracionAcademica`.
-- Un usuario Profesor puede tener muchas `IntegracionAcademica`.
-
-Diagrama de relaciones:
-
-```mermaid
-erDiagram
-    USUARIO ||--o{ RETO : crea
-    USUARIO ||--o{ INTEGRACION_ACADEMICA : crea
-    USUARIO ||--o{ HISTORIAL_ESTADO_RETO : realiza
-    USUARIO ||--o{ SEGUIMIENTO_RETO : registra
-    RETO ||--o{ HISTORIAL_ESTADO_RETO : tiene
-    RETO ||--o{ SEGUIMIENTO_RETO : tiene
-    RETO ||--o{ INTEGRACION_ACADEMICA : integra
-
-    USUARIO {
-        int id PK
-        string rol
-        string email
-        string username
-    }
-
-    RETO {
-        int id PK
-        int empresa_id FK
-        string tipo
-        string titulo
-        string estado
-        int consecutivo
-        datetime fecha_envio_revision
-        datetime fecha_aprobacion
-        datetime creado_en
-        datetime actualizado_en
-    }
-
-    HISTORIAL_ESTADO_RETO {
-        int id PK
-        int reto_id FK
-        int realizado_por_id FK
-        string estado_anterior
-        string estado_nuevo
-        text comentario
-        datetime fecha
-    }
-
-    SEGUIMIENTO_RETO {
-        int id PK
-        int reto_id FK
-        int creado_por_id FK
-        string tipo_sesion
-        date fecha_sesion
-        int porcentaje_avance
-        text avances
-        text observaciones
-        text acuerdos
-    }
-
-    INTEGRACION_ACADEMICA {
-        int id PK
-        int reto_id FK
-        int profesor_id FK
-        string facultad
-        string programa_academico
-        string estado
-        datetime fecha_envio_revision
-        datetime fecha_aprobacion
-        datetime creado_en
-        datetime actualizado_en
-    }
-```
-
-Flujo recomendado para trabajar con la base de datos:
+## Puesta en marcha
 
 ```bash
-python manage.py makemigrations
-python manage.py migrate
-python manage.py check
-```
-
-Cada cambio en `models.py` debe incluir su migracion correspondiente. Si dos ramas crean migraciones al mismo tiempo y Django detecta ramas paralelas en el historial, se debe resolver con:
-
-```bash
-python manage.py makemigrations --merge
-python manage.py migrate
-```
-
-## Rutas principales
-
-- `/retos/mis-retos/`: listado de retos de la empresa.
-- `/retos/crear/`: creacion de retos.
-- `/retos/<id>/`: detalle del reto.
-- `/retos/<id>/seguimientos/`: historial de seguimientos del reto.
-- `/retos/admin/panel/`: panel administrativo de revision de retos.
-- `/retos/integraciones/`: listado de integraciones del profesor.
-- `/retos/integraciones/crear/`: creacion de integraciones academicas.
-- `/retos/admin/integraciones/`: panel administrativo de revision de integraciones.
-
-## Configuracion local
-
-1. Crear y activar un entorno virtual.
-2. Instalar dependencias:
-
-```bash
+python -m venv venv
+venv\Scripts\activate            # Windows
 pip install -r requirements.txt
-```
-
-3. Crear un archivo `.env` basado en `.env.example`.
-4. Configurar la base de datos PostgreSQL.
-5. Ejecutar migraciones:
-
-```bash
+copy .env.example .env           # y edita las credenciales
 python manage.py migrate
-```
-
-6. Levantar el servidor:
-
-```bash
+python manage.py createsuperuser
 python manage.py runserver
 ```
 
+Requiere PostgreSQL. Todas las credenciales salen de `.env`; nunca se comitean.
+
+### Variables de entorno
+
+| Variable | Uso |
+|---|---|
+| `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS` | Configuración base de Django |
+| `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` | Conexión a PostgreSQL |
+| `SITE_URL` | URL pública, usada para los enlaces absolutos de los correos |
+| `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, `DEFAULT_FROM_EMAIL` | Envío de correo (HU15) |
+| `CSRF_TRUSTED_ORIGINS`, `SECURE_SSL_REDIRECT` | Solo producción |
+
+En desarrollo los correos se imprimen en la consola: no hace falta configurar SMTP.
+
+## Arquitectura
+
+```
+apps/
+  usuarios/        roles.py, decorators.py, context_processors.py, importacion.py, signals.py
+  empresas/        onboarding y documentación legal
+  retos/           ciclo de vida del reto e integración académica
+  academico/       facultades, programas, exploración y certificados
+  participaciones/ postulaciones, equipos operativos y entregables
+  evaluacion/      rúbricas, calificación y comentarios
+  seguimiento/     IntegracionAcademica y avances del reto
+  cierre/          agenda, acta, reconocimientos y encuestas
+  notificaciones/  motor de eventos, bandeja, preferencias y recordatorios
+  dashboard/       KPIs, series para Chart.js y filtros de periodo
+  reportes/        catálogo de reportes y exportación PDF/Excel
+  presupuesto/     presupuesto y gastos por reto
+  hackaton/        modalidad hackathon
+  unidades_estudio/ unidades por programa académico
+```
+
+Convenciones que conviene respetar (ver `constitution.md`):
+
+- **Roles**: usa `apps.usuarios.roles.es_admin` y los decoradores de
+  `apps.usuarios.decorators`. En plantillas, los flags `es_admin`, `es_empresa`,
+  `es_profesor`, `es_estudiante` los inyecta un context processor.
+- **Notificaciones**: siempre a través de
+  `apps.notificaciones.services.notificar` / `notificar_muchos` / `notificar_admins`.
+  El servicio aplica las preferencias del usuario, deduplica por `clave_dedupe` y
+  envía el correo en `transaction.on_commit`.
+- **Cross-app**: nunca importes de otro `views.py`; usa su `services.py`,
+  `models.py` o `decorators.py`.
+
+## Recordatorios automáticos
+
+No se usa Celery. Los recordatorios (7, 3 y 1 día antes de las fechas clave) son un
+comando de gestión idempotente que se programa una vez al día:
+
+```bash
+python manage.py enviar_recordatorios --dias 7 3 1
+python manage.py enviar_recordatorios --dry-run     # ver qué se enviaría
+```
+
+Cubre: cierre de postulaciones, entrega final pendiente, entregables sin calificar,
+etapas de hackathon y vencimiento de documentos de empresa.
+
+**Programador de tareas de Windows**: crea una tarea diaria que ejecute
+`C:\ruta\al\proyecto\venv\Scripts\python.exe manage.py enviar_recordatorios`
+con el directorio de trabajo en la raíz del proyecto. En Linux, la línea de cron
+equivalente es `0 7 * * *`.
+
+## Rutas principales
+
+| Ruta | Descripción |
+|---|---|
+| `/dashboard/` | Panel de indicadores según el rol |
+| `/retos/mis-retos/`, `/retos/crear/` | Gestión de retos por la empresa |
+| `/retos/admin/panel/` | Revisión y aprobación de retos |
+| `/retos/integraciones/` | Integraciones académicas del docente |
+| `/academico/explorar-retos/` | Explorador de retos del estudiante |
+| `/academico/certificados/`, `/academico/portafolio/` | Certificados y portafolio |
+| `/academico/verificar/<codigo>/` | Verificación pública de un certificado (sin login) |
+| `/participaciones/entregables/` | Entregables del estudiante |
+| `/evaluacion/` | Panel de calificación del docente |
+| `/cierre/` | Cierre formal de retos |
+| `/notificaciones/` | Bandeja y preferencias |
+| `/reportes/` | Constructor de informes PDF/Excel |
+| `/presupuesto/` | Presupuesto y gastos por reto |
+| `/hackatones/` | Hackathones, inscripción, votación y ranking |
+
+## Verificación
+
+```bash
+python manage.py check
+python manage.py makemigrations --check --dry-run      # debe decir "No changes"
+python manage.py migrate --plan
+python manage.py test
+python manage.py check --deploy --settings=config.settings.production
+```
+
+Toda la suite debe pasar antes de mergear. Los cambios de modelo van siempre con su
+migración en el mismo commit.
+
 ## Settings
 
-- Desarrollo: `config.settings.development`
-- Produccion: `config.settings.production`
+- Desarrollo: `config.settings.development` (correo a consola, `DEBUG=True`)
+- Producción: `config.settings.production` (HSTS, cookies seguras, redirección HTTPS,
+  `ALLOWED_HOSTS` obligatorio desde entorno)
 
-## Notas para continuar
+## Despliegue a producción
 
-- Validar el flujo completo con usuarios Empresa, Profesor y Admin.
-- Agregar pruebas enfocadas para permisos, transiciones de estado y formularios.
-- Mantener las migraciones junto con cualquier cambio futuro en modelos.
-- Evitar secretos en el repositorio; usar `.env` para credenciales y variables de entorno.
+```bash
+pip install -r requirements.txt
+copy .env.example .env                # edita SECRET_KEY, DEBUG=False, ALLOWED_HOSTS y la BD
+python manage.py migrate
+python manage.py sembrar_catalogo     # siembra facultades/programas/ecosistemas (idempotente)
+python manage.py sembrar_catalogo --demo   # opcional: usuarios por rol + un reto de ejemplo
+python manage.py collectstatic --noinput
+python manage.py check --deploy --settings=config.settings.production
+gunicorn config.wsgi:application      # wsgi.py usa config.settings.production
+```
+
+- **Estáticos**: Whitenoise sirve `/static/` directamente desde el proceso Django
+  (no requiere nginx para los estáticos). Ejecuta `collectstatic` en cada despliegue.
+- **Archivos subidos (`/media/`)**: no los sirve Django en producción. Expón la
+  carpeta `media/` a través de nginx, S3 o un almacenamiento compatible; los
+  `FileField` siguen escribiendo en `MEDIA_ROOT`.
+- **Correo**: en producción define `EMAIL_*` con un SMTP real. La recuperación de
+  contraseña (`/usuarios/recuperar-contrasena/`) y las notificaciones dependen de él.
+- **Correo de respaldo del admin**: crea el superusuario antes de arrancar
+  (`python manage.py createsuperuser`).
+
+### Ajustes de seguridad recomendados
+
+| Check | Cómo se cubre |
+|---|---|
+| `SECURE_SSL_REDIRECT` | `SECURE_SSL_REDIRECT=1` en `.env` |
+| `SECURE_HSTS_SECONDS` | Ya configurado en `production.py` |
+| `CSRF_TRUSTED_ORIGINS` | Lista de orígenes separados por coma en `.env` |
+| `SESSION_COOKIE_SECURE` / `CSRF_COOKIE_SECURE` | Ya configurados en `production.py` |

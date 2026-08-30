@@ -1,9 +1,15 @@
+from decimal import Decimal
+
 from django.db import models
+from django.db.models import Sum
+from django.db.models.functions import Coalesce
 
 
 class Presupuesto(models.Model):
     reto = models.OneToOneField("retos.Reto", on_delete=models.CASCADE, related_name="presupuesto")
     monto_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Evita repetir la alerta del 80% en cada gasto posterior.
+    alerta_80_enviada = models.BooleanField(default=False)
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
 
@@ -17,13 +23,21 @@ class Presupuesto(models.Model):
 
     @property
     def monto_ejecutado(self):
-        return sum(g.monto for g in self.gastos.all())
+        # Agregamos en la base de datos: iterar self.gastos.all() era N+1
+        # y devolvia el int 0 en vez de Decimal cuando no habia gastos.
+        return self.gastos.aggregate(
+            total=Coalesce(Sum("monto"), Decimal("0.00"))
+        )["total"]
 
     @property
     def porcentaje_ejecutado(self):
-        if self.monto_total == 0:
-            return 0
+        if not self.monto_total:
+            return Decimal("0.00")
         return (self.monto_ejecutado / self.monto_total) * 100
+
+    @property
+    def monto_disponible(self):
+        return self.monto_total - self.monto_ejecutado
 
 
 class Gasto(models.Model):

@@ -28,17 +28,17 @@
             {% endif %}
           </div>
           <h1 style="font-size: 1.6rem; font-weight: 800; color: #111827; margin: 0 0 0.4rem;">
-            {{ reto.titulo|default:'Borrador sin t\u00edtulo' }}
+            {{ reto.titulo|default:'Borrador sin título' }}
           </h1>
           <p style="color: #6b7280; font-size: 0.875rem; margin: 0;">
             <i class="bi bi-building me-1"></i>
             {{ reto.empresa.get_full_name|default:reto.empresa.username }}
             &nbsp;&middot;&nbsp;
-            <i class="bi bi-geo-alt me-1"></i>{{ reto.area|default:'Sin \u00e1rea' }}
+            <i class="bi bi-geo-alt me-1"></i>{{ reto.area|default:'Sin área' }}
           </p>
         </div>
 
-        <!-- Acciones seg\u00fan rol -->
+        <!-- Acciones según rol -->
         <div class="d-flex flex-wrap gap-2">
           {% if user.rol == 'EMPRESA' and reto.puede_editar_empresa %}
             <a href="{% url 'retos:editar' reto.pk %}" class="btn btn-sm btn-outline-secondary">
@@ -61,36 +61,43 @@
               <i class="bi bi-arrow-repeat me-1"></i>Cambiar Estado
             </a>
           {% endif %}
-          {% if user.is_superuser or user.rol == 'ADMIN' or user.rol == 'PROFESOR' or user.rol == 'EMPRESA' and reto.empresa_id == user.pk %}
+          {% if reto.tipo == 'hackathon' %}
+            {% if reto.hackathon %}
+              <a href="{% url 'hackaton:detalle' reto.hackathon.pk %}" class="btn btn-sm btn-outline-warning">
+                <i class="bi bi-lightning-charge me-1"></i>Hackathon
+              </a>
+            {% elif es_admin or es_profesor %}
+              <a href="{% url 'hackaton:crear' reto.pk %}" class="btn btn-sm btn-outline-warning">
+                <i class="bi bi-lightning-charge me-1"></i>Configurar hackathon
+              </a>
+            {% endif %}
+          {% endif %}
+          {% if es_admin %}
+            <a href="{% url 'presupuesto:detalle' reto.pk %}" class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-cash-coin me-1"></i>Presupuesto
+            </a>
+          {% endif %}
+          {% if puede_ver_seguimiento %}
             <a href="{% url 'retos:seguimientos' reto.pk %}" class="btn btn-sm btn-outline-secondary">
               <i class="bi bi-graph-up me-1"></i>Seguimiento
             </a>
           {% endif %}
           {% if user.rol == 'ESTUDIANTE' %}
-            <a href="{% url 'participaciones:toggle_favorito' reto.pk %}"
-               class="btn btn-sm btn-outline-warning"
-               title="{% if es_favorito %}Quitar de favoritos{% else %}A\u00f1adir a favoritos{% endif %}">
-              <i class="bi {% if es_favorito %}bi-star-fill{% else %}bi-star{% endif %} me-1"></i>Favorito
-            </a>
+            <form method="post" action="{% url 'participaciones:toggle_favorito' reto.pk %}" class="d-inline">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button type="submit" class="btn btn-sm btn-outline-warning"
+                      title="{% if es_favorito %}Quitar de favoritos{% else %}Añadir a favoritos{% endif %}">
+                <i class="bi {% if es_favorito %}bi-star-fill{% else %}bi-star{% endif %} me-1"></i>Favorito
+              </button>
+            </form>
           {% endif %}
         </div>
       </div>
 
       <!-- Estado badge -->
       <div class="mt-3 pt-3" style="border-top: 1px solid #f3f4f6;">
-        {% if reto.estado == 'aprobado' or reto.estado == 'en_curso' %}
-          <span class="badge bg-success px-3 py-2">
-            <i class="bi bi-check-circle me-1"></i>{{ reto.get_estado_display }}
-          </span>
-        {% elif reto.estado == 'borrador' %}
-          <span class="badge bg-secondary px-3 py-2">{{ reto.get_estado_display }}</span>
-        {% elif reto.estado == 'en_revision' %}
-          <span class="badge bg-warning text-dark px-3 py-2">{{ reto.get_estado_display }}</span>
-        {% elif reto.estado == 'rechazado' %}
-          <span class="badge bg-danger px-3 py-2">{{ reto.get_estado_display }}</span>
-        {% else %}
-          <span class="badge bg-info text-dark px-3 py-2">{{ reto.get_estado_display }}</span>
-        {% endif %}
+        {% include 'retos/_estado_badge.html' with estado=reto.estado etiqueta=reto.get_estado_display %}
       </div>
     </div>
   </div>
@@ -102,7 +109,7 @@
     </div>
   {% endif %}
 
-  <!-- CTA postulaci\u00f3n para estudiantes -->
+  <!-- CTA postulación para estudiantes -->
   {% if user.rol == 'ESTUDIANTE' and reto.estado == 'aprobado' %}
     <div class="mb-4 p-4 rounded-3 d-flex flex-wrap justify-content-between align-items-center gap-3"
          style="background: var(--accent-light); border: 1.5px solid var(--accent);">
@@ -269,7 +276,7 @@
         </div>
       </div>
 
-      <!-- Acceso r\u00e1pido estudiante -->
+      <!-- Acceso rápido estudiante -->
       {% if user.rol == 'ESTUDIANTE' %}
         <div class="card-panel">
           <div class="card-panel-header">

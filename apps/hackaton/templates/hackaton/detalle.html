@@ -1,0 +1,197 @@
+{% extends 'base.html' %}
+
+{% block title %}Hackathon{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+
+  {# ── Columna izquierda: estado y acciones ── #}
+  <div class="col-lg-4">
+    <div class="card-panel mb-3">
+      <div class="card-panel-header">Estado</div>
+      <div class="p-4">
+        <span class="badge {% if hackathon.estado == 'publicado' or hackathon.estado == 'en_curso' %}bg-success{% elif hackathon.estado == 'finalizado' %}bg-secondary{% elif hackathon.estado == 'cancelado' %}bg-danger{% else %}bg-warning text-dark{% endif %} mb-3">
+          {{ hackathon.get_estado_display }}
+        </span>
+
+        <p class="mb-2 small">
+          <strong>Reto:</strong> {{ hackathon.reto.titulo }}<br>
+          <strong>Empresa:</strong> {{ hackathon.reto.empresa }}
+        </p>
+
+        <div class="d-flex flex-column gap-1 small text-muted mb-3">
+          <span><i class="bi bi-people"></i> {{ inscripciones|length }} equipo(s) inscrito(s)</span>
+          <span><i class="bi bi-person-badge"></i> {{ jurados|length }} jurado(s)</span>
+          <span>
+            <i class="bi bi-door-open"></i>
+            Inscripciones: {% if inscripciones_abiertas %}<span class="text-success fw-semibold">abiertas</span>{% else %}<span class="text-danger fw-semibold">cerradas</span>{% endif %}
+          </span>
+          <span>
+            <i class="bi bi-star"></i>
+            Votación: {% if votacion_abierta %}<span class="text-success fw-semibold">abierta</span>{% else %}<span class="text-danger fw-semibold">cerrada</span>{% endif %}
+          </span>
+        </div>
+
+        {% if hackathon.reglas %}
+          <hr>
+          <span class="text-muted text-uppercase small fw-bold">Reglas</span>
+          <p class="small mb-0 mt-1">{{ hackathon.reglas|linebreaksbr }}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card-panel">
+      <div class="card-panel-header">Acciones</div>
+      <div class="p-3 d-grid gap-2">
+        <a href="{% url 'hackaton:ranking' hackathon.pk %}" class="btn btn-outline-primary btn-sm">
+          <i class="bi bi-trophy"></i> Ver resultados
+        </a>
+
+        {% if es_jurado and votacion_abierta %}
+          <a href="{% url 'hackaton:votar' hackathon.pk %}" class="btn btn-primary btn-sm">
+            <i class="bi bi-star-half"></i> Calificar equipos
+          </a>
+        {% endif %}
+
+        {% if es_estudiante and inscripciones_abiertas %}
+          <a href="{% url 'hackaton:inscribir_equipo' hackathon.pk %}" class="btn btn-success btn-sm">
+            <i class="bi bi-plus-circle"></i> Inscribir mi equipo
+          </a>
+        {% endif %}
+
+        {% if puede_gestionar %}
+          <hr class="my-1">
+          <a href="{% url 'hackaton:editar' hackathon.pk %}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-gear"></i> Editar reglas y estado
+          </a>
+          <a href="{% url 'hackaton:etapas' hackathon.pk %}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-calendar3"></i> Editar etapas
+          </a>
+          <a href="{% url 'hackaton:jurados' hackathon.pk %}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-person-badge"></i> Gestionar jurados
+          </a>
+          {% if hackathon.estado == 'borrador' %}
+            <form method="post" action="{% url 'hackaton:publicar' hackathon.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-success btn-sm w-100">
+                <i class="bi bi-megaphone"></i> Publicar hackathon
+              </button>
+            </form>
+          {% endif %}
+          {% if not hackathon.resultados_publicados %}
+            <form method="post" action="{% url 'hackaton:publicar_resultados' hackathon.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-warning btn-sm w-100">
+                <i class="bi bi-trophy-fill"></i> Publicar resultados
+              </button>
+            </form>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ── Columna derecha: etapas, equipos y jurados ── #}
+  <div class="col-lg-8">
+    <div class="card-panel mb-3">
+      <div class="card-panel-header">Etapas</div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead class="table-light">
+            <tr><th class="ps-4">Etapa</th><th>Inicia</th><th>Termina</th><th class="text-center">Estado</th></tr>
+          </thead>
+          <tbody>
+            {% for etapa in etapas %}
+              <tr>
+                <td class="ps-4">
+                  <span class="fw-semibold text-dark">{{ etapa.titulo|default:etapa.get_tipo_display }}</span>
+                  <span class="badge bg-light text-dark ms-1">{{ etapa.get_tipo_display }}</span>
+                </td>
+                <td class="text-muted small">{{ etapa.inicia_en|date:"d/m/Y H:i"|default:"-" }}</td>
+                <td class="text-muted small">{{ etapa.termina_en|date:"d/m/Y H:i"|default:"-" }}</td>
+                <td class="text-center">
+                  {% if etapa.vigente %}
+                    <span class="badge bg-success">En curso</span>
+                  {% else %}
+                    <span class="badge bg-secondary">Fuera de fecha</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4" class="text-center text-muted py-4">Sin etapas configuradas.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card-panel mb-3">
+      <div class="card-panel-header">Equipos inscritos</div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th class="ps-4">Equipo</th><th>Estado</th><th>Inscrito</th>
+              {% if puede_gestionar %}<th class="text-end pe-4">Acciones</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for i in inscripciones %}
+              <tr>
+                <td class="ps-4 fw-semibold text-dark">{{ i.equipo.nombre }}</td>
+                <td>
+                  <span class="badge {% if i.estado == 'ACEPTADA' %}bg-success{% elif i.estado == 'RECHAZADA' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                    {{ i.get_estado_display }}
+                  </span>
+                </td>
+                <td class="text-muted small">{{ i.creado_en|date:"d/m/Y" }}</td>
+                {% if puede_gestionar %}
+                  <td class="text-end pe-4">
+                    {% if i.estado != 'ACEPTADA' %}
+                      <form method="post" action="{% url 'hackaton:gestionar_inscripcion' i.pk %}" class="d-inline">
+                        {% csrf_token %}
+                        <button name="accion" value="aceptar" class="btn btn-sm btn-outline-success">
+                          <i class="bi bi-check-lg"></i>
+                        </button>
+                      </form>
+                    {% endif %}
+                    {% if i.estado != 'RECHAZADA' %}
+                      <form method="post" action="{% url 'hackaton:gestionar_inscripcion' i.pk %}" class="d-inline">
+                        {% csrf_token %}
+                        <button name="accion" value="rechazar" class="btn btn-sm btn-outline-danger">
+                          <i class="bi bi-x-lg"></i>
+                        </button>
+                      </form>
+                    {% endif %}
+                  </td>
+                {% endif %}
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="{% if puede_gestionar %}4{% else %}3{% endif %}" class="text-center text-muted py-4">
+                  Todavía no hay equipos inscritos.
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card-panel">
+      <div class="card-panel-header">Jurados</div>
+      <div class="p-3">
+        {% for j in jurados %}
+          <span class="badge bg-light text-dark border me-1 mb-1 p-2">
+            <i class="bi bi-person-badge"></i> {{ j.nombre }}
+            {% if j.especialidad %}<span class="text-muted">· {{ j.especialidad }}</span>{% endif %}
+          </span>
+        {% empty %}
+          <p class="text-muted small mb-0">Sin jurados asignados.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

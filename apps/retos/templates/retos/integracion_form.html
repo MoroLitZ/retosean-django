@@ -48,6 +48,11 @@
                         {{ form.nivel_formacion }}
                         {% for error in form.nivel_formacion.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
                     </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold small text-muted" for="{{ form.ecosistema.id_for_label }}">{{ form.ecosistema.label }}</label>
+                        {{ form.ecosistema }}
+                        {% for error in form.ecosistema.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </div>
                 </div>
             </div>
         </div>
@@ -60,9 +65,65 @@
                     <label class="form-label fw-semibold small text-muted" for="{{ form.descripcion.id_for_label }}">{{ form.descripcion.label }}</label>
                     {{ form.descripcion }}
                 </div>
-                <div class="mb-0">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small text-muted" for="{{ form.alcance.id_for_label }}">{{ form.alcance.label }}</label>
+                    {{ form.alcance }}
+                </div>
+                <div class="mb-3">
                     <label class="form-label fw-semibold small text-muted" for="{{ form.entregable_esperado.id_for_label }}">{{ form.entregable_esperado.label }}</label>
                     {{ form.entregable_esperado }}
+                </div>
+                <div class="mb-0">
+                    <label class="form-label fw-semibold small text-muted" for="{{ form.cronograma_sesiones.id_for_label }}">{{ form.cronograma_sesiones.label }}</label>
+                    {{ form.cronograma_sesiones }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Tarjeta 4: Equipo -->
+        <div class="card border-0 shadow-sm mb-4" style="border-radius: 12px;">
+            <div class="card-body p-4">
+                <h5 class="fw-semibold text-primary mb-3 fs-6">4. Equipo</h5>
+                <div class="row g-3">
+                    <div class="col-md-12">
+                        <label class="form-label fw-semibold small text-muted" for="{{ form.equipo_profesores.id_for_label }}">{{ form.equipo_profesores.label }}</label>
+                        {{ form.equipo_profesores }}
+                        {% for error in form.equipo_profesores.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label fw-semibold small text-muted" for="{{ form.equipo_estudiantes.id_for_label }}">{{ form.equipo_estudiantes.label }}</label>
+                        {{ form.equipo_estudiantes }}
+                        {% for error in form.equipo_estudiantes.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label fw-semibold small text-muted" for="{{ form.expertos_invitados.id_for_label }}">{{ form.expertos_invitados.label }}</label>
+                        {{ form.expertos_invitados }}
+                        {% for error in form.expertos_invitados.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tarjeta 5: Logística -->
+        <div class="card border-0 shadow-sm mb-4" style="border-radius: 12px;">
+            <div class="card-body p-4">
+                <h5 class="fw-semibold text-primary mb-3 fs-6">5. Logística y Requerimientos</h5>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold small text-muted" for="{{ form.requerimientos_empresa.id_for_label }}">{{ form.requerimientos_empresa.label }}</label>
+                        {{ form.requerimientos_empresa }}
+                        {% for error in form.requerimientos_empresa.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold small text-muted" for="{{ form.requerimientos_internos.id_for_label }}">{{ form.requerimientos_internos.label }}</label>
+                        {{ form.requerimientos_internos }}
+                        {% for error in form.requerimientos_internos.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold small text-muted" for="{{ form.espacio_fisico.id_for_label }}">{{ form.espacio_fisico.label }}</label>
+                        {{ form.espacio_fisico }}
+                        {% for error in form.espacio_fisico.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </div>
                 </div>
             </div>
         </div>

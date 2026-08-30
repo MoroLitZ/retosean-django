@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import IntegracionAcademica, SeguimientoArchivo, SeguimientoReto, SesionReto
+from .models import IntegracionAcademica, SeguimientoArchivo, SeguimientoReto
 
 
 class SeguimientoArchivoInline(admin.TabularInline):
@@ -15,5 +15,9 @@ class SeguimientoRetoAdmin(admin.ModelAdmin):
     inlines = (SeguimientoArchivoInline,)
 
 
-admin.site.register(IntegracionAcademica)
-admin.site.register(SesionReto)
+@admin.register(IntegracionAcademica)
+class IntegracionAcademicaAdmin(admin.ModelAdmin):
+    list_display = ("reto", "profesor", "estado", "creado_en")
+    list_filter = ("estado",)
+    search_fields = ("reto__titulo", "profesor__username", "programa_academico")
+    date_hierarchy = "creado_en"

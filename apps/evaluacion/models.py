@@ -45,17 +45,22 @@ class Entregable(models.Model):
         unique_together = ["reto", "estudiante", "titulo"]
 
     def save(self, *args, **kwargs):
+        # Al reemplazar el archivo borramos el anterior, pero solo si existe
+        # y si el storage es local: en otro caso .path lanza excepcion.
         try:
-            this = Entregable.objects.get(id=self.id)
-            if this.archivo != self.archivo:
-                if os.path.isfile(this.archivo.path):
-                    os.remove(this.archivo.path)
+            anterior = Entregable.objects.get(id=self.id)
         except Entregable.DoesNotExist:
-            pass
+            anterior = None
+        if anterior and anterior.archivo and anterior.archivo != self.archivo:
+            try:
+                if os.path.isfile(anterior.archivo.path):
+                    os.remove(anterior.archivo.path)
+            except (ValueError, NotImplementedError, OSError):
+                pass
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Reto {self.reto_id} - {self.estudiante.username} ({self.estado})"
+        return f"{self.reto.titulo} - {self.estudiante.username} ({self.estado})"
 
     @property
     def nombre_archivo(self):
@@ -135,6 +140,9 @@ class EvaluacionCriterio(models.Model):
 
     class Meta:
         unique_together = ["evaluacion", "criterio"]
+
+    def __str__(self):
+        return f"{self.evaluacion} / {self.criterio}: {self.puntaje}"
 
     def clean(self):
         if self.criterio_id and (self.puntaje < 0 or self.puntaje > self.criterio.puntaje_maximo):

@@ -1,0 +1,53 @@
+{% extends 'dashboard/panel_base.html' %}
+
+{% block kpis %}
+<div class="row g-3 mb-4">
+  {% include 'dashboard/_kpi.html' with etiqueta="Mis retos" valor=kpis.retos_total icono="trophy" color="#2563eb" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Activos" valor=kpis.retos_activos icono="play-circle" color="#16a34a" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="En revisión" valor=kpis.retos_en_revision icono="hourglass-split" color="#f59e0b" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Finalizados" valor=kpis.retos_finalizados icono="flag" color="#7c3aed" %}
+</div>
+
+<div class="row g-3 mb-4">
+  {% include 'dashboard/_kpi.html' with etiqueta="Postulaciones" valor=kpis.postulaciones_total icono="send" color="#0891b2" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Pendientes" valor=kpis.postulaciones_pendientes icono="clock-history" color="#f59e0b" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Aceptadas" valor=kpis.postulaciones_aceptadas icono="person-check" color="#16a34a" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Entregables" valor=kpis.entregables_total icono="folder-check" color="#db2777" %}
+</div>
+{% endblock %}
+
+{% block graficas %}
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="card-panel h-100">
+      <div class="card-panel-header">Mis retos por estado</div>
+      <div class="p-3" style="height:300px;">
+        <canvas data-serie="retos_por_estado" data-tipo="doughnut"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card-panel h-100">
+      <div class="card-panel-header">Retos publicados por mes</div>
+      <div class="p-3" style="height:300px;">
+        <canvas data-serie="retos_por_mes" data-tipo="line" data-etiqueta="Retos"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="d-flex flex-wrap gap-2 mt-4">
+  <a href="{% url 'retos:mis_retos' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-trophy"></i> Mis retos
+  </a>
+  <a href="{% url 'empresas:postulaciones' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-send"></i> Postulaciones recibidas
+  </a>
+  <a href="{% url 'retos:crear' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-plus-lg"></i> Publicar reto
+  </a>
+  <a href="{% url 'empresas:documentos' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-file-earmark-text"></i> Mis documentos
+  </a>
+</div>
+{% endblock %}

@@ -18,17 +18,16 @@ def lista_unidades(request):
 
     from apps.academico.models import Programa
 
-    # Programas unicos por nombre normalizado (sin duplicados por acentos/tildes)
-    programas = []
-    vistos = set()
-    for p in Programa.objects.filter(unidades_estudio__isnull=False).order_by("nombre"):
-        key = p.nombre.lower().replace("í", "i").replace("ó", "o").replace("é", "e").replace("á", "a").replace("ú", "u")
-        if key not in vistos:
-            vistos.add(key)
-            programas.append(p)
+    programas = Programa.objects.filter(unidades_estudio__isnull=False).order_by("nombre")
 
     programa_id = request.GET.get("programa", "").strip()
+    filtro_activo = request.GET.get("activo", "1")
     unidades = UnidadEstudio.objects.select_related("programa__facultad")
+
+    # El borrado logico no cerraba: las unidades desactivadas seguian listandose.
+    # Por defecto solo se muestran las activas; "activo=0" revela las inactivas.
+    if filtro_activo == "1":
+        unidades = unidades.filter(activo=True)
 
     if programa_id:
         unidades = unidades.filter(programa_id=programa_id)
@@ -37,6 +36,7 @@ def lista_unidades(request):
         "unidades": unidades,
         "programas": programas,
         "programa_id": programa_id,
+        "filtro_activo": filtro_activo,
     })
 
 
@@ -48,10 +48,14 @@ def crear_unidad(request):
 
     errores = {}
 
+    if request.method == "POST" and request.POST.get("accion") == "cargar_csv":
+        # El formulario ofrecia esta carga masiva pero la vista nunca la leia.
+        return _procesar_csv(request)
+
     if request.method == "POST":
         codigo = request.POST.get("codigo", "").strip()
         nombre = request.POST.get("nombre", "").strip()
-        programa_nombre = request.POST.get("programa", "").strip()
+        programa_id = request.POST.get("programa", "").strip()
         periodo = request.POST.get("periodo", "").strip()
         ciclo = request.POST.get("ciclo", "").strip()
         archivo = request.FILES.get("archivo")
@@ -60,25 +64,15 @@ def crear_unidad(request):
             errores["codigo"] = "El código es obligatorio."
         if not nombre:
             errores["nombre"] = "El nombre es obligatorio."
-        if not programa_nombre:
+
+        programa = _resolver_programa(programa_id)
+        if not programa:
             errores["programa"] = "El programa académico es obligatorio."
 
         if UnidadEstudio.objects.filter(codigo=codigo).exists():
             errores["codigo"] = "Ese código ya está vinculado a otra materia."
 
         if not errores:
-            from apps.academico.models import Programa, Facultad
-
-            facultad, _ = Facultad.objects.get_or_create(
-                nombre="Facultad de Ingeniería y Ciencias Básicas",
-                defaults={"codigo": "FICB"},
-            )
-
-            programa, _ = Programa.objects.get_or_create(
-                nombre__iexact=programa_nombre,
-                defaults={"nombre": programa_nombre, "facultad": facultad},
-            )
-
             UnidadEstudio.objects.create(
                 codigo=codigo,
                 nombre=nombre,
@@ -95,10 +89,11 @@ def crear_unidad(request):
 
     return render(request, "unidades_estudio/form.html", {
         "accion": "Crear",
+        "programas": _programas_contexto(),
+        "programa_seleccionado": _entero(request.POST.get("programa")),
         "unidad": type("obj", (), {
             "codigo": request.POST.get("codigo", ""),
             "nombre": request.POST.get("nombre", ""),
-            "programa": type("obj", (), {"nombre": request.POST.get("programa", "")})(),
             "periodo": request.POST.get("periodo", ""),
             "ciclo": request.POST.get("ciclo", ""),
             "archivo": None,
@@ -117,7 +112,7 @@ def editar_unidad(request, pk):
     if request.method == "POST":
         codigo_nuevo = request.POST.get("codigo", "").strip()
         nombre = request.POST.get("nombre", "").strip()
-        programa_nombre = request.POST.get("programa", "").strip()
+        programa_id = request.POST.get("programa", "").strip()
         periodo = request.POST.get("periodo", "").strip()
         ciclo = request.POST.get("ciclo", "").strip()
         archivo = request.FILES.get("archivo")
@@ -127,7 +122,9 @@ def editar_unidad(request, pk):
             errores["codigo"] = "El código es obligatorio."
         if not nombre:
             errores["nombre"] = "El nombre es obligatorio."
-        if not programa_nombre:
+
+        programa = _resolver_programa(programa_id)
+        if not programa:
             errores["programa"] = "El programa académico es obligatorio."
 
         if not errores:
@@ -139,27 +136,16 @@ def editar_unidad(request, pk):
                 messages.error(request, msg)
             return render(request, "unidades_estudio/form.html", {
                 "accion": "Editar",
+                "programas": _programas_contexto(),
+                "programa_seleccionado": _entero(programa_id),
                 "unidad": type("obj", (), {
                     "codigo": codigo_nuevo,
                     "nombre": nombre,
-                    "programa": type("obj", (), {"nombre": programa_nombre})(),
                     "periodo": periodo,
                     "ciclo": ciclo,
                     "archivo": unidad.archivo,
                 })(),
             })
-
-        from apps.academico.models import Programa, Facultad
-
-        facultad, _ = Facultad.objects.get_or_create(
-            nombre="Facultad de Ingeniería y Ciencias Básicas",
-            defaults={"codigo": "FICB"},
-        )
-
-        programa, _ = Programa.objects.get_or_create(
-            nombre__iexact=programa_nombre,
-            defaults={"nombre": programa_nombre, "facultad": facultad},
-        )
 
         unidad.codigo = codigo_nuevo
         unidad.nombre = nombre
@@ -175,6 +161,8 @@ def editar_unidad(request, pk):
 
     return render(request, "unidades_estudio/form.html", {
         "accion": "Editar",
+        "programas": _programas_contexto(),
+        "programa_seleccionado": unidad.programa_id,
         "unidad": unidad,
     })
 
@@ -204,4 +192,123 @@ def activar_unidad(request, pk):
     unidad.activo = True
     unidad.save()
     messages.success(request, f"Unidad de estudio '{unidad.codigo}' activada correctamente.")
+    return redirect("unidades_estudio:lista")
+
+
+CSV_COLUMNAS_OBLIGATORIAS = ["codigo", "nombre", "programa"]
+
+
+def _programas_contexto():
+    from apps.academico.models import Programa
+
+    return Programa.objects.select_related("facultad").order_by("nombre")
+
+
+def _resolver_programa(programa_id):
+    """Devuelve el Programa por su id, o None si no es valido."""
+    from apps.academico.models import Programa
+
+    if not programa_id:
+        return None
+    try:
+        return Programa.objects.get(pk=int(programa_id))
+    except (ValueError, TypeError, Programa.DoesNotExist):
+        return None
+
+
+def _entero(valor):
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return None
+
+
+def _buscar_programa_por_nombre(nombre):
+    """Busca un programa por nombre exacto, sin crear filas nuevas."""
+    from apps.academico.models import Programa
+
+    return Programa.objects.filter(nombre__iexact=nombre.strip()).first()
+
+
+def _procesar_csv(request):
+    """Crea varias unidades de estudio a partir de un CSV."""
+    import csv
+    import io
+
+    archivo = request.FILES.get("archivo_csv")
+    if archivo is None:
+        messages.error(request, "Selecciona un archivo CSV.")
+        return redirect("unidades_estudio:crear")
+
+    contenido = archivo.read()
+    texto = None
+    for codificacion in ("utf-8-sig", "latin-1"):
+        try:
+            texto = contenido.decode(codificacion)
+            break
+        except UnicodeDecodeError:
+            continue
+    if texto is None:
+        messages.error(request, "No se pudo leer el archivo: codificacion no reconocida.")
+        return redirect("unidades_estudio:crear")
+
+    try:
+        dialecto = csv.Sniffer().sniff(texto[:2048], delimiters=",;	")
+    except csv.Error:
+        dialecto = csv.excel
+
+    lector = csv.DictReader(io.StringIO(texto), dialect=dialecto)
+    cabeceras = [(c or "").strip().lower() for c in (lector.fieldnames or [])]
+    faltantes = [c for c in CSV_COLUMNAS_OBLIGATORIAS if c not in cabeceras]
+    if faltantes:
+        messages.error(
+            request,
+            "Al CSV le faltan estas columnas obligatorias: " + ", ".join(faltantes) + ".",
+        )
+        return redirect("unidades_estudio:crear")
+
+    cache_programas = {}
+    creadas, problemas = 0, []
+
+    for numero, fila in enumerate(lector, start=2):
+        datos = {(k or "").strip().lower(): (v or "").strip() for k, v in fila.items()}
+        codigo = datos.get("codigo", "")
+        nombre = datos.get("nombre", "")
+        programa_nombre = datos.get("programa", "")
+
+        if not (codigo and nombre and programa_nombre):
+            problemas.append(f"fila {numero}: faltan codigo, nombre o programa")
+            continue
+        if UnidadEstudio.objects.filter(codigo=codigo).exists():
+            problemas.append(f"fila {numero}: el codigo {codigo} ya existe")
+            continue
+
+        clave = programa_nombre.lower()
+        programa = cache_programas.get(clave)
+        if programa is None:
+            programa = _buscar_programa_por_nombre(programa_nombre)
+            if programa is None:
+                problemas.append(
+                    f"fila {numero}: el programa '{programa_nombre}' no existe en el catálogo"
+                )
+                continue
+            cache_programas[clave] = programa
+
+        UnidadEstudio.objects.create(
+            codigo=codigo,
+            nombre=nombre,
+            programa=programa,
+            periodo=datos.get("periodo", ""),
+            ciclo=datos.get("ciclo", ""),
+        )
+        creadas += 1
+
+    if creadas:
+        messages.success(request, f"{creadas} unidad(es) de estudio creada(s) desde el CSV.")
+    if problemas:
+        detalle = "; ".join(problemas[:8]) + ("; ..." if len(problemas) > 8 else "")
+        messages.warning(request, f"{len(problemas)} fila(s) omitida(s): {detalle}")
+    if not creadas and not problemas:
+        messages.warning(request, "El CSV no contenia filas de datos.")
+
     return redirect("unidades_estudio:lista")

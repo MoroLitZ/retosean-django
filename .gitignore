@@ -10,4 +10,8 @@ staticfiles/
 *.err
 .DS_Store
 
+# Artefactos temporales de pruebas
+_test_result.txt
+test_out.txt
+
 retos_db.sqlite3

@@ -107,12 +107,17 @@ class DocumentoEmpresa(models.Model):
         
         if self.pk:
             try:
-                this = DocumentoEmpresa.objects.get(id=self.id)
-                if this.archivo != self.archivo:
-                    if os.path.isfile(this.archivo.path):
-                        os.remove(this.archivo.path)
+                anterior = DocumentoEmpresa.objects.get(id=self.id)
             except DocumentoEmpresa.DoesNotExist:
-                pass
+                anterior = None
+            # Solo intentamos borrar si realmente habia archivo previo:
+            # sobre un FileField vacio, .path lanza ValueError.
+            if anterior and anterior.archivo and anterior.archivo != self.archivo:
+                try:
+                    if os.path.isfile(anterior.archivo.path):
+                        os.remove(anterior.archivo.path)
+                except (ValueError, NotImplementedError, OSError):
+                    pass
         super().save(*args, **kwargs)
 
     def __str__(self):

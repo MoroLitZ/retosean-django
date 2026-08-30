@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+
+{% block title %}Error del servidor{% endblock %}
+{% block page_title %}Error del servidor{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column align-items-center justify-content-center" style="min-height: 58vh;">
+  <div class="text-center" style="max-width: 460px;">
+    <div class="mb-4" style="font-size: 5rem; font-weight: 800; color: var(--accent); opacity: 0.4;">500</div>
+    <h2 class="fw-bold mb-2" style="color: #111827;">Algo salió mal</h2>
+    <p class="text-muted mb-4">
+      Ocurrió un error inesperado al procesar tu solicitud. Intenta de nuevo en unos minutos.
+    </p>
+    <a href="{% url 'usuarios:perfil' %}" class="btn" style="background: var(--accent); color: #fff; border: none;">
+      <i class="bi bi-arrow-clockwise me-1"></i> Reintentar
+    </a>
+  </div>
+</div>
+{% endblock %}

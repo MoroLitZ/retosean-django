@@ -1,0 +1,132 @@
+{% extends 'base.html' %}
+
+{% block title %}Importar usuarios{% endblock %}
+{% block page_title %}Importación Masiva de Usuarios{% endblock %}
+
+{% block content %}
+<div class="card-panel mb-3">
+  <div class="card-panel-header d-flex justify-content-between align-items-center">
+    <span>Cargar archivo</span>
+    <a href="{% url 'usuarios:plantilla_importacion' %}" class="btn btn-sm btn-outline-light">
+      <i class="bi bi-download"></i> Descargar plantilla CSV
+    </a>
+  </div>
+
+  <div class="p-4">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div class="row g-3 align-items-end">
+        <div class="col-md-8">
+          <label for="archivo" class="form-label small fw-semibold text-secondary">
+            Archivo CSV o Excel (.csv, .xlsx)
+          </label>
+          <input type="file" name="archivo" id="archivo" accept=".csv,.xlsx,.xlsm"
+                 class="form-control form-control-sm" required>
+        </div>
+        <div class="col-md-4">
+          <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">
+            <i class="bi bi-eye"></i> Previsualizar
+          </button>
+        </div>
+      </div>
+    </form>
+
+    <hr class="my-4">
+
+    <h6 class="fw-bold text-dark mb-2">Formato esperado</h6>
+    <p class="text-muted small mb-2">
+      La primera fila debe contener los nombres de las columnas. Obligatorias:
+      {% for c in columnas_obligatorias %}<code>{{ c }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}.
+      Opcionales: <code>first_name</code>, <code>last_name</code>, <code>telefono</code>, <code>password</code>.
+    </p>
+    <p class="text-muted small mb-0">
+      Si dejas <code>password</code> vacío la cuenta se crea sin contraseña utilizable
+      y la persona deberá establecerla mediante recuperación de contraseña.
+      Roles válidos: <code>ADMIN</code>, <code>EMPRESA</code>, <code>PROFESOR</code>, <code>ESTUDIANTE</code>.
+    </p>
+  </div>
+</div>
+
+{% if lectura %}
+  {% if lectura.error_global %}
+    <div class="alert alert-danger">
+      <i class="bi bi-exclamation-octagon-fill me-1"></i> {{ lectura.error_global }}
+    </div>
+  {% else %}
+    <div class="card-panel">
+      <div class="card-panel-header d-flex justify-content-between align-items-center">
+        <span>Previsualización</span>
+        <span>
+          <span class="badge bg-success">{{ lectura.validas|length }} válida(s)</span>
+          {% if lectura.invalidas %}
+            <span class="badge bg-danger">{{ lectura.invalidas|length }} con errores</span>
+          {% endif %}
+        </span>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th class="ps-4" style="width:60px;">Fila</th>
+              <th>Usuario</th>
+              <th>Correo</th>
+              <th>Nombre</th>
+              <th>Rol</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for fila in lectura.filas %}
+              <tr class="{% if not fila.valida %}table-danger{% endif %}">
+                <td class="ps-4 text-muted">{{ fila.numero }}</td>
+                <td class="fw-semibold text-dark">{{ fila.datos.username|default:"-" }}</td>
+                <td class="small">{{ fila.datos.email|default:"-" }}</td>
+                <td class="small text-muted">{{ fila.datos.first_name }} {{ fila.datos.last_name }}</td>
+                <td><span class="badge bg-secondary">{{ fila.datos.rol|default:"-" }}</span></td>
+                <td>
+                  {% if fila.valida %}
+                    <span class="text-success small"><i class="bi bi-check-circle-fill"></i> Lista</span>
+                  {% else %}
+                    <span class="text-danger small">
+                      {% for error in fila.errores %}
+                        <span class="d-block"><i class="bi bi-x-circle"></i> {{ error }}</span>
+                      {% endfor %}
+                    </span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if lectura.validas %}
+        <div class="p-3 border-top">
+          <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="confirmar">
+            <div class="row g-2 align-items-end">
+              <div class="col-md-8">
+                <label for="archivo_confirmar" class="form-label small fw-semibold text-secondary">
+                  Vuelve a seleccionar el mismo archivo para confirmar
+                </label>
+                <input type="file" name="archivo" id="archivo_confirmar" accept=".csv,.xlsx,.xlsm"
+                       class="form-control form-control-sm" required>
+              </div>
+              <div class="col-md-4">
+                <button type="submit" class="btn btn-success btn-sm w-100 fw-bold">
+                  <i class="bi bi-cloud-upload"></i> Crear {{ lectura.validas|length }} usuario(s)
+                </button>
+              </div>
+            </div>
+            <p class="text-muted small mb-0 mt-2">
+              Las filas con errores se omiten; el resto se crea en una sola transacción.
+            </p>
+          </form>
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+{% endif %}
+{% endblock %}

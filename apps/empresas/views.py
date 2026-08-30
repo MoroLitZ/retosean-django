@@ -1,25 +1,35 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.urls import reverse
+from django.views.decorators.http import require_POST
 
 from .models import Empresa, DocumentoEmpresa
 from .forms import CargarDocumentoForm
 from apps.retos.models import Reto
 from apps.participaciones.models import Postulacion as PostulacionReto
 from apps.evaluacion.models import Entregable
-from apps.usuarios.views import _url_para_usuario
+from apps.notificaciones.services import notificar, notificar_admins
+from apps.usuarios.decorators import solo_admin, solo_empresa
+from apps.usuarios.roles import es_admin, url_dashboard_para
 from .services import puede_la_empresa_operar
 
 
 @login_required(login_url='usuarios:login')
 def panel_documentos_empresa(request):
     empresa = getattr(request.user, 'empresa_perfil', None)
-    
+
     if not empresa and not request.user.is_staff:
         messages.error(request, "Acceso denegado.")
         return redirect('usuarios:login')
 
     if request.method == 'POST':
+        # Sin perfil de empresa no hay a quien asociar el documento:
+        # un staff que entre aqui solo puede consultar.
+        if not empresa:
+            messages.error(request, "No tienes un perfil de empresa al que asociar documentos.")
+            return redirect('empresas:documentos')
+
         form = CargarDocumentoForm(request.POST, request.FILES)
 
         if form.is_valid():
@@ -45,7 +55,11 @@ def panel_documentos_empresa(request):
     else:
         form = CargarDocumentoForm()
 
-    documentos = DocumentoEmpresa.objects.filter(empresa=empresa) if empresa else []
+    documentos = (
+        DocumentoEmpresa.objects.filter(empresa=empresa)
+        if empresa
+        else DocumentoEmpresa.objects.none()
+    )
     
     estados_config = {
         'CARGADO': ('En Revisión', 'bg-info text-dark'),
@@ -56,6 +70,7 @@ def panel_documentos_empresa(request):
 
     context = {
         'form': form,
+        'documentos_requeridos': len(DocumentoEmpresa.TIPO_DOCUMENTO_CHOICES),
         'documentos': [
             {
                 'tipo': doc.get_tipo_documento_display(),
@@ -74,17 +89,17 @@ def panel_documentos_empresa(request):
     return render(request, 'empresas/panel_documentos.html', context)
 
 
-@login_required(login_url='usuarios:login')
+@solo_empresa
 def postulaciones_empresa(request):
     """Gestión de postulaciones y entregables recibidos por la empresa"""
-    if request.user.rol != 'EMPRESA' or not hasattr(request.user, 'empresa_perfil'):
+    if not hasattr(request.user, 'empresa_perfil'):
         messages.error(request, "Primero debes completar el perfil de tu empresa.")
-        return redirect(_url_para_usuario(request.user))
+        return redirect(url_dashboard_para(request.user))
 
     empresa = request.user.empresa_perfil
     retos_empresa = Reto.objects.filter(empresa=request.user)
-    estado_filtro = request.GET.get('estado', 'PENDIENTE')
-    estados_validos = {'PENDIENTE', 'ACEPTADA', 'RECHAZADA'}
+    estado_filtro = request.GET.get('estado', '')
+    estados_validos = {'PENDIENTE', 'ACEPTADA', 'RECHAZADA', 'RETIRADA'}
 
     postulaciones = PostulacionReto.objects.filter(
         reto__in=retos_empresa
@@ -106,11 +121,12 @@ def postulaciones_empresa(request):
     })
 
 
-@login_required(login_url='usuarios:login')
+@solo_empresa
+@require_POST
 def gestionar_postulacion(request, postulacion_id):
     """Aceptar o rechazar una postulación de estudiante"""
-    if request.user.rol != 'EMPRESA' or not hasattr(request.user, 'empresa_perfil'):
-        return redirect(_url_para_usuario(request.user))
+    if not hasattr(request.user, 'empresa_perfil'):
+        return redirect(url_dashboard_para(request.user))
 
     # CORRECCIÓN: Filtrar por empresa_perfil
     postulacion = get_object_or_404(
@@ -119,25 +135,91 @@ def gestionar_postulacion(request, postulacion_id):
         reto__empresa=request.user,
     )
 
-    if request.method == 'POST':
-        accion = request.POST.get('accion')
-        if accion == 'aceptar':
-            postulacion.estado = 'ACEPTADA'
-            postulacion.save()
+    accion = request.POST.get('accion')
+    if accion in {'aceptar', 'rechazar'}:
+        aceptada = accion == 'aceptar'
+        postulacion.estado = 'ACEPTADA' if aceptada else 'RECHAZADA'
+        postulacion.save(update_fields=['estado'])
+        _notificar_respuesta_postulacion(postulacion, aceptada)
+        if aceptada:
             messages.success(request, 'Postulación aceptada.')
-        elif accion == 'rechazar':
-            postulacion.estado = 'RECHAZADA'
-            postulacion.save()
+        else:
             messages.warning(request, 'Postulación rechazada.')
+    else:
+        messages.error(request, 'Acción no reconocida.')
 
     return redirect('empresas:postulaciones')
 
 
-@login_required(login_url='usuarios:login')
+def _notificar_respuesta_postulacion(postulacion, aceptada):
+    reto = postulacion.reto
+    if aceptada:
+        mensaje = (
+            f'Fuiste aceptado en el reto "{reto.titulo}". '
+            'Ya puedes cargar tus entregables desde la plataforma.'
+        )
+    else:
+        mensaje = f'Tu postulacion al reto "{reto.titulo}" no fue seleccionada en esta ocasion.'
+    notificar(
+        postulacion.estudiante, 'POSTULACION_GESTIONADA',
+        mensaje=mensaje,
+        tipo='EXITO' if aceptada else 'ADVERTENCIA',
+        link=reverse('retos:detalle', kwargs={'pk': reto.pk}),
+        clave_dedupe=f'postulacion:{postulacion.pk}:{postulacion.estado}',
+    )
+
+
+def _actualizar_estado_validacion(empresa):
+    """Mantiene Empresa.estado_validacion coherente con sus documentos.
+
+    Antes solo se escribia 'RECHAZADA' desde listas restrictivas, asi que la UI
+    mostraba 'Pendiente' incluso con toda la documentacion aprobada.
+    """
+    if empresa.estado_listas_restrictivas == 'RECHAZADO':
+        return
+    estados = set(
+        DocumentoEmpresa.objects.filter(empresa=empresa).values_list('estado', flat=True)
+    )
+    if 'RECHAZADO' in estados:
+        nuevo = 'RECHAZADA'
+    elif puede_la_empresa_operar(empresa):
+        nuevo = 'VERIFICADA'
+    elif estados:
+        nuevo = 'EN_REVISION'
+    else:
+        nuevo = 'PENDIENTE'
+    if empresa.estado_validacion != nuevo:
+        empresa.estado_validacion = nuevo
+        empresa.save(update_fields=['estado_validacion'])
+
+
+def _notificar_revision_documento(documento, nuevo_estado, motivo):
+    destino = documento.empresa.usuario
+    etiqueta = documento.get_tipo_documento_display()
+    if nuevo_estado == 'VERIFICADO':
+        mensaje = f'Tu documento "{etiqueta}" fue verificado y aprobado.'
+        tipo = 'EXITO'
+    elif nuevo_estado == 'RECHAZADO':
+        mensaje = f'Tu documento "{etiqueta}" fue rechazado.'
+        if motivo:
+            mensaje += f'\nMotivo: {motivo}'
+        mensaje += '\nPuedes volver a cargarlo desde tu panel de documentacion.'
+        tipo = 'ERROR'
+    else:
+        return
+    notificar(
+        destino, 'DOCUMENTO_REVISADO',
+        mensaje=mensaje, tipo=tipo,
+        link=reverse('empresas:documentos'),
+        clave_dedupe=f'documento:{documento.pk}:{nuevo_estado}:{documento.pk}',
+    )
+
+
+@solo_empresa
 def indicadores_empresa(request):
     """Indicadores y estadísticas de gestión de la empresa"""
-    if request.user.rol != 'EMPRESA' or not hasattr(request.user, 'empresa_perfil'):
-        return redirect(_url_para_usuario(request.user))
+    if not hasattr(request.user, 'empresa_perfil'):
+        return redirect(url_dashboard_para(request.user))
 
     retos = Reto.objects.filter(empresa=request.user)
     context = {
@@ -166,8 +248,9 @@ def mis_retos_empresa(request):
     return redirect('retos:mis_retos')
 
 
-@login_required
+@solo_admin
 def admin_revisar_documentacion(request, empresa_id):
+    """Documentacion legal de una empresa (HU00): solo el administrador."""
     empresa = get_object_or_404(Empresa, id=empresa_id)
     pendientes = DocumentoEmpresa.objects.filter(empresa=empresa).exclude(estado__in=['VERIFICADO', 'RECHAZADO'])
 
@@ -177,48 +260,51 @@ def admin_revisar_documentacion(request, empresa_id):
     })
 
 
-@login_required
+@require_POST
+@solo_admin
 def procesar_aprobacion(request, documento_id):
-    if request.method == 'POST':
-        documento = get_object_or_404(DocumentoEmpresa, id=documento_id)
-        
-        nuevo_estado = request.POST.get('nuevo_estado')
-        motivo = request.POST.get('motivo', '')
-        
-        if nuevo_estado == 'VERIFICADO':
-            documento.estado = 'VERIFICADO'
-            documento.motivo_rechazo = ''
-        elif nuevo_estado == 'RECHAZADO':
-            documento.estado = 'RECHAZADO'
-            documento.motivo_rechazo = motivo
-        
-        documento.save()
-        messages.success(request, f"Documento {documento.get_tipo_documento_display()} procesado correctamente.")
-        
-        return redirect('empresas:admin_revisar_documentacion', empresa_id=documento.empresa.id)
-    
-    return redirect('empresas:lista_empresas')
+    """Verifica o rechaza un documento legal. Solo el administrador, y solo por POST."""
+    documento = get_object_or_404(DocumentoEmpresa, id=documento_id)
+
+    nuevo_estado = request.POST.get('nuevo_estado')
+    motivo = request.POST.get('motivo', '')
+
+    # Antes cualquier otro valor caia igual en el save() y mostraba
+    # "procesado correctamente" sin haber cambiado nada.
+    if nuevo_estado not in ('VERIFICADO', 'RECHAZADO'):
+        messages.error(request, "Debes indicar si el documento queda verificado o rechazado.")
+        return redirect('empresas:admin_revisar_documentacion', empresa_id=documento.empresa_id)
+
+    if nuevo_estado == 'RECHAZADO' and not motivo.strip():
+        messages.error(request, "Para rechazar un documento debes indicar el motivo.")
+        return redirect('empresas:admin_revisar_documentacion', empresa_id=documento.empresa_id)
+
+    documento.estado = nuevo_estado
+    documento.motivo_rechazo = motivo if nuevo_estado == 'RECHAZADO' else ''
+    documento.save()
+    _actualizar_estado_validacion(documento.empresa)
+    _notificar_revision_documento(documento, nuevo_estado, motivo)
+    messages.success(request, f"Documento {documento.get_tipo_documento_display()} procesado correctamente.")
+
+    return redirect('empresas:admin_revisar_documentacion', empresa_id=documento.empresa_id)
 
 
-@login_required(login_url='usuarios:login')
+@solo_admin
 def lista_empresas(request):
     """Gestión y listado de empresas aliadas"""
-    if not request.user.is_superuser:
-        return redirect(_url_para_usuario(request.user))
-    
     empresas = Empresa.objects.all().order_by('razon_social')
     return render(request, 'usuarios/admin/lista_empresas.html', {
         'empresas': empresas,
         'titulo': 'Empresas Aliadas'
     })
     
-@login_required
+@solo_admin
 def procesar_listas_restrictivas(request, empresa_id):
-    """Permite al administrador registrar el resultado de listas restrictivas (Clinton/OFAC) y subir evidencia"""
-    if not request.user.is_staff:
-        messages.error(request, "Acceso denegado.")
-        return redirect('usuarios:login')
+    """Permite al administrador registrar el resultado de listas restrictivas (Clinton/OFAC) y subir evidencia.
 
+    Antes gateaba con `is_staff`, que deja fuera a un usuario con rol ADMIN sin
+    ese flag: el resto del proyecto usa `es_admin`.
+    """
     empresa = get_object_or_404(Empresa, id=empresa_id)
 
     if request.method == 'POST':
@@ -247,38 +333,58 @@ def procesar_listas_restrictivas(request, empresa_id):
                     empresa.usuario.is_active = False
                     empresa.usuario.save()
                 
+                notificar(
+                    empresa.usuario, 'EMPRESA_LISTAS_RESTRICTIVAS',
+                    mensaje=(
+                        'Tu organizacion aparece en listas restrictivas (Clinton/OFAC). '
+                        'La cuenta quedo inhabilitada y la documentacion fue rechazada. '
+                        'Comunicate con la Universidad EAN para revisar el caso.'
+                    ),
+                    clave_dedupe=f'empresa:{empresa.pk}:listas:RECHAZADO',
+                )
+                notificar_admins(
+                    'EMPRESA_LISTAS_RESTRICTIVAS',
+                    mensaje=f'La empresa {empresa.razon_social} fue rechazada por listas restrictivas.',
+                    excluir=request.user,
+                    clave_dedupe=f'empresa:{empresa.pk}:listas:RECHAZADO:admin',
+                )
                 messages.warning(request, f"La empresa {empresa.razon_social} fue rechazada por listas restrictivas y su cuenta ha sido inhabilitada.")
             elif estado_listas == 'APROBADO':
                 messages.success(request, f"Verificación de listas restrictivas aprobada para {empresa.razon_social}.")
-                # Si por error estuvo rechazada antes y ahora se aprueba, podríamos reactivar el usuario opcionalmente:
+                # Si por error estuvo rechazada antes y ahora se aprueba, reactivamos la cuenta.
                 if empresa.usuario and not empresa.usuario.is_active:
                     empresa.usuario.is_active = True
                     empresa.usuario.save()
 
             empresa.save()
+
+            # El estado de validacion se quedaba congelado en 'RECHAZADA' para
+            # siempre al levantar el bloqueo: hay que recalcularlo desde los
+            # documentos, ya sin el corto circuito de listas restrictivas.
+            if estado_listas != 'RECHAZADO':
+                _actualizar_estado_validacion(empresa)
         else:
             messages.error(request, "Estado de listas no válido.")
 
     return redirect('empresas:admin_revisar_documentacion', empresa_id=empresa.id)
 
-@login_required
+@solo_empresa
 def elegir_modo_convenio(request):
-    # Asumimos que la empresa está vinculada al usuario (ajusta si tu relación es diferente)
+    """La empresa decide si tramita convenio marco o publica de forma directa."""
     empresa = getattr(request.user, 'empresa_perfil', None)
     if not empresa:
         messages.error(request, 'No tienes un perfil de empresa asociado.')
-        return redirect('home') # O la ruta principal que uses
+        return redirect(url_dashboard_para(request.user))
 
     if request.method == 'POST':
         opcion = request.POST.get('opcion')
         if opcion == 'si_convenio':
-            # Quiere convenio -> Lo mandamos a subir sus documentos legales
-            return redirect('empresas:documentos') # Ajusta el nombre de la URL de documentos si es distinto
-        elif opcion == 'no_convenio':
-            # No quiere convenio -> Marcamos que renunció y lo mandamos a crear el reto directamente
+            return redirect('empresas:documentos')
+        if opcion == 'no_convenio':
             empresa.renuncio_a_convenio = True
-            empresa.save()
+            empresa.save(update_fields=['renuncio_a_convenio'])
             messages.success(request, 'Has seleccionado publicar de forma directa sin convenio.')
-            return redirect('retos:crear') # Ajusta el nombre de la URL para crear retos
-            
-    return render(request, 'empresas/elegir_convenio.html')
+            return redirect('retos:crear')
+        messages.error(request, 'Selecciona una de las dos opciones para continuar.')
+
+    return render(request, 'empresas/elegir_convenio.html', {'empresa': empresa})

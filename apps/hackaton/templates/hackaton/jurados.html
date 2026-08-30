@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+
+{% block title %}Jurados{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="card-panel">
+      <div class="card-panel-header">Agregar jurado</div>
+      <div class="p-3">
+        <form method="post">
+          {% csrf_token %}
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger small">{{ form.non_field_errors }}</div>
+          {% endif %}
+          {% for campo in form %}
+            <div class="mb-2">
+              <label for="{{ campo.id_for_label }}" class="form-label small fw-semibold text-secondary">
+                {{ campo.label }}
+              </label>
+              {{ campo }}
+              {% if campo.errors %}<div class="text-danger small">{{ campo.errors }}</div>{% endif %}
+            </div>
+          {% endfor %}
+          <p class="text-muted small">
+            Si asocias una cuenta, esa persona podrá votar desde la plataforma.
+          </p>
+          <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">
+            <i class="bi bi-plus-lg"></i> Agregar jurado
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card-panel">
+      <div class="card-panel-header d-flex justify-content-between align-items-center">
+        <span>Panel de jurados</span>
+        <a href="{% url 'hackaton:detalle' hackathon.pk %}" class="btn btn-sm btn-outline-light">
+          <i class="bi bi-arrow-left"></i> Volver
+        </a>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead class="table-light">
+            <tr><th class="ps-4">Nombre</th><th>Especialidad</th><th>Cuenta</th><th class="text-end pe-4"></th></tr>
+          </thead>
+          <tbody>
+            {% for j in jurados %}
+              <tr>
+                <td class="ps-4 fw-semibold text-dark">{{ j.nombre }}</td>
+                <td class="text-muted small">{{ j.especialidad|default:"-" }}</td>
+                <td class="text-muted small">
+                  {% if j.usuario %}
+                    <i class="bi bi-check-circle-fill text-success"></i> {{ j.usuario.username }}
+                  {% else %}
+                    <span class="text-muted">Externo</span>
+                  {% endif %}
+                </td>
+                <td class="text-end pe-4">
+                  <form method="post" action="{% url 'hackaton:eliminar_jurado' j.pk %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Retirar jurado">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </form>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4" class="text-center text-muted py-4">Sin jurados asignados.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

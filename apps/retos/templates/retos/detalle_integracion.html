@@ -76,6 +76,82 @@
     </div>
   </div>
 
+  <div class="card border-0 shadow-sm mb-4" style="border-radius: 12px;">
+    <div class="card-body p-4">
+      <h5 class="fw-semibold text-primary mb-3 fs-6">Equipos académicos</h5>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr class="text-muted small">
+              <th>Equipo</th>
+              <th>Estudiantes</th>
+              {% if user.rol == 'PROFESOR' and integracion.estado in 'aprobada,publicada' %}
+              <th class="text-end">Acciones</th>
+              {% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for equipo in equipos %}
+            <tr>
+              <td class="fw-medium text-dark">{{ equipo.nombre_equipo }}</td>
+              <td class="text-secondary">{{ equipo.estudiantes.count }}</td>
+              {% if user.rol == 'PROFESOR' and integracion.estado in 'aprobada,publicada' %}
+              <td class="text-end">
+                <a href="{% url 'retos:editar_equipo_academico' equipo.pk %}" class="btn btn-sm btn-outline-primary">Editar</a>
+                <form method="post" action="{% url 'retos:eliminar_equipo_academico' equipo.pk %}" class="d-inline">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('¿Eliminar este equipo académico?');">Eliminar</button>
+                </form>
+              </td>
+              {% endif %}
+            </tr>
+            {% empty %}
+            <tr><td colspan="3" class="text-muted text-center py-3">Sin equipos configurados todavía.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm mb-4" style="border-radius: 12px;">
+    <div class="card-body p-4">
+      <h5 class="fw-semibold text-primary mb-3 fs-6">Sesiones académicas</h5>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr class="text-muted small">
+              <th>Tipo</th>
+              <th>Fecha y hora</th>
+              <th>Enlace de reunión</th>
+              <th>Observaciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for sesion in sesiones %}
+            <tr>
+              <td><span class="badge bg-light text-dark border">{{ sesion.get_tipo_display }}</span></td>
+              <td class="text-dark">{{ sesion.fecha_hora|date:"d/m/Y H:i" }}</td>
+              <td>
+                {% if sesion.enlace_reunion %}
+                <a href="{{ sesion.enlace_reunion }}" target="_blank" rel="noopener" class="text-decoration-none">
+                  <i class="bi bi-camera-video me-1"></i> Unirse
+                </a>
+                {% else %}
+                <span class="text-muted small">-</span>
+                {% endif %}
+              </td>
+              <td class="text-secondary">{{ sesion.observaciones|default:'-' }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="text-muted text-center py-3">Sin sesiones registradas.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <div class="mb-5">
     <a href="{% url 'retos:mis_integraciones' %}" class="btn btn-outline-secondary px-4">Volver</a>
   </div>

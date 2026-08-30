@@ -14,5 +14,12 @@ class RetoAdmin(admin.ModelAdmin):
     search_fields = ("titulo", "descripcion", "empresa__username", "empresa__email")
     inlines = (RetoArchivoInline,)
 
+@admin.register(HistorialEstadoReto)
+class HistorialEstadoRetoAdmin(admin.ModelAdmin):
+    list_display = ("reto", "estado_anterior", "estado_nuevo", "realizado_por", "fecha")
+    list_filter = ("estado_nuevo",)
+    search_fields = ("reto__titulo", "realizado_por__username")
+    date_hierarchy = "fecha"
+
+
 admin.site.register(Reto, RetoAdmin)
-admin.site.register(HistorialEstadoReto)

@@ -1,19 +1,84 @@
 {% extends 'base.html' %}
 
-{% block title %}{{ titulo }}{% endblock %}
-{% block page_title %}{{ titulo }}{% endblock %}
+{% block title %}Mis Certificados{% endblock %}
+{% block page_title %}Mis Certificados Obtenidos{% endblock %}
 
 {% block content %}
 <div class="card-panel">
-    <div class="card-panel-header">
-        <span>Mis Diplomas y Certificaciones</span>
-    </div>
-    <div class="p-4 text-center py-5">
-        <i class="bi bi-award display-2 text-warning"></i>
-        <h4 class="fw-bold mt-3 text-dark">Certificados Obtenidos</h4>
-        <p class="text-muted mx-auto" style="max-width: 500px;">
-            ¡Culmina retos con éxito para acumular insignias y descargar tus certificados oficiales avalados por las empresas aliadas y la Universidad EAN!
+  <div class="card-panel-header d-flex justify-content-between align-items-center">
+    <span>Certificados y portafolio</span>
+    {% if certificados %}
+      <a href="{% url 'academico:portafolio' %}" class="btn btn-sm btn-outline-light">
+        <i class="bi bi-file-earmark-pdf"></i> Exportar portafolio
+      </a>
+    {% endif %}
+  </div>
+
+  <div class="p-4">
+    {% if certificados %}
+      <p class="text-muted small mb-4">
+        Cada certificado incluye un código de verificación público: quien lo reciba puede
+        confirmar su autenticidad sin necesidad de tener cuenta en la plataforma.
+      </p>
+
+      <div class="row g-3">
+        {% for c in certificados %}
+          <div class="col-md-6">
+            <div class="card h-100 border-0 shadow-sm">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <span class="badge bg-primary">{{ c.get_rol_participacion_display }}</span>
+                  <span class="text-muted" style="font-size:.72rem;">
+                    {{ c.emitido_en|date:"d/m/Y" }}
+                  </span>
+                </div>
+
+                <h5 class="fw-bold text-dark mb-1">{{ c.reto.titulo }}</h5>
+                <p class="text-muted small mb-2">
+                  <i class="bi bi-building"></i>
+                  {{ c.reto.empresa.get_full_name|default:c.reto.empresa.username }}
+                </p>
+
+                {% if c.horas %}
+                  <p class="text-muted small mb-2">
+                    <i class="bi bi-clock"></i> {{ c.horas }} horas certificadas
+                  </p>
+                {% endif %}
+
+                <p class="mb-3" style="font-size:.72rem;">
+                  <span class="text-muted">Código:</span>
+                  <code>{{ c.codigo_corto }}</code>
+                </p>
+
+                <div class="d-flex gap-2">
+                  <a href="{% url 'academico:descargar_certificado' c.codigo_verificacion %}"
+                     class="btn btn-sm btn-primary flex-grow-1">
+                    <i class="bi bi-download"></i> Descargar PDF
+                  </a>
+                  <a href="{% url 'academico:verificar_certificado' c.codigo_verificacion %}"
+                     class="btn btn-sm btn-outline-secondary" target="_blank" title="Enlace de verificación">
+                    <i class="bi bi-patch-check"></i>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="text-center p-5">
+        <i class="bi bi-award display-1 text-muted" style="font-size:3.5rem;"></i>
+        <h4 class="fw-bold text-dark mt-3">Todavía no tienes certificados</h4>
+        <p class="text-muted mx-auto" style="max-width:520px;">
+          Los certificados se emiten automáticamente cuando el administrador cierra
+          formalmente un reto en el que participaste. Cúlmina tus retos con éxito para
+          obtener el tuyo.
         </p>
-    </div>
+        <a href="{% url 'academico:explorar_retos' %}" class="btn btn-outline-primary mt-2">
+          <i class="bi bi-search"></i> Explorar retos disponibles
+        </a>
+      </div>
+    {% endif %}
+  </div>
 </div>
 {% endblock %}
