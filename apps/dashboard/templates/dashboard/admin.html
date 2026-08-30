@@ -1,0 +1,91 @@
+{% extends 'dashboard/panel_base.html' %}
+
+{% block filtros_extra %}
+  <div class="col-sm-6 col-md-3">
+    <label for="facultad" class="form-label small fw-semibold text-secondary mb-1">Facultad</label>
+    <select name="facultad" id="facultad" class="form-select form-select-sm">
+      <option value="">Todas</option>
+      {% for f in facultades %}
+        <option value="{{ f.pk }}" {% if facultad_id == f.pk|stringformat:"s" %}selected{% endif %}>{{ f.nombre }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-sm-6 col-md-2">
+    <label for="programa" class="form-label small fw-semibold text-secondary mb-1">Programa</label>
+    <select name="programa" id="programa" class="form-select form-select-sm">
+      <option value="">Todos</option>
+      {% for p in programas %}
+        <option value="{{ p.pk }}" data-facultad="{{ p.facultad_id }}"
+                {% if programa_id == p.pk|stringformat:"s" %}selected{% endif %}>{{ p.nombre }}</option>
+      {% endfor %}
+    </select>
+  </div>
+{% endblock %}
+
+{% block kpis %}
+<div class="row g-3 mb-4">
+  {% include 'dashboard/_kpi.html' with etiqueta="Retos totales" valor=kpis.retos_total icono="trophy" color="#2563eb" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Retos activos" valor=kpis.retos_activos icono="play-circle" color="#16a34a" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Finalizados" valor=kpis.retos_finalizados icono="flag" color="#7c3aed" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="En revisión" valor=kpis.retos_en_revision icono="hourglass-split" color="#f59e0b" %}
+</div>
+
+<div class="row g-3 mb-4">
+  {% include 'dashboard/_kpi.html' with etiqueta="Empresas" valor=kpis.empresas_total icono="building" color="#0891b2" nota=kpis.empresas_verificadas|stringformat:"s"|add:" verificadas" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Estudiantes" valor=kpis.estudiantes_total icono="mortarboard" color="#65a30d" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Docentes" valor=kpis.profesores_total icono="person-video3" color="#db2777" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Postulaciones" valor=kpis.postulaciones_total icono="send" color="#dc2626" nota=kpis.postulaciones_aceptadas|stringformat:"s"|add:" aceptadas" %}
+</div>
+{% endblock %}
+
+{% block graficas %}
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="card-panel h-100">
+      <div class="card-panel-header">Retos por estado</div>
+      <div class="p-3" style="height:300px;">
+        <canvas data-serie="retos_por_estado" data-tipo="doughnut"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card-panel h-100">
+      <div class="card-panel-header">Retos por facultad</div>
+      <div class="p-3" style="height:300px;">
+        <canvas data-serie="retos_por_facultad" data-tipo="bar" data-etiqueta="Retos"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card-panel h-100">
+      <div class="card-panel-header">Retos creados por mes</div>
+      <div class="p-3" style="height:280px;">
+        <canvas data-serie="retos_por_mes" data-tipo="line" data-etiqueta="Retos creados"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card-panel h-100">
+      <div class="card-panel-header">Integraciones académicas</div>
+      <div class="p-3" style="height:280px;">
+        <canvas data-serie="integraciones_por_estado" data-tipo="doughnut"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="d-flex flex-wrap gap-2 mt-4">
+  <a href="{% url 'usuarios:lista_usuarios' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-people"></i> Gestionar usuarios
+  </a>
+  <a href="{% url 'retos:admin_panel' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-trophy"></i> Revisar retos
+  </a>
+  <a href="{% url 'empresas:lista_empresas' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-building"></i> Empresas
+  </a>
+  <a href="{% url 'usuarios:reportes_admin' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-bar-chart"></i> Ver reportes
+  </a>
+</div>
+{% endblock %}

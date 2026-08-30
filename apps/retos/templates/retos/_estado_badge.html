@@ -1,1 +1,1 @@
-<span class="badge text-bg-secondary">{{ estado }}</span>
+<span class="badge {% if estado == 'aprobado' or estado == 'aprobada' or estado == 'en_curso' or estado == 'finalizado' or estado == 'publicado' or estado == 'publicada' %}bg-success{% elif estado == 'borrador' %}bg-secondary{% elif estado == 'en_revision' %}bg-warning text-dark{% elif estado == 'rechazado' or estado == 'rechazada' or estado == 'cancelado' %}bg-danger{% elif estado == 'pausado' %}bg-info text-dark{% else %}bg-info text-dark{% endif %}">{{ etiqueta|default:estado }}</span>

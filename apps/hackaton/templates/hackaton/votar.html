@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+
+{% block title %}Votación del jurado{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="card-panel mb-3">
+  <div class="p-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+      <span class="text-muted small">Votas como</span>
+      <strong class="text-dark">{{ jurado.nombre }}</strong>
+      {% if jurado.especialidad %}<span class="text-muted small">· {{ jurado.especialidad }}</span>{% endif %}
+    </div>
+    <div>
+      {% if pendientes %}
+        <span class="badge bg-warning text-dark">{{ pendientes }} equipo(s) por calificar</span>
+      {% else %}
+        <span class="badge bg-success"><i class="bi bi-check2-all"></i> Calificaste a todos los equipos</span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  {% for item in equipos %}
+    <div class="col-md-6">
+      <div class="card h-100 border-0 shadow-sm {% if item.voto %}border-start border-success border-3{% endif %}">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start mb-3">
+            <h5 class="fw-bold text-dark mb-0">{{ item.inscripcion.equipo.nombre }}</h5>
+            {% if item.voto %}
+              <span class="badge bg-success">{{ item.voto.puntaje }} / 5</span>
+            {% else %}
+              <span class="badge bg-warning text-dark">Sin calificar</span>
+            {% endif %}
+          </div>
+
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="equipo" value="{{ item.inscripcion.equipo_id }}">
+
+            <div class="mb-2">
+              <label class="form-label small fw-semibold text-secondary">Puntaje (0 a 5)</label>
+              <input type="number" name="puntaje" step="0.25" min="0" max="5" required
+                     class="form-control form-control-sm"
+                     value="{% if item.voto %}{{ item.voto.puntaje }}{% endif %}">
+            </div>
+            <div class="mb-3">
+              <label class="form-label small fw-semibold text-secondary">Comentario</label>
+              <textarea name="comentario" rows="2" class="form-control form-control-sm">{% if item.voto %}{{ item.voto.comentario }}{% endif %}</textarea>
+            </div>
+
+            <button type="submit" class="btn btn-sm {% if item.voto %}btn-outline-primary{% else %}btn-primary{% endif %} w-100 fw-bold">
+              <i class="bi bi-star-fill"></i> {% if item.voto %}Actualizar voto{% else %}Registrar voto{% endif %}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  {% empty %}
+    <div class="col-12">
+      <div class="card-panel">
+        <div class="text-center p-5">
+          <i class="bi bi-people display-1 text-muted" style="font-size:3rem;"></i>
+          <h5 class="fw-bold text-dark mt-3">Sin equipos aceptados</h5>
+          <p class="text-muted mb-0">Todavía no hay inscripciones aprobadas para calificar.</p>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+<div class="mt-3">
+  <a href="{% url 'hackaton:detalle' hackathon.pk %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left"></i> Volver al hackathon
+  </a>
+</div>
+{% endblock %}

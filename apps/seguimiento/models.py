@@ -45,8 +45,24 @@ class IntegracionAcademica(models.Model):
     def __str__(self):
         return f"{self.reto} - {self.profesor}"
 
+    # Minimo academico que el profesor debe definir antes de pedir aprobacion.
+    CAMPOS_REQUERIDOS_REVISION = [
+        ("facultad", "Facultad"),
+        ("programa_academico", "Programa academico"),
+        ("nivel_formacion", "Nivel de formacion"),
+        ("descripcion", "Descripcion"),
+        ("alcance", "Alcance"),
+        ("entregable_esperado", "Entregable esperado"),
+        ("cronograma_sesiones", "Cronograma de sesiones"),
+    ]
+
     def campos_faltantes_para_revision(self):
-        return []
+        """Campos obligatorios sin diligenciar para enviar la integracion a revision."""
+        return [
+            etiqueta
+            for campo, etiqueta in self.CAMPOS_REQUERIDOS_REVISION
+            if not (getattr(self, campo, "") or "").strip()
+        ]
 
     @property
     def puede_editar_profesor(self):
@@ -57,31 +73,6 @@ class IntegracionAcademica(models.Model):
             raise ValidationError({"profesor": "La integracion debe pertenecer a un usuario Profesor."})
         if self.reto_id and not self.reto.esta_aprobado_o_activo:
             raise ValidationError({"reto": "Solo se pueden integrar retos aprobados o en curso."})
-
-
-class SesionReto(models.Model):
-    TIPOS = [
-        ("inicio", "Inicio"),
-        ("seguimiento", "Seguimiento"),
-        ("preseleccion", "Preseleccion"),
-        ("evaluacion", "Evaluacion / Reconocimiento"),
-        ("otro", "Otro"),
-    ]
-    integracion = models.ForeignKey(IntegracionAcademica, on_delete=models.CASCADE, related_name="sesiones")
-    tipo = models.CharField(max_length=30, choices=TIPOS, default="seguimiento")
-    fecha = models.DateField(default=timezone.localdate)
-    lugar = models.CharField(max_length=180, blank=True)
-    descripcion = models.TextField(blank=True)
-    completada = models.BooleanField(default=False)
-    creado_en = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "sesiones_reto"
-        verbose_name = "Sesion de Reto"
-        verbose_name_plural = "Sesiones de Reto"
-
-    def __str__(self):
-        return f"{self.integracion} - {self.get_tipo_display()}"
 
 
 class SeguimientoReto(models.Model):

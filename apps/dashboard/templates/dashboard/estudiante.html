@@ -1,0 +1,52 @@
+{% extends 'dashboard/panel_base.html' %}
+
+{% block kpis %}
+<div class="row g-3 mb-4">
+  {% include 'dashboard/_kpi.html' with etiqueta="Retos disponibles" valor=kpis.retos_disponibles icono="search" color="#2563eb" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Mis postulaciones" valor=kpis.postulaciones_total icono="send" color="#0891b2" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Aceptadas" valor=kpis.postulaciones_aceptadas icono="person-check" color="#16a34a" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Favoritos" valor=kpis.favoritos_total icono="star" color="#f59e0b" %}
+</div>
+
+<div class="row g-3 mb-4">
+  {% include 'dashboard/_kpi.html' with etiqueta="Entregables" valor=kpis.entregables_total icono="folder-check" color="#7c3aed" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Sin calificar" valor=kpis.entregables_pendientes icono="hourglass-split" color="#dc2626" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Nota promedio" valor=kpis.nota_promedio|floatformat:2 icono="star-half" color="#65a30d" %}
+</div>
+{% endblock %}
+
+{% block graficas %}
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="card-panel h-100">
+      <div class="card-panel-header">Mis postulaciones</div>
+      <div class="p-3" style="height:300px;">
+        <canvas data-serie="postulaciones_por_estado" data-tipo="doughnut"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card-panel h-100">
+      <div class="card-panel-header">Mis notas recientes</div>
+      <div class="p-3" style="height:300px;">
+        <canvas data-serie="notas_recientes" data-tipo="bar" data-etiqueta="Nota"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="d-flex flex-wrap gap-2 mt-4">
+  <a href="{% url 'academico:explorar_retos' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-search"></i> Explorar retos
+  </a>
+  <a href="{% url 'participaciones:mis_entregables' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-cloud-arrow-up"></i> Mis entregables
+  </a>
+  <a href="{% url 'academico:mis_postulaciones' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-send"></i> Mis postulaciones
+  </a>
+  <a href="{% url 'academico:certificados' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-award"></i> Mis certificados
+  </a>
+</div>
+{% endblock %}

@@ -36,9 +36,13 @@
                                 <span class="badge bg-success px-2 py-1">
                                     <i class="bi bi-check-circle me-1"></i>Aceptada
                                 </span>
-                            {% else %}
+                            {% elif p.estado == 'RECHAZADA' %}
                                 <span class="badge bg-danger px-2 py-1">
                                     <i class="bi bi-x-circle me-1"></i>Rechazada
+                                </span>
+                            {% else %}
+                                <span class="badge bg-secondary px-2 py-1">
+                                    <i class="bi bi-slash-circle me-1"></i>{{ p.get_estado_display }}
                                 </span>
                             {% endif %}
                         </td>

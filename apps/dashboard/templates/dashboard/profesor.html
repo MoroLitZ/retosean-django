@@ -1,0 +1,52 @@
+{% extends 'dashboard/panel_base.html' %}
+
+{% block kpis %}
+<div class="row g-3 mb-4">
+  {% include 'dashboard/_kpi.html' with etiqueta="Cursos activos" valor=kpis.cursos_activos icono="journal-text" color="#2563eb" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Retos asignados" valor=kpis.retos_asignados icono="trophy" color="#16a34a" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Mis estudiantes" valor=kpis.estudiantes_total icono="people" color="#0891b2" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Por calificar" valor=kpis.evaluaciones_pendientes icono="clipboard2-check" color="#f59e0b" %}
+</div>
+
+<div class="row g-3 mb-4">
+  {% include 'dashboard/_kpi.html' with etiqueta="Entregables recibidos" valor=kpis.entregables_total icono="folder-check" color="#7c3aed" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Integraciones en revisión" valor=kpis.integraciones_en_revision icono="hourglass-split" color="#dc2626" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Nota promedio" valor=kpis.nota_promedio|floatformat:2 icono="star-half" color="#65a30d" %}
+</div>
+{% endblock %}
+
+{% block graficas %}
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="card-panel h-100">
+      <div class="card-panel-header">Entregables por estado</div>
+      <div class="p-3" style="height:300px;">
+        <canvas data-serie="entregables_por_estado" data-tipo="doughnut"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card-panel h-100">
+      <div class="card-panel-header">Entregables por reto</div>
+      <div class="p-3" style="height:300px;">
+        <canvas data-serie="entregables_por_reto" data-tipo="bar" data-etiqueta="Entregables"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="d-flex flex-wrap gap-2 mt-4">
+  <a href="{% url 'evaluacion:panel_profesor' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-clipboard2-check"></i> Calificar entregables
+  </a>
+  <a href="{% url 'retos:mis_integraciones' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-diagram-3"></i> Mis integraciones
+  </a>
+  <a href="{% url 'seguimiento:mis_cursos' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-journal-text"></i> Mis cursos
+  </a>
+  <a href="{% url 'seguimiento:mis_estudiantes' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-people"></i> Mis estudiantes
+  </a>
+</div>
+{% endblock %}

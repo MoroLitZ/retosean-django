@@ -10,6 +10,26 @@ class Reto(models.Model):
         ("reto", "Reto"),
         ("hackathon", "Hackathon"),
     ]
+    AREA_CHOICES = [
+        ("Tecnología", "Tecnología"),
+        ("Sostenibilidad", "Sostenibilidad"),
+        ("Emprendimiento", "Emprendimiento"),
+        ("Salud y Bienestar", "Salud y Bienestar"),
+        ("Finanzas", "Finanzas"),
+        ("Mercadeo", "Mercadeo"),
+        ("Derecho", "Derecho"),
+        ("Educación", "Educación"),
+        ("Diseño y Creatividad", "Diseño y Creatividad"),
+        ("Otra", "Otra"),
+    ]
+    NIVEL_ACADEMICO_CHOICES = [
+        ("Pregrado", "Pregrado"),
+        ("Posgrado", "Posgrado"),
+        ("Especialización", "Especialización"),
+        ("Maestría", "Maestría"),
+        ("Doctorado", "Doctorado"),
+        ("Educación Continua", "Educación Continua"),
+    ]
     ESTADO_CHOICES = [
         ("borrador", "Borrador"),
         ("en_revision", "En Revision"),
@@ -29,8 +49,8 @@ class Reto(models.Model):
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, default="reto")
     titulo = models.CharField(max_length=180, blank=True)
     descripcion = models.TextField(blank=True)
-    area = models.CharField(max_length=120, blank=True)
-    nivel_academico = models.CharField(max_length=120, blank=True)
+    area = models.CharField(max_length=120, blank=True, choices=AREA_CHOICES)
+    nivel_academico = models.CharField(max_length=120, blank=True, choices=NIVEL_ACADEMICO_CHOICES)
     facultad = models.ForeignKey(
         "academico.Facultad",
         on_delete=models.SET_NULL,
@@ -151,30 +171,22 @@ class RetoArchivo(models.Model):
     def __str__(self):
         return self.nombre_original or os.path.basename(self.archivo.name)
 
-class IntegracionAcademica(models.Model):
-    reto = models.OneToOneField(Reto, on_delete=models.CASCADE, related_name='integracion_academica')
-    facultad = models.CharField(max_length=150, blank=True)
-    programa = models.CharField(max_length=150, blank=True)
-    nivel_formacion = models.CharField(max_length=100, blank=True)
-    asignatura = models.CharField(max_length=150, blank=True)
-    alcance = models.TextField(blank=True, help_text="Definición del alcance académico del reto")
-    entregable_esperado = models.TextField(blank=True, help_text="Qué debe entregar exactamente el equipo de estudiantes")
-
-    class Meta:
-        db_table = "integracion_academica"
-        verbose_name = "Integración Académica"
-        verbose_name_plural = "Integraciones Académicas"
-
-    def __str__(self):
-        return f"Integración para: {self.reto.titulo} ({self.asignatura})"
-
-
 class EquipoRetoAcademico(models.Model): # <--- Cambiamos el nombre para que no choque con 'participaciones.Equipo'
     reto = models.ForeignKey(Reto, on_delete=models.CASCADE, related_name='equipos_academicos') # <--- related_name único
     nombre_equipo = models.CharField(max_length=100)
     profesores = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='equipos_academicos_profesor', blank=True)
     estudiantes = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='equipos_academicos_estudiante', blank=True)
     expertos_invitados = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='equipos_academicos_experto', blank=True)
+    # Equipo operativo espejo. Los entregables y las votaciones de hackathon
+    # apuntan a participaciones.Equipo, asi que el equipo que arma el profesor
+    # se refleja alli en vez de fusionar ambos modelos.
+    equipo_espejo = models.OneToOneField(
+        'participaciones.Equipo',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='origen_academico',
+    )
 
     class Meta:
         db_table = "equipos_reto_academico" # <--- Tabla única

@@ -38,7 +38,9 @@ class Equipo(models.Model):
         verbose_name_plural = "Equipos"
 
     def __str__(self):
-        return f"{self.nombre} - Reto {self.reto_id}"
+        # Se ve tal cual en el desplegable de inscripcion a hackathon: el id
+        # crudo del reto no le decia nada al estudiante.
+        return f"{self.nombre} ({self.reto.titulo or 'reto sin titulo'})"
 
 
 class MiembroEquipo(models.Model):

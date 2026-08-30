@@ -167,11 +167,27 @@ class IntegracionAcademicaForm(BootstrapModelForm):
             'facultad',
             'nivel_formacion',
             'unidad_estudio',
+            'ecosistema',
             'descripcion',
+            'alcance',
             'entregable_esperado',
+            'cronograma_sesiones',
+            'equipo_profesores',
+            'equipo_estudiantes',
+            'expertos_invitados',
+            'requerimientos_empresa',
+            'requerimientos_internos',
+            'espacio_fisico',
         ]
         widgets = {
             'descripcion': forms.Textarea(attrs={'rows': 4}),
+            'alcance': forms.Textarea(attrs={'rows': 4}),
+            'cronograma_sesiones': forms.Textarea(attrs={'rows': 4}),
+            'equipo_profesores': forms.Textarea(attrs={'rows': 3}),
+            'equipo_estudiantes': forms.Textarea(attrs={'rows': 3}),
+            'expertos_invitados': forms.Textarea(attrs={'rows': 3}),
+            'requerimientos_empresa': forms.Textarea(attrs={'rows': 3}),
+            'requerimientos_internos': forms.Textarea(attrs={'rows': 3}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -235,6 +251,9 @@ class EquipoRetoAcademicoForm(BootstrapModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # El reto lo fija la vista a partir de la integracion; se muestra de solo lectura.
+        if 'reto' in self.fields:
+            self.fields['reto'].disabled = True
         # Esto asegura que los nombres salgan limpios como "Nombre Apellido" en lugar de "usuario123 (ROL)"
         for field_name in ['profesores', 'estudiantes', 'expertos_invitados']:
             if field_name in self.fields:
@@ -248,4 +267,10 @@ class SesionRetoAcademicoForm(BootstrapModelForm):
         widgets = {
             'fecha_hora': forms.DateTimeInput(attrs={'type': 'datetime-local', 'class': 'form-control'}),
             'observaciones': forms.Textarea(attrs={'rows': 3, 'class': 'form-control'}),
-        } 
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # El reto lo fija la vista a partir de la integracion; se muestra de solo lectura.
+        if 'reto' in self.fields:
+            self.fields['reto'].disabled = True 

@@ -3,7 +3,7 @@
 {% block content %}
 <div class="container mt-4" style="max-width: 600px;">
   <div class="card shadow-sm border-0 p-4">
-    <h2 class="h4 mb-3 fw-bold">Configurar Equipo Académico</h2>
+    <h2 class="h4 mb-3 fw-bold">{{ titulo|default:"Configurar Equipo Académico" }}</h2>
     <p class="text-muted small mb-4">
       Asigna el nombre del equipo y selecciona a los estudiantes, profesores y expertos invitados para este reto.
     </p>
@@ -14,7 +14,7 @@
       
       <div class="d-flex justify-content-between mt-4">
         <a href="{% url 'retos:detalle_integracion' integracion.pk %}" class="btn btn-outline-secondary">Cancelar</a>
-        <button type="submit" class="btn btn-primary">Guardar Equipo</button>
+        <button type="submit" class="btn btn-primary">{{ boton|default:"Guardar Equipo" }}</button>
       </div>
     </form>
   </div>

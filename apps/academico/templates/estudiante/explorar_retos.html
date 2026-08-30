@@ -43,11 +43,21 @@
             </div>
             <div class="col-md-3">
                 <label class="form-label small fw-semibold">&#193;rea</label>
-                <input type="text" name="area" value="{{ filtros.area }}" class="form-control" placeholder="Ej: Tecnolog&#237;a">
+                <select name="area" class="form-select">
+                    <option value="">Todas</option>
+                    {% for a in areas %}
+                        <option value="{{ a.0 }}" {% if filtros.area == a.0 %}selected{% endif %}>{{ a.1 }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="col-md-3">
                 <label class="form-label small fw-semibold">Nivel acad&#233;mico</label>
-                <input type="text" name="nivel" value="{{ filtros.nivel }}" class="form-control" placeholder="Ej: Pregrado">
+                <select name="nivel" class="form-select">
+                    <option value="">Todos</option>
+                    {% for n in niveles %}
+                        <option value="{{ n.0 }}" {% if filtros.nivel == n.0 %}selected{% endif %}>{{ n.1 }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="col-md-6 d-flex gap-2">
                 <button type="submit" class="btn" style="background: var(--accent); color: #fff; border: none;">
@@ -74,11 +84,14 @@
                         <div class="d-flex justify-content-between align-items-start mb-2">
                             <span class="badge bg-primary mb-2">{{ reto.get_tipo_display }}</span>
                             {% if user.rol == 'ESTUDIANTE' %}
-                            <a href="{% url 'participaciones:toggle_favorito' reto.id %}"
-                               class="btn btn-sm p-0 border-0 bg-transparent"
-                               title="{% if reto.id in favoritos_ids %}Quitar de favoritos{% else %}A&#241;adir a favoritos{% endif %}">
-                                <i class="bi {% if reto.id in favoritos_ids %}bi-star-fill text-warning{% else %}bi-star text-muted{% endif %}" style="font-size: 1.15rem;"></i>
-                            </a>
+                            <form method="post" action="{% url 'participaciones:toggle_favorito' reto.id %}" class="d-inline">
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                <button type="submit" class="btn btn-sm p-0 border-0 bg-transparent"
+                                        title="{% if reto.id in favoritos_ids %}Quitar de favoritos{% else %}A&#241;adir a favoritos{% endif %}">
+                                    <i class="bi {% if reto.id in favoritos_ids %}bi-star-fill text-warning{% else %}bi-star text-muted{% endif %}" style="font-size: 1.15rem;"></i>
+                                </button>
+                            </form>
                             {% endif %}
                         </div>
                         <h5 class="fw-bold text-dark mb-1">{{ reto.titulo|default:'Sin t&#237;tulo' }}</h5>

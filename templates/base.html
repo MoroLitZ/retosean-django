@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+{% load static %}<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
@@ -339,7 +339,7 @@
   </style>
   {% block extra_css %}{% endblock %}
 </head>
-<body class="{% if user.is_authenticated %}{% if user.is_superuser %}role-admin{% elif user.rol == 'EMPRESA' %}role-empresa{% elif user.rol == 'PROFESOR' %}role-profesor{% elif user.rol == 'ESTUDIANTE' %}role-estudiante{% endif %}{% endif %}">
+<body class="{% if es_admin %}role-admin{% elif es_empresa %}role-empresa{% elif es_profesor %}role-profesor{% elif es_estudiante %}role-estudiante{% endif %}">
 
 <!-- Mobile overlay -->
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
@@ -363,7 +363,7 @@
   <ul class="nav flex-column py-2" style="overflow-y: auto; flex: 1;">
     {% if user.is_authenticated %}
 
-      {% if user.is_superuser %}
+      {% if es_admin %}
         {# ── ADMIN ── #}
         <li><div class="nav-section-label">Administración</div></li>
         <li class="nav-item">
@@ -398,8 +398,13 @@
           </a>
         </li>
                         <li class="nav-item">
-          <a href="{% url 'usuarios:reportes_admin' %}" class="nav-link {% if request.resolver_match.url_name == 'reportes_admin' %}active{% endif %}">
+          <a href="{% url 'reportes:constructor' %}" class="nav-link {% if request.resolver_match.namespace == 'reportes' %}active{% endif %}">
             <i class="bi bi-bar-chart-line"></i> Reportes
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="{% url 'presupuesto:panel' %}" class="nav-link {% if request.resolver_match.namespace == 'presupuesto' %}active{% endif %}">
+            <i class="bi bi-cash-coin"></i> Presupuesto
           </a>
         </li>
         <li><div class="nav-section-label">Gestión Académica</div></li>
@@ -409,7 +414,7 @@
           </a>
         </li>
 
-      {% elif user.rol == 'EMPRESA' %}
+      {% elif es_empresa %}
         {# ── EMPRESA ── #}
         <li><div class="nav-section-label">Mi Empresa</div></li>
         <li class="nav-item">
@@ -425,6 +430,11 @@
         <li class="nav-item">
           <a href="{% url 'retos:mis_retos' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'mis_retos' %}active{% endif %}">
             <i class="bi bi-trophy"></i> Mis Retos
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="{% url 'retos:empresa_integraciones' %}" class="nav-link {% if request.resolver_match.url_name == 'empresa_integraciones' or request.resolver_match.url_name == 'empresa_revisar_integracion' %}active{% endif %}">
+            <i class="bi bi-person-plus"></i> Vinculaciones
           </a>
         </li>
         <li class="nav-item">
@@ -448,7 +458,7 @@
           </a>
         </li>
 
-      {% elif user.rol == 'PROFESOR' %}
+      {% elif es_profesor %}
         {# ── PROFESOR ── #}
         <li><div class="nav-section-label">Docencia</div></li>
         <li class="nav-item">
@@ -476,11 +486,6 @@
             <i class="bi bi-people"></i> Mis Estudiantes
           </a>
         </li>
-        <li class="nav-item">
-          <a href="{% url 'seguimiento:evaluaciones' %}" class="nav-link {% if request.resolver_match.url_name == 'evaluaciones' %}active{% endif %}">
-            <i class="bi bi-star-half"></i> Evaluaciones
-          </a>
-        </li>
                 <li class="nav-item">
                   <a href="{% url 'seguimiento:entregables_profesor' %}" class="nav-link {% if request.resolver_match.url_name == 'entregables_profesor' %}active{% endif %}">
                     <i class="bi bi-folder-check"></i> Entregables
@@ -488,7 +493,7 @@
                 </li>
                 <li class="nav-item">
                   <a href="{% url 'evaluacion:panel_profesor' %}" class="nav-link {% if request.resolver_match.namespace == 'evaluacion' and request.resolver_match.url_name == 'panel_profesor' %}active{% endif %}">
-                    <i class="bi bi-clipboard2-check"></i> Evaluación Formal
+                    <i class="bi bi-clipboard2-check"></i> Evaluaciones
                   </a>
                 </li>
                 <li class="nav-item">
@@ -502,7 +507,7 @@
                   </a>
                 </li>
 
-      {% elif user.rol == 'ESTUDIANTE' %}
+      {% elif es_estudiante %}
         {# ── ESTUDIANTE ── #}
         <li><div class="nav-section-label">Mi Espacio</div></li>
         <li class="nav-item">
@@ -520,6 +525,11 @@
             <i class="bi bi-send"></i> Mis Postulaciones
           </a>
         </li>
+        <li class="nav-item">
+          <a href="{% url 'participaciones:mis_favoritos' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_favoritos' %}active{% endif %}">
+            <i class="bi bi-star"></i> Mis Favoritos
+          </a>
+        </li>
                 <li class="nav-item">
           <a href="{% url 'participaciones:mis_entregables' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_entregables' %}active{% endif %}">
             <i class="bi bi-folder2-open"></i> Mis Entregables
@@ -535,6 +545,11 @@
             <i class="bi bi-award"></i> Certificados
           </a>
         </li>
+        <li class="nav-item">
+          <a href="{% url 'academico:portafolio' %}" class="nav-link">
+            <i class="bi bi-file-earmark-pdf"></i> Mi Portafolio
+          </a>
+        </li>
         <li>
           <a href="{% url 'retos:mis_equipos_estudiante' %}" class="nav-link">Mis Equipos y Retos</a>
         </li>
@@ -547,11 +562,28 @@
         </a>
       </li>
       <li class="nav-item">
-        <a href="{% url 'usuarios:logout' %}" class="nav-link" style="color:rgba(255,255,255,0.5);">
-          <i class="bi bi-box-arrow-left"></i> Cerrar Sesión
-        </a>
+        <form method="post" action="{% url 'usuarios:logout' %}">
+          {% csrf_token %}
+          <button type="submit" class="nav-link w-100 text-start border-0 bg-transparent" style="color:rgba(255,255,255,0.5);">
+            <i class="bi bi-box-arrow-left"></i> Cerrar Sesión
+          </button>
+        </form>
       </li>
 
+      <li><hr class="my-2" style="border-color:rgba(255,255,255,.12);"></li>
+      <li class="nav-item">
+        <a href="{% url 'hackaton:lista' %}" class="nav-link {% if request.resolver_match.namespace == 'hackaton' %}active{% endif %}">
+          <i class="bi bi-lightning-charge"></i> Hackathones
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="{% url 'notificaciones:bandeja' %}" class="nav-link {% if request.resolver_match.namespace == 'notificaciones' %}active{% endif %}">
+          <i class="bi bi-bell"></i> Notificaciones
+          {% if notificaciones_no_leidas %}
+            <span class="badge bg-danger ms-1">{{ notificaciones_no_leidas }}</span>
+          {% endif %}
+        </a>
+      </li>
     {% endif %}
   </ul>
 
@@ -577,10 +609,67 @@
   </button>
   <h1 class="page-heading">{% block page_title %}Dashboard{% endblock %}</h1>
   {% if user.is_authenticated %}
+  <div class="dropdown">
+    <button class="btn btn-sm btn-link position-relative text-decoration-none p-1" type="button"
+            data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false"
+            aria-label="Notificaciones" style="color:#4b5563;">
+      <i class="bi bi-bell" style="font-size:1.15rem;"></i>
+      {% if notificaciones_no_leidas %}
+        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
+              style="font-size:0.62rem;">
+          {{ notificaciones_no_leidas }}<span class="visually-hidden">no leidas</span>
+        </span>
+      {% endif %}
+    </button>
+    <div class="dropdown-menu dropdown-menu-end shadow" style="width:340px;max-width:92vw;">
+      <h6 class="dropdown-header d-flex justify-content-between align-items-center">
+        <span>Notificaciones</span>
+        {% if notificaciones_no_leidas %}
+          <form method="post" action="{% url 'notificaciones:marcar_todas_leidas' %}" class="m-0">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit" class="btn btn-link btn-sm p-0 text-decoration-none"
+                    style="font-size:0.75rem;">Marcar todas</button>
+          </form>
+        {% endif %}
+      </h6>
+      <div style="max-height:320px;overflow-y:auto;">
+        {% for n in notificaciones_recientes %}
+          <a class="dropdown-item d-flex gap-2 align-items-start py-2 {% if not n.leida %}bg-light{% endif %}"
+             href="{% if n.link %}{{ n.link }}{% else %}{% url 'notificaciones:bandeja' %}{% endif %}"
+             style="white-space:normal;">
+            <span class="pt-1">
+              {% if n.tipo == 'EXITO' %}<i class="bi bi-check-circle-fill text-success"></i>
+              {% elif n.tipo == 'ADVERTENCIA' %}<i class="bi bi-exclamation-triangle-fill text-warning"></i>
+              {% elif n.tipo == 'ERROR' %}<i class="bi bi-x-circle-fill text-danger"></i>
+              {% else %}<i class="bi bi-info-circle-fill text-info"></i>{% endif %}
+            </span>
+            <span class="flex-grow-1">
+              <span class="d-block fw-semibold small text-dark">{{ n.titulo }}</span>
+              <span class="d-block text-muted" style="font-size:0.76rem;">{{ n.mensaje|truncatechars:82 }}</span>
+              <span class="d-block text-muted" style="font-size:0.7rem;">{{ n.creada_en|date:"d/m/Y H:i" }}</span>
+            </span>
+          </a>
+        {% empty %}
+          <div class="text-center text-muted py-4 small">
+            <i class="bi bi-bell-slash d-block mb-2" style="font-size:1.5rem;"></i>
+            Sin notificaciones
+          </div>
+        {% endfor %}
+      </div>
+      <div class="dropdown-divider"></div>
+      <a class="dropdown-item text-center small fw-semibold" href="{% url 'notificaciones:bandeja' %}">
+        Ver todas
+      </a>
+    </div>
+  </div>
   <span class="topbar-email d-none d-lg-inline">{{ user.email }}</span>
-  <a href="{% url 'usuarios:logout' %}" class="btn btn-sm btn-outline-danger d-none d-md-flex align-items-center gap-1" style="font-size:0.8rem;">
-    <i class="bi bi-box-arrow-right"></i> Salir
-  </a>
+  <form method="post" action="{% url 'usuarios:logout' %}" class="d-none d-md-flex">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-sm btn-outline-danger d-flex align-items-center gap-1" style="font-size:0.8rem;">
+      <i class="bi bi-box-arrow-right"></i> Salir
+    </button>
+  </form>
   {% endif %}
 </header>
 
