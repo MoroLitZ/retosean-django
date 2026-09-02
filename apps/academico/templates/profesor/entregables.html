@@ -7,7 +7,12 @@
 <div class="card-panel">
     <div class="card-panel-header d-flex justify-content-between align-items-center">
         <span>Consola de Supervisión de Docentes</span>
-        <span class="badge bg-success">Modo Profesor</span>
+        <div>
+            <a href="{% url 'evaluacion:panel_profesor' %}" class="btn btn-outline-light btn-sm me-2">
+                <i class="bi bi-clipboard2-check me-1"></i> Panel de Evaluación Detallada
+            </a>
+            <span class="badge bg-success">Modo Profesor</span>
+        </div>
     </div>
     
     <div class="p-4">
@@ -15,12 +20,12 @@
         <ul class="nav nav-tabs mb-4" id="profesorTab" role="tablist">
             <li class="nav-item" role="presentation">
                 <button class="nav-link active fw-bold" id="entregables-tab" data-bs-toggle="tab" data-bs-target="#entregables-pane" type="button" role="tab">
-                    <i class="bi bi-folder-check"></i> Evidencias Recibidas
+                    <i class="bi bi-folder-check me-1"></i> Evidencias Recibidas
                 </button>
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link fw-bold" id="retos-tab" data-bs-toggle="tab" data-bs-target="#retos-pane" type="button" role="tab">
-                    <i class="bi bi-collection"></i> Explorar Todos los Retos
+                    <i class="bi bi-collection me-1"></i> Explorar Todos los Retos
                 </button>
             </li>
         </ul>
@@ -28,45 +33,69 @@
         <div class="tab-content" id="profesorTabContent">
             
             <div class="tab-pane fade show active" id="entregables-pane" role="tabpanel" aria-labelledby="entregables-tab">
-                <p class="text-muted small mb-3">Listado global de avances de desarrollo tecnológico cargados por los estudiantes.</p>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <p class="text-muted small mb-0">Listado global de avances y entregables cargados por los estudiantes.</p>
+                </div>
                 
                 {% if entregables %}
                     <div class="table-responsive">
                         <table class="table table-hover align-middle border shadow-sm rounded">
                             <thead class="table-light">
                                 <tr>
-                                    <th scope="col" class="ps-3">Estudiante</th>
+                                    <th scope="col" class="ps-3">Estudiante / Equipo</th>
                                     <th scope="col">Reto / Proyecto</th>
-                                    <th scope="col">Tipo</th>
-                                    <th scope="col">Estado</th>
-                                    <th scope="col" class="text-center">Documento</th>
+                                    <th scope="col">Fecha Entrega</th>
+                                    <th scope="col" class="text-center">Estado</th>
+                                    <th scope="col" class="text-center">Nota</th>
+                                    <th scope="col" class="text-center">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for e in entregables %}
                                 <tr>
-                                    <td class="ps-3 fw-bold text-dark">
-                                        {{ e.estudiante.get_full_name|default:e.estudiante.username }}
+                                    <td class="ps-3">
+                                        <div class="fw-bold text-dark">
+                                            {{ e.estudiante.get_full_name|default:e.estudiante.username }}
+                                        </div>
+                                        {% if e.equipo %}
+                                            <small class="text-muted"><i class="bi bi-people me-1"></i>{{ e.equipo.nombre }}</small>
+                                        {% endif %}
                                     </td>
                                     <td>
                                         <div class="fw-semibold text-secondary small">{{ e.reto.titulo }}</div>
+                                        <small class="text-muted d-block">{{ e.titulo }}</small>
                                     </td>
                                     <td>
-                                        <span class="text-muted small">Evidencia de Proyecto</span>
-                                    </td>
-                                    <td>
-                                        <span class="badge {% if e.estado == 'ENVIADO' %}bg-warning text-dark{% elif e.estado == 'REVISADO' %}bg-success{% else %}bg-secondary{% endif %}">
-                                            {{ e.estado }}
-                                        </span>
+                                        <span class="small text-muted">{{ e.fecha_entrega|date:'d/m/Y H:i' }}</span>
                                     </td>
                                     <td class="text-center">
-                                        {% if e.archivo %}
-                                            <a href="{{ e.archivo.url }}" target="_blank" class="btn btn-sm btn-primary">
-                                                <i class="bi bi-file-earmark-arrow-down-fill"></i> Evaluar
-                                            </a>
+                                        {% if e.estado == 'CALIFICADO' %}
+                                            <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Calificado</span>
+                                        {% elif e.estado == 'EN_REVISION' %}
+                                            <span class="badge bg-info text-dark"><i class="bi bi-hourglass-split me-1"></i>En Revisión</span>
                                         {% else %}
-                                            <span class="text-muted small">Sin adjunto</span>
+                                            <span class="badge bg-warning text-dark"><i class="bi bi-clock me-1"></i>Enviado</span>
                                         {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if e.nota is not None %}
+                                            <span class="fw-bold text-success fs-6">{{ e.nota }}</span>
+                                            <span class="text-muted small"> / {{ e.puntaje_maximo }}</span>
+                                        {% else %}
+                                            <span class="badge bg-light text-secondary border"><i class="bi bi-dash-circle me-1"></i>Sin calificar</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            {% if e.archivo %}
+                                                <a href="{{ e.archivo.url }}" target="_blank" class="btn btn-outline-secondary" title="Descargar / Ver Documento">
+                                                    <i class="bi bi-file-earmark-arrow-down me-1"></i> Documento
+                                                </a>
+                                            {% endif %}
+                                            <button type="button" class="btn {% if e.nota is not None %}btn-outline-primary{% else %}btn-primary{% endif %}" data-bs-toggle="modal" data-bs-target="#modalCalificar{{ e.pk }}">
+                                                <i class="bi bi-pencil-square me-1"></i>{% if e.nota is not None %}Modificar Nota{% else %}Calificar{% endif %}
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -150,4 +179,126 @@
         </div>
     </div>
 </div>
+
+{# Modales de Calificación #}
+{% for e in entregables %}
+<div class="modal fade" id="modalCalificar{{ e.pk }}" tabindex="-1" aria-labelledby="modalCalificarLabel{{ e.pk }}" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="post" action="{% url 'evaluacion:calificar' e.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title fs-6 fw-bold" id="modalCalificarLabel{{ e.pk }}">
+                        <i class="bi bi-clipboard2-check me-2 text-primary"></i>
+                        {% if e.nota is not None %}Modificar Calificación{% else %}Calificar Entregable{% endif %} - {{ e.titulo }}
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row g-3 mb-3 p-3 bg-light rounded border">
+                        <div class="col-md-6">
+                            <small class="text-muted d-block">Estudiante</small>
+                            <strong>{{ e.estudiante.get_full_name|default:e.estudiante.username }}</strong>
+                        </div>
+                        <div class="col-md-6">
+                            <small class="text-muted d-block">Reto</small>
+                            <strong>{{ e.reto.titulo }}</strong>
+                        </div>
+                        {% if e.equipo %}
+                        <div class="col-md-6">
+                            <small class="text-muted d-block">Equipo</small>
+                            <span>{{ e.equipo.nombre }}</span>
+                        </div>
+                        {% endif %}
+                        <div class="col-md-6">
+                            <small class="text-muted d-block">Fecha de entrega</small>
+                            <span>{{ e.fecha_entrega|date:'d/m/Y H:i' }}</span>
+                        </div>
+                        {% if e.archivo %}
+                        <div class="col-12 mt-2">
+                            <a href="{{ e.archivo.url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-file-earmark-arrow-down me-1"></i> Abrir / Descargar archivo adjunto
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Modalidad de Evaluación</label>
+                        <select class="form-select rubric-select-modal" name="rubrica">
+                            <option value="">Puntaje libre (máximo {{ e.puntaje_maximo }})</option>
+                            {% for r in rubricas %}
+                                {% if r.reto_id == e.reto_id %}
+                                    <option value="{{ r.pk }}">Rúbrica: {{ r.nombre }} ({{ r.puntaje_maximo }} puntos)</option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="free-score-modal mb-3">
+                        <label class="form-label fw-semibold">Nota (0 a {{ e.puntaje_maximo }})</label>
+                        <input class="form-control" type="number" name="nota" min="0" max="{{ e.puntaje_maximo }}" step="0.01" value="{{ e.nota|default:'' }}" placeholder="Ej: 4.50">
+                    </div>
+
+                    {% for r in rubricas %}
+                        {% if r.reto_id == e.reto_id %}
+                        <div class="rubric-fields-modal border rounded p-3 mb-3 d-none bg-light" data-rubric="{{ r.pk }}">
+                            <h6 class="fw-bold mb-2 text-primary">{{ r.nombre }}</h6>
+                            {% for c in r.criterios.all %}
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold mb-1">{{ c.nombre }} (0 – {{ c.puntaje_maximo }})</label>
+                                <input class="form-control form-control-sm" type="number" name="criterio_{{ c.pk }}" min="0" max="{{ c.puntaje_maximo }}" step="0.01" placeholder="Puntaje">
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Retroalimentación / Comentarios</label>
+                        <textarea class="form-control" name="comentario" rows="3" placeholder="Ingresa observaciones o retroalimentación para el estudiante...">{{ e.comentario_profesor|default:'' }}</textarea>
+                    </div>
+
+                    {% if e.historial_comentarios.all %}
+                    <hr>
+                    <h6 class="fw-bold text-secondary mb-2">Historial de interacciones</h6>
+                    <div class="small bg-light p-3 rounded border" style="max-height: 150px; overflow-y: auto;">
+                        {% for item in e.historial_comentarios.all %}
+                            <div class="border-start border-3 border-primary ps-2 mb-2">
+                                <strong>{{ item.autor.get_full_name|default:item.autor.username }}</strong>
+                                <span class="text-muted font-monospace ms-1" style="font-size: 0.75rem;">{{ item.creado_en|date:'d/m/Y H:i' }}</span>
+                                <div>{{ item.comentario }}</div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-circle me-1"></i> Guardar Calificación
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.querySelectorAll('.rubric-select-modal').forEach(select => select.addEventListener('change', () => {
+    const modalBody = select.closest('.modal-body');
+    const freeScore = modalBody.querySelector('.free-score-modal');
+    if (freeScore) {
+        freeScore.classList.toggle('d-none', Boolean(select.value));
+    }
+    modalBody.querySelectorAll('.rubric-fields-modal').forEach(box => {
+        box.classList.toggle('d-none', box.dataset.rubric !== select.value);
+    });
+}));
+</script>
 {% endblock %}

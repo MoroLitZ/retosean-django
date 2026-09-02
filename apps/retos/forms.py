@@ -152,7 +152,24 @@ class SeguimientoRetoForm(BootstrapModelForm):
 
 
 class IntegracionAcademicaForm(BootstrapModelForm):
-    
+    NIVEL_FORMACION_CHOICES = [('', 'Selecciona un nivel')] + list(Reto.NIVEL_ACADEMICO_CHOICES)
+
+    facultad = forms.ChoiceField(
+        choices=[('', 'Selecciona una facultad')],
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    nivel_formacion = forms.ChoiceField(
+        choices=NIVEL_FORMACION_CHOICES,
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    ecosistema = forms.ChoiceField(
+        choices=[('', 'Selecciona un ecosistema')],
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+
     unidad_estudio = forms.ModelChoiceField(
         queryset=UnidadEstudio.objects.all().order_by('nombre'),
         label='Unidad de Estudio',
@@ -192,12 +209,51 @@ class IntegracionAcademicaForm(BootstrapModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        from apps.academico.models import Ecosistema, Facultad
+
         self.fields['reto'].queryset = Reto.objects.filter(
             estado__in=['aprobado', 'en_curso', 'pausado']
         ).order_by('titulo')
-        
+
+        facultades = list(Facultad.objects.order_by('nombre').values_list('nombre', flat=True))
+        self.fields['facultad'].choices = [('', 'Selecciona una facultad')] + [
+            (nombre, nombre) for nombre in facultades
+        ]
+
+        ecosistemas = list(Ecosistema.objects.order_by('nombre').values_list('nombre', flat=True))
+        self.fields['ecosistema'].choices = [('', 'Selecciona un ecosistema')] + [
+            (nombre, nombre) for nombre in ecosistemas
+        ]
+
+        # Compatibilidad hacia atras: si la integracion guarda un valor legacy
+        # que ya no existe en catalogo, lo mantenemos seleccionable al editar.
+        if self.instance and self.instance.pk:
+            facultad_actual = (self.instance.facultad or '').strip()
+            nivel_actual = (self.instance.nivel_formacion or '').strip()
+            ecosistema_actual = (self.instance.ecosistema or '').strip()
+
+            if facultad_actual and facultad_actual not in dict(self.fields['facultad'].choices):
+                self.fields['facultad'].choices.append((facultad_actual, f'{facultad_actual} (actual)'))
+
+            if nivel_actual and nivel_actual not in dict(self.fields['nivel_formacion'].choices):
+                self.fields['nivel_formacion'].choices.append((nivel_actual, f'{nivel_actual} (actual)'))
+
+            if ecosistema_actual and ecosistema_actual not in dict(self.fields['ecosistema'].choices):
+                self.fields['ecosistema'].choices.append((ecosistema_actual, f'{ecosistema_actual} (actual)'))
+
         if 'unidad_estudio' in self.fields and hasattr(UnidadEstudio, 'objects'):
-            self.fields['unidad_estudio'].queryset = UnidadEstudio.objects.all()
+            facultad_seleccionada = (self.data.get('facultad') or '').strip()
+            if not facultad_seleccionada and self.instance and self.instance.pk:
+                facultad_seleccionada = (self.instance.facultad or '').strip()
+
+            unidades = UnidadEstudio.objects.select_related('programa', 'programa__facultad').filter(activo=True)
+            if facultad_seleccionada:
+                unidades = unidades.filter(programa__facultad__nombre=facultad_seleccionada)
+            self.fields['unidad_estudio'].queryset = unidades.order_by('programa__nombre', 'ciclo', 'nombre')
+            self.fields['unidad_estudio'].empty_label = 'Selecciona una unidad de estudio'
+            self.fields['unidad_estudio'].label_from_instance = (
+                lambda unidad: f"{unidad.codigo} - {unidad.nombre} ({unidad.programa.nombre})"
+            )
 
         # AQUÍ ESTÁ LA CLAVE: Si la instancia ya tiene guardado un programa_academico, 
         # intentamos buscar la UnidadEstudio correspondiente para preseleccionarla si el formulario se recarga.

@@ -63,7 +63,7 @@ def postular_a_reto(request, reto_id):
         messages.success(
             request,
             '\u00a1Tu postulaci\u00f3n al reto "' + reto.titulo + '" fue enviada! '
-            'Un docente evaluar\u00e1 tu perfil y la empresa ser\u00e1 notificada.'
+            'La empresa fue notificada y revisara tu solicitud.'
         )
         return redirect('academico:mis_postulaciones')
 
@@ -76,11 +76,10 @@ def postular_a_reto(request, reto_id):
 
 
 def _notificar_nueva_postulacion(reto, estudiante):
-    """Avisa a la empresa, a los profesores del reto y a los administradores."""
+    """Avisa a la empresa dueña del reto sobre una postulacion nueva."""
     from django.urls import reverse
 
-    from apps.notificaciones.services import notificar, notificar_admins, notificar_muchos
-    from apps.usuarios.models import Usuario
+    from apps.notificaciones.services import notificar
 
     nombre = estudiante.get_full_name() or estudiante.username
     link = reverse('retos:detalle', kwargs={'pk': reto.pk})
@@ -91,24 +90,6 @@ def _notificar_nueva_postulacion(reto, estudiante):
         titulo='Nueva postulacion recibida',
         mensaje=f'{nombre} se ha postulado a tu reto "{reto.titulo}".',
         tipo='EXITO', link=link, clave_dedupe=clave,
-    )
-
-    # El mensaje al estudiante promete que un docente revisara su perfil,
-    # asi que el docente de la integracion tambien tiene que enterarse.
-    profesores = Usuario.objects.filter(
-        integraciones__reto=reto,
-        integraciones__estado__in=['aprobada', 'publicada'],
-    ).distinct().exclude(pk=estudiante.pk)
-    notificar_muchos(
-        profesores, 'POSTULACION_NUEVA',
-        mensaje=f'{nombre} se postulo al reto "{reto.titulo}" que integraste a tu curso.',
-        link=link, clave_dedupe=clave,
-    )
-
-    notificar_admins(
-        'POSTULACION_NUEVA',
-        mensaje=f'{nombre} se postulo al reto "{reto.titulo}".',
-        excluir=estudiante, link=link, clave_dedupe=clave,
     )
 
 
@@ -223,46 +204,62 @@ def panel_entregables(request):
 
 
 def _estudiante_participa_en(usuario, reto):
-    """El estudiante solo participa si fue aceptado o si el profesor lo puso en un equipo."""
+    """El estudiante participa si fue aceptado, asignado a un equipo o ya envio un entregable."""
+    from apps.evaluacion.models import Entregable
     from apps.retos.models import EquipoRetoAcademico
 
     if PostulacionReto.objects.filter(
         reto=reto, estudiante=usuario, estado='ACEPTADA'
     ).exists():
         return True
-    return EquipoRetoAcademico.objects.filter(reto=reto, estudiantes=usuario).exists()
+    if EquipoRetoAcademico.objects.filter(reto=reto, estudiantes=usuario).exists():
+        return True
+    return Entregable.objects.filter(reto=reto, estudiante=usuario).exists()
 
 
 @solo_estudiante
 def mis_entregables(request, reto_id=None):
+    from apps.retos.models import EquipoRetoAcademico
+
     reto = None
     entregables_subidos = []
     form = None
-    # Solo los retos donde fue aceptado: son los unicos donde puede entregar.
-    todas_mis_postulaciones = PostulacionReto.objects.filter(
+
+    retos_aceptados_ids = PostulacionReto.objects.filter(
         estudiante=request.user, estado='ACEPTADA'
-    ).select_related('reto')
+    ).values_list('reto_id', flat=True)
+    retos_equipo_ids = EquipoRetoAcademico.objects.filter(
+        estudiantes=request.user
+    ).values_list('reto_id', flat=True)
+    retos_entregable_ids = Entregable.objects.filter(
+        estudiante=request.user
+    ).values_list('reto_id', flat=True)
+    todos_mis_retos_ids = set(retos_aceptados_ids) | set(retos_equipo_ids) | set(retos_entregable_ids)
+
+    retos_participando = Reto.objects.filter(
+        id__in=todos_mis_retos_ids
+    ).select_related('empresa').order_by('-creado_en')
 
     if not reto_id and request.method == 'POST':
-        # Sin reto no hay a que asociar el archivo: antes el POST se descartaba
-        # en silencio y el estudiante creia haber entregado.
         messages.error(request, 'Elige primero el reto al que quieres subir el entregable.')
         return redirect('participaciones:mis_entregables')
 
     if reto_id:
-        reto = get_object_or_404(Reto, pk=reto_id, estado__in=['aprobado', 'en_curso'])
+        reto = get_object_or_404(Reto, pk=reto_id, estado__in=['aprobado', 'en_curso', 'finalizado'])
         if not _estudiante_participa_en(request.user, reto):
             messages.error(
                 request,
-                'Solo puedes subir entregables a retos en los que fuiste aceptado.'
+                'Solo puedes ver entregables de retos en los que participas.'
             )
             return redirect('participaciones:mis_entregables')
 
         if request.method == 'POST':
+            if reto.estado == 'finalizado':
+                messages.error(request, 'Este reto ya fue cerrado formalmente y no recibe mas entregables.')
+                return redirect('participaciones:mis_entregables_reto', reto_id=reto.id)
+
             form = EntregableForm(request.POST, request.FILES)
             if form.is_valid():
-                # Usa titulo del formulario (o default del modelo) para respetar
-                # el unique_together (reto, estudiante, titulo).
                 titulo = form.cleaned_data.get('titulo') or 'Entregable del reto'
                 entregable, created = Entregable.objects.get_or_create(
                     reto=reto,
@@ -285,8 +282,9 @@ def mis_entregables(request, reto_id=None):
                 messages.success(request, 'Entregable guardado con exito!')
                 return redirect('participaciones:mis_entregables_reto', reto_id=reto.id)
         else:
-            form = EntregableForm()
-            
+            if reto.estado != 'finalizado':
+                form = EntregableForm()
+
         entregables_subidos = (
             Entregable.objects
             .filter(reto=reto, estudiante=request.user)
@@ -299,7 +297,8 @@ def mis_entregables(request, reto_id=None):
         'reto': reto,
         'form': form,
         'entregables_subidos': entregables_subidos,
-        'postulaciones': todas_mis_postulaciones
+        'postulaciones': retos_participando,
+        'retos_participando': retos_participando,
     })
 
 

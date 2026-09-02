@@ -43,6 +43,7 @@ def calificar(request, pk):
     entregable = get_object_or_404(Entregable, pk=pk, reto_id__in=_retos_profesor(request.user))
     rubrica = None
     rubrica_id = request.POST.get("rubrica")
+    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("evaluacion:panel_profesor")
     try:
         if rubrica_id:
             rubrica = Rubrica.objects.prefetch_related("criterios").get(
@@ -62,7 +63,7 @@ def calificar(request, pk):
             puntajes = []
     except (Rubrica.DoesNotExist, InvalidOperation, ValueError):
         messages.error(request, "La calificacion o los puntajes de la rubrica no son validos.")
-        return redirect("evaluacion:panel_profesor")
+        return redirect(next_url)
 
     comentario = request.POST.get("comentario", "").strip()
     evaluacion, _ = Evaluacion.objects.update_or_create(
@@ -75,7 +76,7 @@ def calificar(request, pk):
     except ValidationError:
         transaction.set_rollback(True)
         messages.error(request, "La evaluacion no cumple con la escala configurada.")
-        return redirect("evaluacion:panel_profesor")
+        return redirect(next_url)
     evaluacion.puntajes_criterio.all().delete()
     for criterio, valor in puntajes:
         EvaluacionCriterio.objects.create(evaluacion=evaluacion, criterio=criterio, puntaje=valor)
@@ -99,7 +100,7 @@ def calificar(request, pk):
         clave_dedupe=f'entregable:{entregable.pk}:calificado:{evaluacion.pk}:{nota}',
     )
     messages.success(request, "Evaluacion formal registrada y visible para el estudiante.")
-    return redirect("evaluacion:panel_profesor")
+    return redirect(next_url)
 
 
 @rol_requerido("PROFESOR", raise_exception=True)

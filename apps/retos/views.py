@@ -29,7 +29,7 @@ from .models import Reto, RetoArchivo, EquipoRetoAcademico
 from apps.seguimiento.models import IntegracionAcademica, SeguimientoArchivo, SeguimientoReto
 from django.urls import reverse
 
-from apps.notificaciones.services import notificar, notificar_muchos
+from apps.notificaciones.services import notificar, notificar_admins, notificar_muchos
 from apps.participaciones.services import sincronizar_equipo_academico
 from .services import cambiar_estado_reto, registrar_cambio_estado
 
@@ -173,6 +173,12 @@ def enviar_revision(request, pk):
     reto.fecha_envio_revision = timezone.now()
     reto.save(update_fields=['estado', 'fecha_envio_revision', 'actualizado_en'])
     registrar_cambio_estado(reto, estado_anterior, 'en_revision', request.user, 'Reto enviado a aprobacion.')
+    notificar_admins(
+        'RETO_ENVIADO_REVISION',
+        mensaje=f'La empresa {request.user.username} envio el reto "{reto.titulo}" para aprobacion.',
+        excluir=request.user,
+        link=reverse('retos:admin_revisar', kwargs={'pk': reto.pk}),
+    )
     messages.success(request, 'Reto enviado a aprobacion del administrador.')
     return redirect('retos:detalle', pk=reto.pk)
 
@@ -333,6 +339,32 @@ def enviar_integracion_revision(request, pk):
     integracion.estado = 'en_revision'
     integracion.fecha_envio_revision = timezone.now()
     integracion.save(update_fields=['estado', 'fecha_envio_revision', 'actualizado_en'])
+
+    nombre_profesor = request.user.get_full_name() or request.user.username
+    link_empresa = reverse('retos:empresa_revisar_integracion', kwargs={'pk': integracion.pk})
+    link_admin = reverse('retos:admin_revisar_vinculacion', kwargs={'pk': integracion.pk})
+    mensaje = (
+        f'{nombre_profesor} envio una postulacion de integracion para el reto '
+        f'"{integracion.reto.titulo}" y esta pendiente de revision.'
+    )
+    clave = f'integracion:{integracion.pk}:en_revision:{integracion.fecha_envio_revision.isoformat()}'
+
+    notificar(
+        integracion.reto.empresa,
+        'INTEGRACION_ENVIADA_REVISION',
+        mensaje=mensaje,
+        tipo='INFO',
+        link=link_empresa,
+        clave_dedupe=f'{clave}:empresa',
+    )
+    notificar_admins(
+        'INTEGRACION_ENVIADA_REVISION',
+        mensaje=mensaje,
+        excluir=request.user,
+        link=link_admin,
+        clave_dedupe=f'{clave}:admin',
+    )
+
     messages.success(request, 'Integracion enviada a aprobacion del administrador.')
     return redirect('retos:detalle_integracion', pk=integracion.pk)
 

@@ -171,3 +171,29 @@ class CierreEmiteCertificadosTests(TestCase):
         self.assertTrue(
             Certificado.objects.filter(reto=reto, usuario=estudiante).exists()
         )
+
+    def test_estudiante_con_entregable_recibe_certificado_al_finalizar(self):
+        from apps.evaluacion.models import Entregable
+        admin = Usuario.objects.create_superuser(
+            username="admin-cierre-entregable", password="x", email="b@ean.edu.co"
+        )
+        empresa = Usuario.objects.create_user(
+            username="empresa-cierre-2", password="x", rol="EMPRESA"
+        )
+        estudiante = Usuario.objects.create_user(
+            username="est-entregable", password="x", rol="ESTUDIANTE"
+        )
+        reto = Reto.objects.create(empresa=empresa, titulo="Reto con entregable", estado="en_curso")
+        Entregable.objects.create(
+            reto=reto, estudiante=estudiante, titulo="Entrega de avance",
+            archivo=SimpleUploadedFile("avance.pdf", b"contenido"),
+        )
+
+        self.client.force_login(admin)
+        self.client.post(reverse("cierre:finalizar", args=[reto.pk]))
+
+        reto.refresh_from_db()
+        self.assertEqual(reto.estado, "finalizado")
+        self.assertTrue(
+            Certificado.objects.filter(reto=reto, usuario=estudiante).exists()
+        )

@@ -29,6 +29,7 @@ GRIS = colors.HexColor("#6b7280")
 # ------------------------------------------------------------- EMISION
 def _participantes_del_reto(reto):
     """Devuelve [(usuario, rol_participacion), ...] elegibles para certificado."""
+    from apps.evaluacion.models import Entregable
     from apps.hackaton.models import Jurado
     from apps.participaciones.models import Postulacion
     from apps.retos.models import EquipoRetoAcademico
@@ -37,19 +38,22 @@ def _participantes_del_reto(reto):
 
     elegibles = {}
 
-    # Estudiantes aceptados o incorporados a un equipo academico.
+    # Estudiantes aceptados, incorporados a un equipo academico o que entregaron evidencias.
     for postulacion in Postulacion.objects.filter(reto=reto, estado="ACEPTADA").select_related("estudiante"):
         elegibles[postulacion.estudiante_id] = (postulacion.estudiante, "ESTUDIANTE")
     for estudiante in Usuario.objects.filter(
         equipos_academicos_estudiante__reto=reto
     ).distinct():
         elegibles.setdefault(estudiante.pk, (estudiante, "ESTUDIANTE"))
+    for entregable in Entregable.objects.filter(reto=reto).select_related("estudiante"):
+        elegibles.setdefault(entregable.estudiante_id, (entregable.estudiante, "ESTUDIANTE"))
 
-    # Docentes con integracion aprobada o publicada.
+    # Docentes con integracion vinculada al reto.
     for integracion in IntegracionAcademica.objects.filter(
-        reto=reto, estado__in=["aprobada", "publicada"]
+        reto=reto
     ).select_related("profesor"):
-        elegibles[integracion.profesor_id] = (integracion.profesor, "PROFESOR")
+        if integracion.profesor:
+            elegibles[integracion.profesor_id] = (integracion.profesor, "PROFESOR")
 
     # Jurados del hackathon, si lo hubo.
     for jurado in Jurado.objects.filter(hackathon__reto=reto, usuario__isnull=False).select_related("usuario"):
@@ -59,7 +63,6 @@ def _participantes_del_reto(reto):
     if reto.empresa_id:
         elegibles.setdefault(reto.empresa_id, (reto.empresa, "EMPRESA"))
 
-    # EquipoRetoAcademico se importa arriba para dejar clara la dependencia.
     del EquipoRetoAcademico
     return list(elegibles.values())
 

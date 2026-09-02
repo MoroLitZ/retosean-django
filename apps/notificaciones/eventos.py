@@ -23,10 +23,13 @@ def _registrar(*eventos):
 EVENTOS = _registrar(
     # --- Empresas y documentacion (HU00, HU01) ---
     Evento("DOCUMENTO_REVISADO", "INFO", "Documentacion revisada"),
+    Evento("DOCUMENTO_CARGADO_ADMIN", "INFO", "Documento legal cargado por empresa"),
     Evento("EMPRESA_LISTAS_RESTRICTIVAS", "ERROR", "Verificacion en listas restrictivas"),
     # --- Ciclo de vida del reto (HU02, HU04) ---
     Evento("RETO_ESTADO_CAMBIADO", "INFO", "Cambio de estado de tu reto"),
+    Evento("RETO_ENVIADO_REVISION", "INFO", "Reto enviado a revision"),
     # --- Integracion academica (HU03) ---
+    Evento("INTEGRACION_ENVIADA_REVISION", "INFO", "Nueva postulacion docente a reto"),
     Evento("INTEGRACION_REVISADA", "INFO", "Integracion academica revisada"),
     Evento("EQUIPO_ASIGNADO", "EXITO", "Fuiste asignado a un equipo"),
     # --- Participacion estudiantil (HU10, HU11) ---

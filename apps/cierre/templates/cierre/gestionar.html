@@ -1,15 +1,206 @@
 {% extends 'base.html' %}
+
 {% block title %}Cierre · {{ reto.titulo }}{% endblock %}
 {% block page_title %}Cierre formal del reto{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4"><div><h2 class="page-title">{{ reto.titulo }}</h2><p class="page-subtitle">Agenda, documentos, reconocimientos y encuestas de cierre.</p></div><span class="badge {% if reto.estado == 'finalizado' %}bg-success{% else %}bg-warning text-dark{% endif %}">{{ reto.get_estado_display }}</span></div>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="page-title">{{ reto.titulo }}</h2>
+        <p class="page-subtitle">Gestión de evidencias, documentación, reconocimientos y emisión de certificados.</p>
+    </div>
+    <div>
+        <span class="badge {% if reto.estado == 'finalizado' %}bg-success{% else %}bg-warning text-dark{% endif %} fs-6 px-3 py-2">
+            <i class="bi bi-flag-fill me-1"></i>{{ reto.get_estado_display|upper }}
+        </span>
+    </div>
+</div>
+
 <div class="row g-4">
- <div class="col-lg-7">
-  <div class="card-panel mb-4"><div class="card-panel-header">Agenda y acta</div><div class="p-4"><form method="post" enctype="multipart/form-data">{% csrf_token %}<input type="hidden" name="accion" value="guardar"><h6>Logistica</h6>{{ agenda_form.as_p }}<h6>Documentacion</h6>{{ cierre_form.as_p }}<button class="btn btn-ean">Guardar borrador</button></form></div></div>
-  <div class="card-panel"><div class="card-panel-header">Entregables finales</div><div class="p-4"><form method="post" enctype="multipart/form-data" action="{% url 'cierre:agregar_entregable' reto.pk %}">{% csrf_token %}{{ entregable_form.as_p }}<button class="btn btn-outline-primary">Cargar entregable</button></form><hr>{% for item in cierre.entregables_finales.all %}<a href="{{ item.archivo.url }}" target="_blank" class="d-block">{{ item.nombre }} · {{ item.creado_en|date:'d/m/Y' }}</a>{% empty %}<span class="text-muted">Sin entregables finales.</span>{% endfor %}</div></div>
- </div>
- <div class="col-lg-5">
-  <div class="card-panel mb-4"><div class="card-panel-header">Premios y reconocimientos</div><div class="p-4"><form method="post" action="{% url 'cierre:agregar_reconocimiento' reto.pk %}">{% csrf_token %}{{ reconocimiento_form.as_p }}<button class="btn btn-outline-primary">Registrar</button></form><hr>{% for item in cierre.reconocimientos.all %}<div class="mb-2"><strong>{{ item.nombre_destinatario }}</strong><br><span class="small">{{ item.descripcion }}</span></div>{% empty %}<span class="text-muted">Sin reconocimientos.</span>{% endfor %}</div></div>
-  <div class="card-panel"><div class="card-panel-header">Formalizacion</div><div class="p-4">{% if reto.estado == 'finalizado' %}<div class="alert alert-success">Cierre formal completado. Encuestas generadas: {{ cierre.encuestas.count }}.</div>{% else %}<p class="small text-muted">Finalizar cambia el estado, registra la trazabilidad, genera las encuestas y notifica a todos los participantes.</p><form method="post" action="{% url 'cierre:finalizar' reto.pk %}" onsubmit="return confirm('¿Finalizar formalmente este reto?')">{% csrf_token %}<button class="btn btn-danger w-100">Finalizar reto</button></form>{% endif %}</div></div>
- </div>
-</div>{% endblock %}
+    <!-- Columna Izquierda: Entregables del Curso y Agenda -->
+    <div class="col-lg-7">
+        
+        <!-- Entregables Cargados por Estudiantes durante el Reto -->
+        <div class="card-panel mb-4">
+            <div class="card-panel-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-folder-check me-2 text-primary"></i>Entregables de Estudiantes Recibidos</span>
+                <span class="badge bg-primary">{{ entregables_estudiantes|length }} entregable(s)</span>
+            </div>
+            <div class="p-4">
+                {% if entregables_estudiantes %}
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle border shadow-sm rounded">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Estudiante</th>
+                                    <th>Título Entregable</th>
+                                    <th class="text-center">Nota</th>
+                                    <th class="text-center">Archivo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for e in entregables_estudiantes %}
+                                <tr>
+                                    <td>
+                                        <div class="fw-bold text-dark">{{ e.estudiante.get_full_name|default:e.estudiante.username }}</div>
+                                        {% if e.equipo %}<small class="text-muted"><i class="bi bi-people me-1"></i>{{ e.equipo.nombre }}</small>{% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="fw-semibold text-secondary small">{{ e.titulo }}</span>
+                                        <small class="d-block text-muted">{{ e.fecha_entrega|date:'d/m/Y H:i' }}</small>
+                                    </td>
+                                    <td class="text-center">
+                                        {% if e.nota is not None %}
+                                            <span class="badge bg-success fs-6">{{ e.nota }} / {{ e.puntaje_maximo }}</span>
+                                        {% else %}
+                                            <span class="badge bg-warning text-dark">Pendiente</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if e.archivo %}
+                                            <a href="{{ e.archivo.url }}" target="_blank" class="btn btn-sm btn-outline-primary" title="Descargar entregable del estudiante">
+                                                <i class="bi bi-download me-1"></i> Ver
+                                            </a>
+                                        {% else %}
+                                            <span class="text-muted small">Sin adjunto</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center p-3 bg-light rounded border">
+                        <i class="bi bi-info-circle display-6 text-muted mb-2"></i>
+                        <p class="text-muted small mb-0">Los estudiantes aún no han subido evidencias para este reto.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Agenda y Acta de Cierre -->
+        <div class="card-panel mb-4">
+            <div class="card-panel-header">
+                <i class="bi bi-journal-text me-2 text-primary"></i>Logística y Acta de Cierre
+            </div>
+            <div class="p-4">
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <input type="hidden" name="accion" value="guardar">
+                    <h6 class="fw-bold text-primary mb-3">1. Logística y Agenda de Cierre</h6>
+                    <div class="mb-3">
+                        {{ agenda_form.as_p }}
+                    </div>
+                    <hr>
+                    <h6 class="fw-bold text-primary mb-3">2. Documentación y Acta de Cierre</h6>
+                    <div class="mb-3">
+                        {{ cierre_form.as_p }}
+                    </div>
+                    <button class="btn btn-primary" type="submit">
+                        <i class="bi bi-save me-1"></i> Guardar Borrador
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Carga de Entregables Finales Adicionales -->
+        <div class="card-panel">
+            <div class="card-panel-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-cloud-upload me-2 text-primary"></i>Archivos y Anexos Finales del Cierre</span>
+            </div>
+            <div class="p-4">
+                <form method="post" enctype="multipart/form-data" action="{% url 'cierre:agregar_entregable' reto.pk %}" class="mb-3">
+                    {% csrf_token %}
+                    {{ entregable_form.as_p }}
+                    <button class="btn btn-outline-primary btn-sm mt-2" type="submit">
+                        <i class="bi bi-plus-circle me-1"></i> Cargar Anexo Final
+                    </button>
+                </form>
+                <hr>
+                <h6 class="fw-bold small text-secondary mb-2">Anexos agregados a este cierre:</h6>
+                {% for item in cierre.entregables_finales.all %}
+                    <div class="d-flex justify-content-between align-items-center p-2 mb-2 bg-light rounded border">
+                        <div>
+                            <i class="bi bi-file-earmark-check text-success me-2"></i>
+                            <strong>{{ item.nombre }}</strong>
+                            <small class="text-muted ms-2">{{ item.creado_en|date:'d/m/Y H:i' }}</small>
+                        </div>
+                        <a href="{{ item.archivo.url }}" target="_blank" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-download"></i>
+                        </a>
+                    </div>
+                {% empty %}
+                    <span class="text-muted small">Sin anexos adicionales guardados.</span>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Columna Derecha: Premios, Reconocimientos y Formalización -->
+    <div class="col-lg-5">
+        
+        <!-- Reconocimientos y Menciones -->
+        <div class="card-panel mb-4">
+            <div class="card-panel-header">
+                <i class="bi bi-trophy me-2 text-warning"></i>Premios y Reconocimientos
+            </div>
+            <div class="p-4">
+                <form method="post" action="{% url 'cierre:agregar_reconocimiento' reto.pk %}" class="mb-3">
+                    {% csrf_token %}
+                    {{ reconocimiento_form.as_p }}
+                    <button class="btn btn-outline-primary btn-sm mt-2" type="submit">
+                        <i class="bi bi-award me-1"></i> Registrar Reconocimiento
+                    </button>
+                </form>
+                <hr>
+                <h6 class="fw-bold small text-secondary mb-2">Reconocimientos asignados:</h6>
+                {% for item in cierre.reconocimientos.all %}
+                    <div class="p-2 mb-2 bg-light rounded border">
+                        <strong class="text-dark"><i class="bi bi-star-fill text-warning me-1"></i>{{ item.nombre_destinatario }}</strong>
+                        <div class="small text-muted mt-1">{{ item.descripcion }}</div>
+                    </div>
+                {% empty %}
+                    <span class="text-muted small">Sin reconocimientos registrados.</span>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Formalización y Emisión de Certificados -->
+        <div class="card-panel border-primary">
+            <div class="card-panel-header bg-primary text-white">
+                <i class="bi bi-patch-check me-2"></i>Formalización y Certificados
+            </div>
+            <div class="p-4">
+                {% if reto.estado == 'finalizado' %}
+                    <div class="alert alert-success d-flex align-items-center mb-3">
+                        <i class="bi bi-check-circle-fill display-6 me-3"></i>
+                        <div>
+                            <strong>¡Reto Finalizado!</strong>
+                            <div class="small">Los certificados han sido emitidos y están disponibles para descarga de todos los participantes. Encuestas generadas: {{ cierre.encuestas.count }}.</div>
+                        </div>
+                    </div>
+                    <form method="post" action="{% url 'cierre:finalizar' reto.pk %}">
+                        {% csrf_token %}
+                        <button class="btn btn-outline-primary w-100" type="submit">
+                            <i class="bi bi-arrow-repeat me-1"></i> Regenerar / Actualizar Certificados
+                        </button>
+                    </form>
+                {% else %}
+                    <p class="small text-muted mb-3">
+                        Al **Finalizar el reto**, se cambiará su estado a <strong>FINALIZADO</strong>, se auto-vincularán los entregables de los estudiantes y se <strong>emitirán automáticamente los certificados PDF</strong> para los estudiantes y participantes.
+                    </p>
+                    <form method="post" action="{% url 'cierre:finalizar' reto.pk %}" onsubmit="return confirm('¿Confirmas que deseas finalizar formalmente este reto y emitir los certificados para todos los participantes?')">
+                        {% csrf_token %}
+                        <button class="btn btn-success btn-lg w-100 fw-bold" type="submit">
+                            <i class="bi bi-award-fill me-2"></i>Finalizar Reto y Emitir Certificados
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

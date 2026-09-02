@@ -80,8 +80,18 @@
                   </span>
                 </td>
                 <td class="text-center pe-4">
+                  <div class="d-flex gap-1 justify-content-center flex-wrap">
+                    <button
+                      class="btn btn-sm btn-outline-secondary px-2"
+                      type="button"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#detalle-postulacion-{{ p.pk }}"
+                      aria-expanded="false"
+                      aria-controls="detalle-postulacion-{{ p.pk }}"
+                    >
+                      <i class="bi bi-eye"></i> Ver solicitud
+                    </button>
                   {% if p.estado == 'PENDIENTE' %}
-                  <div class="d-flex gap-1 justify-content-center">
                     <form method="post" action="{% url 'empresas:gestionar_postulacion' postulacion_id=p.pk %}">
                       {% csrf_token %}
                       <button name="accion" value="aceptar" type="submit"
@@ -97,10 +107,30 @@
                         <i class="bi bi-x-lg"></i> Rechazar
                       </button>
                     </form>
-                  </div>
-                  {% else %}
-                  <span class="text-muted small">—</span>
                   {% endif %}
+                  </div>
+                </td>
+              </tr>
+              <tr class="collapse" id="detalle-postulacion-{{ p.pk }}">
+                <td colspan="5" class="bg-light-subtle px-4 py-3">
+                  <div class="row g-3">
+                    <div class="col-md-3">
+                      <div class="small text-muted">Programa académico</div>
+                      <div class="fw-semibold">{{ p.programa|default:"No registrado" }}</div>
+                    </div>
+                    <div class="col-md-2">
+                      <div class="small text-muted">Semestre</div>
+                      <div class="fw-semibold">{{ p.semestre|default:"No registrado" }}</div>
+                    </div>
+                    <div class="col-md-7">
+                      <div class="small text-muted">Habilidades</div>
+                      <div>{{ p.habilidades|default:"Sin información"|linebreaksbr }}</div>
+                    </div>
+                    <div class="col-12">
+                      <div class="small text-muted">Motivación del estudiante</div>
+                      <div>{{ p.motivacion|default:"Sin información"|linebreaksbr }}</div>
+                    </div>
+                  </div>
                 </td>
               </tr>
               {% endfor %}
