@@ -94,37 +94,43 @@
                 <div class="col-md-7">
                     <div class="card border-0 shadow-sm">
                         <div class="card-body p-4">
-                            <h5 class="fw-bold text-dark mb-3"><i class="bi bi-cloud-arrow-up text-primary"></i> Subir o actualizar entregable</h5>
-                            
-
-                            <form method="POST" enctype="multipart/form-data" class="needs-validation">
-                                {% csrf_token %}
-                                
-                                {% if form.non_field_errors %}
-                                    <div class="alert alert-danger">
-                                        {{ form.non_field_errors }}
-                                    </div>
-                                {% endif %}
-
-                                {% for field in form %}
-                                    <div class="mb-3">
-                                        <label for="{{ field.id_for_label }}" class="form-label fw-semibold text-secondary small">{{ field.label }}</label>
-                                        {{ field }}
-                                        {% if field.help_text %}
-                                            <div class="form-text small text-muted">{{ field.help_text }}</div>
-                                        {% endif %}
-                                        {% if field.errors %}
-                                            <div class="text-danger small mt-1">{{ field.errors }}</div>
-                                        {% endif %}
-                                    </div>
-                                {% endfor %}
-
-                                <div class="mt-4 d-grid">
-                                    <button type="submit" class="btn btn-primary py-2 fw-bold">
-                                        <i class="bi bi-check-circle-fill"></i> Guardar y Enviar Entregable
-                                    </button>
+                            {% if reto.estado == 'finalizado' %}
+                                <div class="alert alert-secondary border-0 p-4 mb-0">
+                                    <h5 class="fw-bold text-dark mb-2"><i class="bi bi-lock-fill text-secondary me-2"></i>Reto Cerrado Formalmente</h5>
+                                    <p class="mb-0 small text-muted">Este reto ya concluyó y no admite nuevos envíos. Puedes revisar los documentos cargados, tus calificaciones y la retroalimentación en la lista lateral.</p>
                                 </div>
-                            </form>
+                            {% else %}
+                                <h5 class="fw-bold text-dark mb-3"><i class="bi bi-cloud-arrow-up text-primary"></i> Subir o actualizar entregable</h5>
+
+                                <form method="POST" enctype="multipart/form-data" class="needs-validation">
+                                    {% csrf_token %}
+                                    
+                                    {% if form.non_field_errors %}
+                                        <div class="alert alert-danger">
+                                            {{ form.non_field_errors }}
+                                        </div>
+                                    {% endif %}
+
+                                    {% for field in form %}
+                                        <div class="mb-3">
+                                            <label for="{{ field.id_for_label }}" class="form-label fw-semibold text-secondary small">{{ field.label }}</label>
+                                            {{ field }}
+                                            {% if field.help_text %}
+                                                <div class="form-text small text-muted">{{ field.help_text }}</div>
+                                            {% endif %}
+                                            {% if field.errors %}
+                                                <div class="text-danger small mt-1">{{ field.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    {% endfor %}
+
+                                    <div class="mt-4 d-grid">
+                                        <button type="submit" class="btn btn-primary py-2 fw-bold">
+                                            <i class="bi bi-check-circle-fill"></i> Guardar y Enviar Entregable
+                                        </button>
+                                    </div>
+                                </form>
+                            {% endif %}
                         </div>
                     </div>
                 </div>

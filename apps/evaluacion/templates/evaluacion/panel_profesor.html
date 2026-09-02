@@ -6,7 +6,7 @@
   <div><h2 class="page-title">Evaluacion formal</h2><p class="page-subtitle">Usa puntaje libre o una rubrica configurada para cada reto.</p></div>
 </div>
 {% for e in entregables %}
-<section class="card-panel mb-4">
+<section class="card-panel mb-4" id="entregable-{{ e.pk }}">
   <div class="card-panel-header">
     <span>{{ e.titulo }} · {{ e.reto.titulo }}</span>
     <span class="badge {% if e.estado == 'CALIFICADO' %}bg-success{% else %}bg-warning text-dark{% endif %}">{{ e.get_estado_display }}</span>

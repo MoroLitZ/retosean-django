@@ -5,7 +5,7 @@ from django.core.paginator import Paginator
 
 from apps.retos.models import Reto
 from apps.participaciones.models import Postulacion as PostulacionReto
-from apps.evaluacion.models import Entregable
+from apps.evaluacion.models import Entregable, Rubrica
 from .models import IntegracionAcademica
 from apps.usuarios.decorators import solo_profesor
 
@@ -20,11 +20,15 @@ def entregables_profesor(request):
 
     entregables_academia = Entregable.objects.filter(
         reto_id__in=retos_integrados
-    ).select_related('reto', 'estudiante').order_by('-id')
+    ).select_related('reto', 'estudiante', 'equipo').prefetch_related("historial_comentarios__autor").order_by('-id')
 
     todos_los_retos = Reto.objects.filter(
         id__in=retos_integrados
     ).select_related('empresa').order_by('-id')
+
+    rubricas = Rubrica.objects.filter(
+        reto_id__in=retos_integrados, activa=True
+    ).prefetch_related("criterios")
 
     paginator = Paginator(entregables_academia, 25)
     page_obj = paginator.get_page(request.GET.get('page'))
@@ -33,7 +37,8 @@ def entregables_profesor(request):
         'titulo': 'Panel de Control Académico',
         'entregables': page_obj,
         'page_obj': page_obj,
-        'retos': todos_los_retos
+        'retos': todos_los_retos,
+        'rubricas': rubricas,
     })
 
 

@@ -47,6 +47,17 @@ def panel_documentos_empresa(request):
                     'fecha_expedicion': fecha_expedicion
                 }
             )
+
+            notificar_admins(
+                'DOCUMENTO_CARGADO_ADMIN',
+                mensaje=(
+                    f'La empresa {empresa.razon_social} '
+                    f'{"cargo" if created else "actualizo"} el documento '
+                    f'"{documento.get_tipo_documento_display()}" para revision.'
+                ),
+                excluir=request.user,
+                link=reverse('empresas:admin_revisar_documentacion', kwargs={'empresa_id': empresa.pk}),
+            )
             
             messages.success(request, "Documento cargado correctamente.")
             return redirect('empresas:documentos')

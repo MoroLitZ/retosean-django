@@ -51,6 +51,23 @@ class DocumentacionEmpresaTests(TestCase):
         notificacion = Notificacion.objects.get(usuario=self.usuario_empresa)
         self.assertEqual(notificacion.tipo, "EXITO")
 
+    def test_cargar_documento_notifica_al_admin(self):
+        self.client.force_login(self.usuario_empresa)
+        self.client.post(
+            reverse("empresas:documentos"),
+            {
+                "tipo_documento": "RUT",
+                "archivo": SimpleUploadedFile("rut.pdf", b"contenido"),
+            },
+        )
+
+        notificacion = Notificacion.objects.get(
+            usuario=self.admin,
+            evento="DOCUMENTO_CARGADO_ADMIN",
+        )
+        self.assertIn(self.empresa.razon_social, notificacion.mensaje)
+        self.assertIn("RUT", notificacion.mensaje)
+
     def test_el_estado_de_validacion_avanza_a_verificada(self):
         """Antes solo se escribia RECHAZADA y la UI siempre mostraba Pendiente."""
         rut = self._documento("RUT")

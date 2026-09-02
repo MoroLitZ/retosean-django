@@ -276,6 +276,28 @@
         </div>
       </div>
 
+      {% if es_admin or user == reto.empresa or es_profesor %}
+        {% if reto.estado == 'aprobado' or reto.estado == 'en_curso' or reto.estado == 'pausado' or reto.estado == 'finalizado' %}
+        <div class="card-panel mb-4">
+          <div class="card-panel-header">
+            <i class="bi bi-flag me-2 text-primary"></i>Cierre y Certificación
+          </div>
+          <div class="p-4">
+            <p class="small text-muted mb-3">
+              {% if reto.estado == 'finalizado' %}
+                Este reto se encuentra cerrado formalmente. Puedes consultar el acta y los certificados generados.
+              {% else %}
+                Gestiona el cierre formal del reto para emitir certificados a los participantes.
+              {% endif %}
+            </p>
+            <a href="{% url 'cierre:gestionar' reto.id %}" class="btn btn-primary btn-sm w-100">
+              <i class="bi bi-flag-fill me-1"></i>{% if reto.estado == 'finalizado' %}Ver Cierre del Reto{% else %}Gestionar Cierre del Reto{% endif %}
+            </a>
+          </div>
+        </div>
+        {% endif %}
+      {% endif %}
+
       <!-- Acceso rápido estudiante -->
       {% if user.rol == 'ESTUDIANTE' %}
         <div class="card-panel">

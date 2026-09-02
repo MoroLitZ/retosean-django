@@ -17,6 +17,10 @@ from .forms import AgendaCierreForm, CierreRetoForm, EncuestaSatisfaccionForm, E
 from .models import AgendaCierre, CierreReto, EncuestaSatisfaccion
 
 
+from django.core.exceptions import PermissionDenied
+from apps.usuarios.roles import es_admin
+
+
 def _participantes(reto):
     ids = {reto.empresa_id}
     ids.update(IntegracionAcademica.objects.filter(reto=reto).values_list("profesor_id", flat=True))
@@ -25,19 +29,50 @@ def _participantes(reto):
     return {pk for pk in ids if pk}
 
 
-@rol_requerido("ADMIN", raise_exception=True)
+def _usuario_puede_gestionar_cierre(usuario, reto):
+    if es_admin(usuario):
+        return True
+    if getattr(usuario, "rol", None) == "EMPRESA" and reto.empresa_id == usuario.pk:
+        return True
+    if getattr(usuario, "rol", None) == "PROFESOR" and IntegracionAcademica.objects.filter(reto=reto, profesor=usuario).exists():
+        return True
+    return False
+
+
+def _usuario_puede_finalizar_cierre(usuario, reto):
+    if es_admin(usuario):
+        return True
+    if getattr(usuario, "rol", None) == "PROFESOR" and IntegracionAcademica.objects.filter(reto=reto, profesor=usuario).exists():
+        return True
+    return False
+
+
+@rol_requerido("ADMIN", "EMPRESA", "PROFESOR", raise_exception=True)
 def panel(request):
-    retos = Reto.objects.select_related("empresa").filter(estado__in=["aprobado", "en_curso", "pausado", "finalizado"])
+    if es_admin(request.user):
+        retos = Reto.objects.select_related("empresa").filter(estado__in=["aprobado", "en_curso", "pausado", "finalizado"])
+    elif getattr(request.user, "rol", None) == "EMPRESA":
+        retos = Reto.objects.select_related("empresa").filter(empresa=request.user, estado__in=["aprobado", "en_curso", "pausado", "finalizado"])
+    else:
+        retos_ids = IntegracionAcademica.objects.filter(profesor=request.user).values_list("reto_id", flat=True)
+        retos = Reto.objects.select_related("empresa").filter(id__in=retos_ids, estado__in=["aprobado", "en_curso", "pausado", "finalizado"])
     return render(request, "cierre/panel.html", {"retos": retos})
 
 
-@rol_requerido("ADMIN", raise_exception=True)
+@rol_requerido("ADMIN", "EMPRESA", "PROFESOR", raise_exception=True)
 def gestionar(request, reto_id):
     reto = get_object_or_404(
         Reto, pk=reto_id, estado__in=["aprobado", "en_curso", "pausado", "finalizado"]
     )
+    if not _usuario_puede_gestionar_cierre(request.user, reto):
+        raise PermissionDenied("No tienes permiso para gestionar el cierre de este reto.")
+
     agenda, _ = AgendaCierre.objects.get_or_create(reto=reto)
     cierre, _ = CierreReto.objects.get_or_create(reto=reto, defaults={"cerrado_por": request.user})
+
+    if reto.estado == "finalizado":
+        emitir_certificados_de_reto(reto, emitido_por=request.user)
+
     agenda_form = AgendaCierreForm(request.POST or None, instance=agenda, prefix="agenda")
     cierre_form = CierreRetoForm(request.POST or None, request.FILES or None, instance=cierre, prefix="cierre")
     if request.method == "POST" and request.POST.get("accion") == "guardar":
@@ -49,16 +84,25 @@ def gestionar(request, reto_id):
             messages.success(request, "Documentacion y agenda guardadas.")
             return redirect("cierre:gestionar", reto_id=reto.pk)
         messages.error(request, "No se pudo guardar. Revisa los datos de la agenda y del acta.")
+
+    from apps.evaluacion.models import Entregable
+    entregables_estudiantes = Entregable.objects.filter(reto=reto).select_related("estudiante", "equipo")
+
     return render(request, "cierre/gestionar.html", {
         "reto": reto, "agenda_form": agenda_form, "cierre_form": cierre_form, "cierre": cierre,
         "entregable_form": EntregableFinalForm(), "reconocimiento_form": ReconocimientoForm(),
+        "entregables_estudiantes": entregables_estudiantes,
     })
 
 
 @require_POST
-@rol_requerido("ADMIN", raise_exception=True)
+@rol_requerido("ADMIN", "EMPRESA", "PROFESOR", raise_exception=True)
 def agregar_entregable(request, reto_id):
-    cierre = get_object_or_404(CierreReto, reto_id=reto_id)
+    reto = get_object_or_404(Reto, pk=reto_id)
+    if not _usuario_puede_gestionar_cierre(request.user, reto):
+        raise PermissionDenied("No tienes permiso para gestionar el cierre de este reto.")
+    cierre, _ = CierreReto.objects.get_or_create(reto=reto, defaults={"cerrado_por": request.user})
+
     form = EntregableFinalForm(request.POST, request.FILES)
     if form.is_valid():
         item = form.save(commit=False)
@@ -67,14 +111,18 @@ def agregar_entregable(request, reto_id):
         item.save()
         messages.success(request, "Entregable final cargado.")
     else:
-        messages.error(request, "No fue posible cargar el entregable final.")
+        messages.error(request, "No fue posible cargar el entregable final. Verifica los datos o el archivo.")
     return redirect("cierre:gestionar", reto_id=reto_id)
 
 
 @require_POST
-@rol_requerido("ADMIN", raise_exception=True)
+@rol_requerido("ADMIN", "EMPRESA", "PROFESOR", raise_exception=True)
 def agregar_reconocimiento(request, reto_id):
-    cierre = get_object_or_404(CierreReto, reto_id=reto_id)
+    reto = get_object_or_404(Reto, pk=reto_id)
+    if not _usuario_puede_gestionar_cierre(request.user, reto):
+        raise PermissionDenied("No tienes permiso para gestionar el cierre de este reto.")
+    cierre, _ = CierreReto.objects.get_or_create(reto=reto, defaults={"cerrado_por": request.user})
+
     form = ReconocimientoForm(request.POST)
     if form.is_valid():
         reconocimiento = form.save(commit=False)
@@ -92,7 +140,7 @@ def agregar_reconocimiento(request, reto_id):
     return redirect("cierre:gestionar", reto_id=reto_id)
 
 
-@rol_requerido("ADMIN", raise_exception=True)
+@rol_requerido("ADMIN", "EMPRESA", "PROFESOR", raise_exception=True)
 @require_POST
 @transaction.atomic
 def finalizar(request, reto_id):
@@ -100,25 +148,50 @@ def finalizar(request, reto_id):
         Reto.objects.select_for_update(), pk=reto_id,
         estado__in=["aprobado", "en_curso", "pausado", "finalizado"],
     )
-    cierre = get_object_or_404(CierreReto, reto=reto)
-    agenda = getattr(reto, "agenda_cierre", None)
+    if not _usuario_puede_gestionar_cierre(request.user, reto):
+        raise PermissionDenied("No tienes permiso para gestionar el cierre de este reto.")
+
+    agenda, _ = AgendaCierre.objects.get_or_create(reto=reto)
+    cierre, _ = CierreReto.objects.get_or_create(reto=reto, defaults={"cerrado_por": request.user})
+
+    # Si no hay entregables finales del cierre, pero los estudiantes ya enviaron entregables,
+    # auto-vincular los entregables de los estudiantes como entregables finales.
+    if not cierre.entregables_finales.exists():
+        from apps.evaluacion.models import Entregable
+        entregables_estudiante = Entregable.objects.filter(reto=reto)
+        for e in entregables_estudiante:
+            if e.archivo:
+                cierre.entregables_finales.create(
+                    nombre=f"Entregable de {e.estudiante.get_full_name() or e.estudiante.username} - {e.titulo}",
+                    archivo=e.archivo,
+                    cargado_por=request.user,
+                )
+
+    # Si no se diligenció agenda, auto-inicializar valores por defecto razonables
+    if not agenda.fecha_hora or not agenda.espacio or not agenda.agenda:
+        if not agenda.fecha_hora:
+            agenda.fecha_hora = timezone.now()
+        if not agenda.espacio:
+            agenda.espacio = "Plataforma Retos EAN"
+        if not agenda.agenda:
+            agenda.agenda = "Cierre formal del reto y emision de certificados."
+        agenda.save()
+
     faltantes = []
-    if not agenda or not agenda.fecha_hora or not agenda.espacio or not agenda.agenda:
-        faltantes.append("agenda, fecha y espacio")
-    if not cierre.acta_url:
-        faltantes.append("acta de cierre")
     if not cierre.entregables_finales.exists():
         faltantes.append("al menos un entregable final")
+
     if faltantes:
         messages.error(request, "Antes de finalizar completa: " + ", ".join(faltantes) + ".")
         return redirect("cierre:gestionar", reto_id=reto.pk)
+
     if reto.estado != "finalizado":
         cambiar_estado_reto(reto, "finalizado", request.user, "Cierre formal del reto completado.")
+
     participantes = _participantes(reto)
     encuestas = [EncuestaSatisfaccion(cierre=cierre, participante_id=pk) for pk in participantes]
     EncuestaSatisfaccion.objects.bulk_create(encuestas, ignore_conflicts=True)
-    # La deduplicacion iba por titulo, asi que dos retos homonimos colisionaban;
-    # ahora la clave incluye el id del reto.
+
     from apps.usuarios.models import Usuario
 
     notificar_muchos(
@@ -132,14 +205,14 @@ def finalizar(request, reto_id):
         link=reverse("cierre:mis_encuestas"),
         clave_dedupe=f"cierre:{reto.pk}:encuesta",
     )
-    # Al cerrar formalmente el reto se emiten los certificados (HU16).
+
     emitir_certificados_de_reto(reto, emitido_por=request.user)
 
     cierre.encuesta_enviada = True
     cierre.cerrado_por = request.user
     cierre.cerrado_en = timezone.now()
     cierre.save(update_fields=["encuesta_enviada", "cerrado_por", "cerrado_en", "actualizado_en"])
-    messages.success(request, "Reto finalizado; participantes notificados y encuestas generadas.")
+    messages.success(request, "Reto finalizado con exito; certificados emitidos y participantes notificados.")
     return redirect("cierre:gestionar", reto_id=reto.pk)
 
 
