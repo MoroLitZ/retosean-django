@@ -21,8 +21,9 @@ from apps.notificaciones.services import notificar_muchos
 
 from .models import Certificado
 
-NEGRO = colors.HexColor("#111827")
-AMBAR = colors.HexColor("#f59e0b")
+NEGRO = colors.HexColor("#0a0a0a")
+VERDE_EAN = colors.HexColor("#3bac52")
+VERDE_EAN_OSC = colors.HexColor("#2d8a40")
 GRIS = colors.HexColor("#6b7280")
 
 
@@ -105,15 +106,18 @@ def emitir_certificados_de_reto(reto, emitido_por=None, horas=None):
 
 # ---------------------------------------------------------------- PDF
 def _marco(canvas, documento):
-    """Borde decorativo del certificado."""
+    """Borde decorativo del certificado, con la paleta de marca EAN."""
     canvas.saveState()
     ancho, alto = documento.pagesize
     canvas.setStrokeColor(NEGRO)
     canvas.setLineWidth(2.5)
     canvas.rect(12 * mm, 12 * mm, ancho - 24 * mm, alto - 24 * mm)
-    canvas.setStrokeColor(AMBAR)
+    canvas.setStrokeColor(VERDE_EAN)
     canvas.setLineWidth(0.8)
     canvas.rect(16 * mm, 16 * mm, ancho - 32 * mm, alto - 32 * mm)
+    # Franja superior de acento, como el borde del topbar en la plataforma.
+    canvas.setFillColor(VERDE_EAN)
+    canvas.rect(12 * mm, alto - 12 * mm - 2.2 * mm, ancho - 24 * mm, 2.2 * mm, stroke=0, fill=1)
     canvas.restoreState()
 
 
@@ -134,7 +138,7 @@ def generar_pdf_certificado(certificado):
     papel = certificado.get_rol_participacion_display().lower()
 
     elementos = [
-        Paragraph("retos<font color='#f59e0b'>ean</font>",
+        Paragraph("retos<font color='#3bac52'>ean</font>",
                   estilo("Marca", fontSize=17, textColor=NEGRO, spaceAfter=2,
                          fontName="Helvetica-Bold")),
         Paragraph("Universidad EAN", estilo("Sub", fontSize=9.5, textColor=GRIS, spaceAfter=16)),
@@ -150,7 +154,7 @@ def generar_pdf_certificado(certificado):
             estilo("Rol", fontSize=11, textColor=GRIS, spaceAfter=8),
         ),
         Paragraph(f'"{reto.titulo}"',
-                  estilo("Reto", fontSize=15, textColor=NEGRO, spaceAfter=8,
+                  estilo("Reto", fontSize=15, textColor=VERDE_EAN_OSC, spaceAfter=8,
                          fontName="Helvetica-Bold")),
         Paragraph(
             f"propuesto por {reto.empresa.get_full_name() or reto.empresa.username}"
@@ -171,7 +175,7 @@ def generar_pdf_certificado(certificado):
     )
     pie.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LINEABOVE", (0, 0), (-1, 0), 0.6, colors.HexColor("#d1d5db")),
+        ("LINEABOVE", (0, 0), (-1, 0), 0.8, VERDE_EAN),
         ("TOPPADDING", (0, 0), (-1, -1), 8),
     ]))
     elementos.extend([Spacer(1, 10), pie])
@@ -211,23 +215,26 @@ def generar_pdf_portafolio(usuario, certificados, entregables):
     titulo = ParagraphStyle("PTitulo", parent=base["Title"], fontSize=18, textColor=NEGRO, alignment=0)
     meta = ParagraphStyle("PMeta", parent=base["Normal"], fontSize=9, textColor=GRIS)
     seccion = ParagraphStyle(
-        "PSeccion", parent=base["Heading2"], fontSize=12.5, textColor=NEGRO, spaceBefore=14
+        "PSeccion", parent=base["Heading2"], fontSize=12.5, textColor=VERDE_EAN_OSC, spaceBefore=14
     )
     celda = ParagraphStyle("PCelda", parent=base["Normal"], fontSize=8.5, leading=11)
+    celda_cabecera = ParagraphStyle(
+        "PCeldaCabecera", parent=celda, textColor=colors.white
+    )
 
     elementos = [
-        Paragraph("retos<font color='#f59e0b'>ean</font>", meta),
+        Paragraph("retos<font color='#3bac52'>ean</font>", meta),
         Paragraph(usuario.get_full_name() or usuario.username, titulo),
         Paragraph(usuario.email or "", meta),
         Paragraph(f"Portafolio generado el {timezone.localtime():%d/%m/%Y}", meta),
     ]
 
     def tabla(cabeceras, filas, anchos):
-        datos = [[Paragraph(f"<b>{c}</b>", celda) for c in cabeceras]]
+        datos = [[Paragraph(f"<b>{c}</b>", celda_cabecera) for c in cabeceras]]
         datos += [[Paragraph(str(v), celda) for v in fila] for fila in filas]
         t = Table(datos, colWidths=[documento.width * a for a in anchos], repeatRows=1)
         t.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e5e7eb")),
+            ("BACKGROUND", (0, 0), (-1, 0), VERDE_EAN),
             ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#d1d5db")),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f9fafb")]),
