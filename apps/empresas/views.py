@@ -9,6 +9,7 @@ from .forms import CargarDocumentoForm
 from apps.retos.models import Reto
 from apps.participaciones.models import Postulacion as PostulacionReto
 from apps.evaluacion.models import Entregable
+from apps.seguimiento.models import SeguimientoReto
 from apps.notificaciones.services import notificar, notificar_admins
 from apps.usuarios.decorators import solo_admin, solo_empresa
 from apps.usuarios.roles import es_admin, url_dashboard_para
@@ -238,6 +239,38 @@ def _notificar_revision_documento(documento, nuevo_estado, motivo):
         link=reverse('empresas:documentos'),
         clave_dedupe=f'documento:{documento.pk}:{nuevo_estado}:{documento.pk}',
     )
+
+
+@solo_empresa
+def seguimiento_avance(request, reto_id=None):
+    """Panel de solo lectura del avance de los retos de la empresa (HU14).
+
+    Muestra el porcentaje del ultimo seguimiento, la bitacora de sesiones y los
+    entregables de los equipos. La empresa no modifica aqui datos academicos.
+    """
+    retos = Reto.objects.filter(
+        empresa=request.user, estado__in=Reto.ESTADOS_VIGENTES
+    ).order_by('-actualizado_en')
+    reto = get_object_or_404(retos, pk=reto_id) if reto_id else retos.first()
+    seguimientos = SeguimientoReto.objects.none()
+    entregables = Entregable.objects.none()
+    porcentaje = 0
+    if reto:
+        seguimientos = (
+            reto.seguimientos.select_related('creado_por')
+            .prefetch_related('archivos')
+            .order_by('-fecha_sesion', '-creado_en')
+        )
+        ultimo = seguimientos.first()
+        porcentaje = ultimo.porcentaje_avance if ultimo else 0
+        entregables = reto.entregables.select_related('estudiante', 'equipo').order_by('-fecha_entrega')
+    return render(request, 'empresas/seguimiento_avance.html', {
+        'retos': retos,
+        'reto': reto,
+        'seguimientos': seguimientos,
+        'porcentaje': porcentaje,
+        'entregables': entregables,
+    })
 
 
 @solo_empresa
