@@ -207,3 +207,38 @@ class ConvenioEmpresaTests(TestCase):
         self.client.post(self.url, {"estado_convenio": "RADICADO"})
         self.empresa.refresh_from_db()
         self.assertEqual(self.empresa.estado_convenio, "NO_RADICADO")
+
+
+class SeguimientoAvanceEmpresaTests(TestCase):
+    """Panel de solo lectura del avance para la empresa (HU14)."""
+
+    def setUp(self):
+        from apps.retos.models import Reto
+        from apps.seguimiento.models import SeguimientoReto
+
+        self.empresa = Usuario.objects.create_user(username="empresa-seg", password="x", rol="EMPRESA")
+        self.otra = Usuario.objects.create_user(username="empresa-otra", password="x", rol="EMPRESA")
+        self.reto = Reto.objects.create(empresa=self.empresa, titulo="Reto monitoreado", estado="en_curso")
+        self.ajeno = Reto.objects.create(empresa=self.otra, titulo="Reto ajeno", estado="en_curso")
+        SeguimientoReto.objects.create(reto=self.reto, porcentaje_avance=20, avances="Kickoff",
+                                       fecha_sesion=date.today() - timedelta(days=7))
+        SeguimientoReto.objects.create(reto=self.reto, porcentaje_avance=60, avances="Prototipo",
+                                       fecha_sesion=date.today())
+
+    def test_muestra_el_porcentaje_del_ultimo_seguimiento(self):
+        self.client.force_login(self.empresa)
+        response = self.client.get(reverse("empresas:seguimiento_reto", args=[self.reto.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["porcentaje"], 60)
+        self.assertContains(response, "Prototipo")
+
+    def test_no_ve_retos_de_otra_empresa(self):
+        self.client.force_login(self.empresa)
+        response = self.client.get(reverse("empresas:seguimiento_reto", args=[self.ajeno.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_otros_roles_no_acceden(self):
+        estudiante = Usuario.objects.create_user(username="est-seg", password="x", rol="ESTUDIANTE")
+        self.client.force_login(estudiante)
+        response = self.client.get(reverse("empresas:seguimiento_avance"))
+        self.assertNotEqual(response.status_code, 200)
