@@ -1,0 +1,4 @@
+{% extends 'base.html' %}
+{% block title %}Encuestas de satisfaccion{% endblock %}
+{% block page_title %}Encuestas de satisfaccion{% endblock %}
+{% block content %}<div class="card-panel"><div class="card-panel-header">Retroalimentacion de retos finalizados</div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Reto</th><th>Estado</th><th></th></tr></thead><tbody>{% for encuesta in encuestas %}<tr><td>{{ encuesta.cierre.reto.titulo }}</td><td>{% if encuesta.respondida %}<span class="badge bg-success">Respondida</span>{% else %}<span class="badge bg-warning text-dark">Pendiente</span>{% endif %}</td><td><a class="btn btn-sm btn-outline-primary" href="{% url 'cierre:responder_encuesta' encuesta.pk %}">{% if encuesta.respondida %}Actualizar{% else %}Responder{% endif %}</a></td></tr>{% empty %}<tr><td colspan="3" class="text-muted">No tienes encuestas pendientes.</td></tr>{% endfor %}</tbody></table></div></div>{% endblock %}

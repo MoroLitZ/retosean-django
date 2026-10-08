@@ -1,0 +1,4 @@
+{% extends 'base.html' %}
+{% block title %}Encuesta{% endblock %}
+{% block page_title %}Encuesta de satisfaccion{% endblock %}
+{% block content %}<div class="card-panel"><div class="card-panel-header">{{ encuesta.cierre.reto.titulo }}</div><div class="p-4"><form method="post">{% csrf_token %}{{ form.as_p }}<button class="btn btn-ean">Enviar respuesta</button></form></div></div>{% endblock %}

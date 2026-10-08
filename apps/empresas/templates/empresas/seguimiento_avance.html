@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}Seguimiento del reto{% endblock %}
+{% block page_title %}Seguimiento del reto{% endblock %}
+{% block content %}
+<div class="alert alert-info"><i class="bi bi-eye"></i> Vista de monitoreo en modo solo lectura. Las calificaciones y el cronograma son gestionados por el equipo academico.</div>
+<div class="card-panel mb-4"><div class="p-4"><label class="form-label fw-semibold">Reto</label><select class="form-select" onchange="if(this.value) location.href=this.value"><option value="">Selecciona</option>{% for item in retos %}<option value="{% url 'empresas:seguimiento_reto' item.pk %}" {% if reto.pk == item.pk %}selected{% endif %}>{{ item.titulo }}</option>{% endfor %}</select></div></div>
+{% if reto %}
+<div class="card-panel mb-4"><div class="card-panel-header"><span>{{ reto.titulo }}</span><strong>{{ porcentaje }}%</strong></div><div class="p-4"><div class="progress" style="height:22px"><div class="progress-bar" style="width:{{ porcentaje }}%">{{ porcentaje }}%</div></div></div></div>
+<div class="row g-4">
+ <div class="col-lg-7"><div class="card-panel"><div class="card-panel-header">Entregables parciales y finales</div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Entrega</th><th>Estudiante/equipo</th><th>Tipo</th><th>Estado</th><th>Archivo</th></tr></thead><tbody>{% for e in entregables %}<tr><td>{{ e.titulo }}</td><td>{{ e.equipo|default:e.estudiante }}</td><td>{% if e.es_final %}Final{% else %}Parcial{% endif %}</td><td>{{ e.get_estado_display }}</td><td>{% if e.archivo %}<a href="{{ e.archivo.url }}" target="_blank">Ver</a>{% endif %}</td></tr>{% empty %}<tr><td colspan="5" class="text-muted">Sin entregables.</td></tr>{% endfor %}</tbody></table></div></div></div>
+ <div class="col-lg-5"><div class="card-panel"><div class="card-panel-header">Bitacora de avance</div><div class="p-3">{% for s in seguimientos %}<div class="border-start border-3 ps-3 mb-3"><strong>{{ s.fecha_sesion }} · {{ s.porcentaje_avance }}%</strong><br><span class="small">{{ s.avances|default:s.observaciones }}</span><br><span class="text-muted small">{{ s.creado_por }}</span></div>{% empty %}<span class="text-muted">Sin registros.</span>{% endfor %}</div></div></div>
+</div>
+{% else %}<div class="alert alert-secondary">No hay retos para monitorear.</div>{% endif %}
+{% endblock %}

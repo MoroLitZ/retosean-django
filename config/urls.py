@@ -33,6 +33,7 @@ urlpatterns = [
     path('dashboard/', include('apps.dashboard.urls')),
     path('unidades-estudio/', include('apps.unidades_estudio.urls')),
     path('notificaciones/', include('apps.notificaciones.urls')),
+    path('cierre/', include('apps.cierre.urls')),
 ]
 
 if settings.DEBUG:
