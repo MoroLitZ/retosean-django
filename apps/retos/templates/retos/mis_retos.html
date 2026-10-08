@@ -26,7 +26,7 @@
         <tr>
           <td>{{ reto.titulo|default:'Borrador sin titulo' }}</td>
           <td>{{ reto.get_tipo_display }}</td>
-          <td>{{ reto.get_estado_display }}</td>
+          <td>{% include 'retos/_estado_badge.html' with estado=reto.estado etiqueta=reto.get_estado_display %}</td>
           <td>{{ reto.area|default:'-' }}</td>
           <td>{{ reto.actualizado_en|date:'Y-m-d H:i' }}</td>
           <td class="text-end">

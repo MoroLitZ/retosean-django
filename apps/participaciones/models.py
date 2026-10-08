@@ -13,9 +13,9 @@ class Postulacion(models.Model):
     fecha_postulacion = models.DateTimeField(auto_now_add=True)
     estado = models.CharField(max_length=20, choices=ESTADOS, default="PENDIENTE")
     motivacion = models.TextField(blank=True)
-    programa = models.CharField(max_length=150, blank=True, help_text="Programa academico del estudiante")
-    semestre = models.IntegerField(null=True, blank=True)
     habilidades = models.TextField(blank=True, help_text="Habilidades y conocimientos relevantes")
+    semestre = models.IntegerField(null=True, blank=True)
+    programa = models.CharField(max_length=150, blank=True, help_text="Programa academico del estudiante")
 
     class Meta:
         db_table = "postulaciones"
@@ -38,7 +38,9 @@ class Equipo(models.Model):
         verbose_name_plural = "Equipos"
 
     def __str__(self):
-        return f"{self.nombre} - Reto {self.reto_id}"
+        # Se ve tal cual en el desplegable de inscripcion a hackathon: el id
+        # crudo del reto no le decia nada al estudiante.
+        return f"{self.nombre} ({self.reto.titulo or 'reto sin titulo'})"
 
 
 class MiembroEquipo(models.Model):

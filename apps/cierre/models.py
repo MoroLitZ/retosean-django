@@ -19,14 +19,11 @@ class AgendaCierre(models.Model):
 
 
 class CierreReto(models.Model):
+    """Cierre formal del reto. La logistica del evento vive en AgendaCierre."""
+
     reto = models.OneToOneField("retos.Reto", on_delete=models.CASCADE, related_name="cierre")
-    agenda = models.TextField(blank=True)
     acta_url = models.FileField(upload_to="actas_cierre/", null=True, blank=True)
     notas = models.TextField(blank=True)
-    catering = models.TextField(blank=True)
-    av_notas = models.TextField(blank=True)
-    invitados = models.TextField(blank=True)
-    espacio_notas = models.TextField(blank=True)
     encuesta_enviada = models.BooleanField(default=False)
     cerrado_por = models.ForeignKey("usuarios.Usuario", on_delete=models.SET_NULL, null=True, related_name="cierres")
     cerrado_en = models.DateTimeField(null=True, blank=True)
@@ -89,3 +86,6 @@ class EncuestaSatisfaccion(models.Model):
     @property
     def respondida(self):
         return self.respondida_en is not None
+
+    def __str__(self):
+        return f"Encuesta {self.cierre.reto} - {self.participante.username}"

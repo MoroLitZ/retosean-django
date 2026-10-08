@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+
+{% block title %}Preferencias de Notificacion{% endblock %}
+{% block page_title %}Preferencias de Notificacion{% endblock %}
+
+{% block content %}
+<div class="card-panel">
+  <div class="card-panel-header">Elige que avisos quieres recibir</div>
+  <div class="p-4">
+    <form method="post">
+      {% csrf_token %}
+
+      <h6 class="fw-bold text-dark mb-3">Canales</h6>
+      <div class="form-check form-switch mb-2">
+        <input class="form-check-input" type="checkbox" role="switch" id="recibir_email"
+               name="recibir_email" {% if preferencia.recibir_email %}checked{% endif %}>
+        <label class="form-check-label" for="recibir_email">
+          Recibir tambien por correo electronico
+        </label>
+      </div>
+      <div class="form-check form-switch mb-4">
+        <input class="form-check-input" type="checkbox" role="switch" id="recibir_recordatorios"
+               name="recibir_recordatorios" {% if preferencia.recibir_recordatorios %}checked{% endif %}>
+        <label class="form-check-label" for="recibir_recordatorios">
+          Recibir recordatorios de fechas limite (7, 3 y 1 dia antes)
+        </label>
+      </div>
+
+      <h6 class="fw-bold text-dark mb-3">Tipos de aviso</h6>
+      <div class="row g-2 mb-4">
+        {% for evento in eventos %}
+          <div class="col-md-6">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox"
+                     id="ev-{{ evento.slug }}" name="eventos_activos" value="{{ evento.slug }}"
+                     {% if evento.activo %}checked{% endif %}>
+              <label class="form-check-label small" for="ev-{{ evento.slug }}">{{ evento.titulo }}</label>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary fw-bold">
+          <i class="bi bi-check-circle-fill"></i> Guardar preferencias
+        </button>
+        <a href="{% url 'notificaciones:bandeja' %}" class="btn btn-outline-secondary">Volver</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+
+{% block title %}Página no encontrada{% endblock %}
+{% block page_title %}Página no encontrada{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column align-items-center justify-content-center" style="min-height: 58vh;">
+  <div class="text-center" style="max-width: 460px;">
+    <div class="mb-4" style="font-size: 5rem; font-weight: 800; color: var(--accent); opacity: 0.4;">404</div>
+    <h2 class="fw-bold mb-2" style="color: #111827;">No encontramos esta página</h2>
+    <p class="text-muted mb-4">
+      El enlace que seguiste no existe o fue movido. Revisa la dirección o vuelve al inicio.
+    </p>
+    <a href="{% url 'usuarios:perfil' %}" class="btn" style="background: var(--accent); color: #fff; border: none;">
+      <i class="bi bi-house-door me-1"></i> Ir al inicio
+    </a>
+  </div>
+</div>
+{% endblock %}

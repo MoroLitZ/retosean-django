@@ -4,52 +4,142 @@
 {% block page_title %}{{ titulo }}{% endblock %}
 
 {% block content %}
-
 <div class="card-panel">
-    <div class="card-panel-header">
-        <span>Usuarios Registrados en la Plataforma</span>
-    </div>
-    <div class="p-4">
-        <p class="page-subtitle mb-4">Lista global de estudiantes, profesores y administradores.</p>
-        
-        <div class="table-responsive">
-            <table class="table table-striped table-hover align-middle">
-                <thead class="table-dark">
-                    <tr>
-                        <th>Usuario</th>
-                        <th>Nombre Completo</th>
-                        <th>Email</th>
-                        <th>Rol</th>
-                        <th>Fecha de Registro</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for usuario in usuarios %}
-                    <tr>
-                        <td class="fw-bold">{{ usuario.username }}</td>
-                        <td>{{ usuario.get_full_name|default:"-- " }}</td>
-                        <td>{{ usuario.email }}</td>
-                        <td>
-                            {% if usuario.is_superuser %}
-                                <span class="badge bg-danger text-white fw-bold" style="padding: 6px 12px;">
-                                    Administrador
-                                </span>
-                            {% else %}
-                                <span class="badge bg-secondary text-white fw-semibold" style="padding: 6px 12px;">
-                                    {{ usuario.get_rol_display }}
-                                </span>
-                            {% endif %}
-                        </td>
-                        <td>{{ usuario.date_joined|date:"d/m/Y H:i" }}</td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="5" class="text-center text-muted p-4">No hay usuarios registrados.</td>
-                    </tr>
+  <div class="card-panel-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span>Usuarios registrados en la plataforma</span>
+    <span class="d-flex gap-2">
+      <a href="{% url 'usuarios:log_actividad' %}" class="btn btn-sm btn-outline-light">
+        <i class="bi bi-journal-text"></i> Actividad
+      </a>
+      <a href="{% url 'usuarios:importar_usuarios' %}" class="btn btn-sm btn-outline-light">
+        <i class="bi bi-upload"></i> Importar
+      </a>
+    </span>
+  </div>
+
+  {# ── Filtros ── #}
+  <div class="p-3 border-bottom">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-sm-6 col-md-4">
+        <label for="q" class="form-label small fw-semibold text-secondary mb-1">Buscar</label>
+        <input type="search" name="q" id="q" value="{{ q }}" placeholder="Usuario, correo o nombre"
+               class="form-control form-control-sm">
+      </div>
+      <div class="col-sm-6 col-md-3">
+        <label for="rol" class="form-label small fw-semibold text-secondary mb-1">Rol</label>
+        <select name="rol" id="rol" class="form-select form-select-sm">
+          <option value="">Todos</option>
+          {% for valor, nombre in roles %}
+            <option value="{{ valor }}" {% if rol == valor %}selected{% endif %}>{{ nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-6 col-md-3">
+        <label for="estado" class="form-label small fw-semibold text-secondary mb-1">Estado</label>
+        <select name="estado" id="estado" class="form-select form-select-sm">
+          <option value="">Todos</option>
+          <option value="activos" {% if estado == 'activos' %}selected{% endif %}>Activos</option>
+          <option value="inactivos" {% if estado == 'inactivos' %}selected{% endif %}>Inactivos</option>
+        </select>
+      </div>
+      <div class="col-sm-6 col-md-2">
+        <button type="submit" class="btn btn-sm btn-primary w-100">
+          <i class="bi bi-funnel"></i> Filtrar
+        </button>
+      </div>
+    </form>
+    <p class="text-muted small mb-0 mt-2">{{ total }} usuario(s) encontrado(s).</p>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th class="ps-4">Usuario</th>
+          <th>Nombre</th>
+          <th>Correo</th>
+          <th style="min-width:150px;">Rol</th>
+          <th>Registro</th>
+          <th class="text-end pe-4">Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in usuarios %}
+          <tr class="{% if not u.is_active %}table-secondary{% endif %}">
+            <td class="ps-4 fw-semibold text-dark">
+              {{ u.username }}
+              {% if u.is_superuser %}
+                <i class="bi bi-shield-fill-check text-danger ms-1" title="Superusuario"></i>
+              {% endif %}
+            </td>
+            <td class="small text-muted">{{ u.get_full_name|default:"—" }}</td>
+            <td class="small text-muted">{{ u.email|default:"—" }}</td>
+            <td>
+              {% if u.pk == request.user.pk or u.is_superuser %}
+                <span class="badge bg-secondary">{{ u.get_rol_display|default:"Administrador" }}</span>
+              {% else %}
+                <form method="post" action="{% url 'usuarios:cambiar_rol' u.pk %}" class="d-flex gap-1">
+                  {% csrf_token %}
+                  <select name="rol" class="form-select form-select-sm" style="min-width:110px;">
+                    {% for valor, nombre in roles %}
+                      <option value="{{ valor }}" {% if u.rol == valor %}selected{% endif %}>{{ nombre }}</option>
                     {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
+                  </select>
+                  <button type="submit" class="btn btn-sm btn-outline-primary" title="Guardar rol">
+                    <i class="bi bi-check-lg"></i>
+                  </button>
+                </form>
+              {% endif %}
+            </td>
+            <td class="small text-muted">{{ u.date_joined|date:"d/m/Y" }}</td>
+            <td class="text-end pe-4">
+              {% if u.pk == request.user.pk %}
+                <span class="badge bg-primary">Tu cuenta</span>
+              {% else %}
+                <form method="post" action="{% url 'usuarios:alternar_estado' u.pk %}" class="d-inline">
+                  {% csrf_token %}
+                  <button type="submit"
+                          class="btn btn-sm {% if u.is_active %}btn-outline-success{% else %}btn-outline-danger{% endif %}">
+                    {% if u.is_active %}
+                      <i class="bi bi-check-circle"></i> Activo
+                    {% else %}
+                      <i class="bi bi-slash-circle"></i> Inactivo
+                    {% endif %}
+                  </button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" class="text-center text-muted py-5">
+              <i class="bi bi-people d-block mb-2" style="font-size:2.5rem;"></i>
+              No hay usuarios que coincidan con el filtro.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if usuarios.has_other_pages %}
+    <nav class="p-3 border-top">
+      <ul class="pagination pagination-sm justify-content-center mb-0">
+        {% if usuarios.has_previous %}
+          <li class="page-item">
+            <a class="page-link" href="?q={{ q }}&rol={{ rol }}&estado={{ estado }}&page={{ usuarios.previous_page_number }}">Anterior</a>
+          </li>
+        {% endif %}
+        <li class="page-item disabled">
+          <span class="page-link">{{ usuarios.number }} de {{ usuarios.paginator.num_pages }}</span>
+        </li>
+        {% if usuarios.has_next %}
+          <li class="page-item">
+            <a class="page-link" href="?q={{ q }}&rol={{ rol }}&estado={{ estado }}&page={{ usuarios.next_page_number }}">Siguiente</a>
+          </li>
+        {% endif %}
+      </ul>
+    </nav>
+  {% endif %}
 </div>
 {% endblock %}

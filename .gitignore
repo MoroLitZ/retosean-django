@@ -3,11 +3,17 @@ __pycache__/
 *.pyc
 *.pyo
 .env
-db.sqlite3
 media/
 staticfiles/
 *.log
 *.err
 .DS_Store
 
-retos_db.sqlite3
+# Artefactos temporales de pruebas
+_test_result.txt
+test_out.txt
+
+
+# El proyecto solo usa PostgreSQL: ningun archivo SQLite debe entrar al repo
+*.sqlite3
+*.sqlite3-journal

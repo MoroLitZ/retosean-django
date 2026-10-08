@@ -17,7 +17,7 @@
 <div class="card-panel">
   <div class="card-panel-header">
     <span><i class="bi bi-journal-text me-2 text-muted"></i>Integraciones académicas activas</span>
-    <span class="badge bg-secondary">{{ integraciones|length }}</span>
+    <span class="badge bg-secondary">{{ page_obj.paginator.count }}</span>
   </div>
 
   {% if integraciones %}
@@ -73,4 +73,24 @@
   </div>
   {% endif %}
 </div>
+
+{% if page_obj.has_other_pages %}
+<nav class="mt-4">
+  <ul class="pagination pagination-sm justify-content-center mb-0">
+    {% if page_obj.has_previous %}
+      <li class="page-item">
+        <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Anterior</a>
+      </li>
+    {% endif %}
+    <li class="page-item disabled">
+      <span class="page-link">{{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+    </li>
+    {% if page_obj.has_next %}
+      <li class="page-item">
+        <a class="page-link" href="?page={{ page_obj.next_page_number }}">Siguiente</a>
+      </li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
 {% endblock %}

@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+{% block title %}Editar Perfil{% endblock %}
+{% block page_title %}Editar Mi Perfil{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-0" style="max-width: 700px;">
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} alert-dismissible fade show mb-4" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  <div class="card-panel">
+    <div class="card-panel-header">
+      <i class="bi bi-pencil-square me-2 text-muted"></i> Editar Información del Perfil
+    </div>
+    <div class="p-4">
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger py-2 mb-3">
+            {% for e in form.non_field_errors %}<div>{{ e }}</div>{% endfor %}
+          </div>
+        {% endif %}
+
+        <!-- Datos básicos del usuario -->
+        <h6 class="mb-3 text-muted" style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;">
+          <i class="bi bi-person me-1"></i> Datos Personales
+        </h6>
+        <div class="row g-3 mb-4">
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold">Nombre</label>
+            {{ form.first_name }}
+            {% for e in form.first_name.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold">Apellido</label>
+            {{ form.last_name }}
+            {% for e in form.last_name.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold">Correo electrónico</label>
+            {{ form.email }}
+            {% for e in form.email.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold">Teléfono</label>
+            {{ form.telefono }}
+            {% for e in form.telefono.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+          </div>
+        </div>
+
+        <!-- Campos específicos del rol -->
+        {% if user.rol == 'ESTUDIANTE' %}
+          <h6 class="mb-3 text-muted" style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;">
+            <i class="bi bi-mortarboard me-1"></i> Información Académica
+          </h6>
+          <div class="row g-3 mb-4">
+            <div class="col-sm-8">
+              <label class="form-label fw-semibold">Carrera / Programa</label>
+              {{ form.primera_carrera }}
+              {% for e in form.primera_carrera.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Semestre</label>
+              {{ form.semestre }}
+              {% for e in form.semestre.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+            </div>
+          </div>
+        {% elif user.rol == 'PROFESOR' %}
+          <h6 class="mb-3 text-muted" style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;">
+            <i class="bi bi-briefcase me-1"></i> Información Profesional
+          </h6>
+          <div class="row g-3 mb-4">
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Facultad</label>
+              {{ form.facultad }}
+              {% for e in form.facultad.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Especialidad</label>
+              {{ form.especialidad }}
+              {% for e in form.especialidad.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+            </div>
+          </div>
+        {% elif user.rol == 'EMPRESA' %}
+          <h6 class="mb-3 text-muted" style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;">
+            <i class="bi bi-building me-1"></i> Información de la Empresa
+          </h6>
+          <div class="row g-3 mb-4">
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Razón Social</label>
+              {{ form.razon_social }}
+              {% for e in form.razon_social.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Sector Industrial</label>
+              {{ form.sector_industrial }}
+              {% for e in form.sector_industrial.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+            </div>
+          </div>
+        {% endif %}
+
+        <div class="d-flex gap-2 mt-4">
+          <button type="submit" class="btn" style="background: var(--accent); color: #fff; border: none;">
+            <i class="bi bi-check-lg me-1"></i> Guardar cambios
+          </button>
+          <a href="{% url 'usuarios:perfil' %}" class="btn btn-outline-secondary">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

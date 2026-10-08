@@ -21,7 +21,7 @@ from django.conf.urls.static import static
 from django.views.generic import RedirectView
 
 urlpatterns = [
-    path('', RedirectView.as_view(pattern_name='usuarios:perfil', permanent=False)),
+    path('', RedirectView.as_view(pattern_name='usuarios:perfil', permanent=False), name='home'),
     path('admin/', admin.site.urls),
     path('usuarios/', include('apps.usuarios.urls')),
     path('retos/', include('apps.retos.urls')),
@@ -30,11 +30,15 @@ urlpatterns = [
     path('participaciones/', include('apps.participaciones.urls')),
     path('seguimiento/', include('apps.seguimiento.urls')),
     path('evaluacion/', include('apps.evaluacion.urls')),
+    path('cierre/', include('apps.cierre.urls')),
     path('dashboard/', include('apps.dashboard.urls')),
     path('unidades-estudio/', include('apps.unidades_estudio.urls')),
     path('notificaciones/', include('apps.notificaciones.urls')),
-    path('cierre/', include('apps.cierre.urls')),
+    path('reportes/', include('apps.reportes.urls')),
+    path('presupuesto/', include('apps.presupuesto.urls')),
+    path('hackatones/', include('apps.hackaton.urls')),
 ]
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
