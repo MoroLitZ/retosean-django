@@ -189,7 +189,7 @@ Producción debe utilizar:
 DJANGO_SETTINGS_MODULE=config.settings.production
 ```
 
-No se deben subir secretos, `.env`, bases SQLite locales, archivos de medios ni credenciales.
+No se deben subir secretos, `.env`, volcados de base de datos, archivos de medios ni credenciales.
 
 ## 4. Enrutamiento
 
