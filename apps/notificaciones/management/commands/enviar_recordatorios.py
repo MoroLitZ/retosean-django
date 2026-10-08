@@ -76,7 +76,7 @@ class Command(BaseCommand):
 
         total = 0
         retos = Reto.objects.filter(
-            estado="aprobado", fecha_limite_postulacion=objetivo
+            estado__in=Reto.ESTADOS_ABIERTOS, fecha_limite_postulacion=objetivo
         ).select_related("empresa")
         for reto in retos:
             # Estudiantes interesados: lo tienen en favoritos o ya se postularon.
@@ -100,7 +100,7 @@ class Command(BaseCommand):
 
         total = 0
         retos = Reto.objects.filter(
-            estado__in=["aprobado", "en_curso"], fecha_fin_tentativa=objetivo
+            estado__in=Reto.ESTADOS_ACTIVOS, fecha_fin_tentativa=objetivo
         )
         for reto in retos:
             con_entrega_final = Entregable.objects.filter(
@@ -142,7 +142,13 @@ class Command(BaseCommand):
                     f"  - VENCIDO: {documento} ({documento.fecha_vencimiento})"
                 )
             return vencidos.count()
-        return vencidos.update(estado="VENCIDO")
+        from apps.empresas.services import marcar_documento_vencido
+
+        total = 0
+        for documento in vencidos:
+            marcar_documento_vencido(documento)
+            total += 1
+        return total
 
     def _documentos_por_vencer(self, objetivo, antelacion):
         from apps.empresas.models import DocumentoEmpresa

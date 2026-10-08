@@ -4,8 +4,22 @@ from django.db.models import Avg, Count, Sum
 from django.urls import reverse
 
 from apps.notificaciones.services import notificar_muchos
+from apps.seguimiento.services import MaquinaEstados
 
 from .models import EtapaHackaton, InscripcionHackaton, Jurado, VotacionHackaton
+
+
+# Inscripcion de un equipo al hackathon. El gestor puede corregir su decision
+# (Aceptada <-> Rechazada); cada cambio queda en el historial.
+MAQUINA_INSCRIPCION = MaquinaEstados(
+    "la inscripcion",
+    {
+        "PENDIENTE": {"ACEPTADA", "RECHAZADA"},
+        "ACEPTADA": {"RECHAZADA"},
+        "RECHAZADA": {"ACEPTADA"},
+    },
+    dict(InscripcionHackaton.ESTADOS),
+)
 
 
 def etapa_vigente(hackathon, tipo):

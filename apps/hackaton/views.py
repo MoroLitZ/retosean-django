@@ -3,6 +3,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from apps.retos.models import Reto
+from apps.seguimiento.services import TransicionInvalida, cambiar_estado, registrar_cambio_estado
 from apps.usuarios.decorators import rol_requerido, solo_estudiante
 from apps.usuarios.roles import es_admin
 
@@ -231,11 +232,12 @@ def inscribir_equipo(request, pk):
 
     form = InscripcionForm(request.POST or None, hackathon=hackathon, usuario=request.user)
     if request.method == "POST" and form.is_valid():
-        InscripcionHackaton.objects.create(
+        inscripcion = InscripcionHackaton.objects.create(
             hackathon=hackathon,
             equipo=form.cleaned_data["equipo"],
             inscrito_por=request.user,
         )
+        registrar_cambio_estado(inscripcion, "", inscripcion.estado, request.user, "Equipo inscrito.")
         messages.success(request, "Equipo inscrito. Queda pendiente de aprobacion.")
         return redirect("hackaton:detalle", pk=hackathon.pk)
 
@@ -258,9 +260,15 @@ def gestionar_inscripcion(request, pk):
 
     accion = request.POST.get("accion")
     if accion in {"aceptar", "rechazar"}:
-        inscripcion.estado = "ACEPTADA" if accion == "aceptar" else "RECHAZADA"
-        inscripcion.save(update_fields=["estado"])
-        messages.success(request, f"Inscripcion de {inscripcion.equipo.nombre} actualizada.")
+        try:
+            cambiar_estado(
+                inscripcion, services.MAQUINA_INSCRIPCION,
+                "ACEPTADA" if accion == "aceptar" else "RECHAZADA", request.user,
+            )
+        except TransicionInvalida as error:
+            messages.error(request, str(error))
+        else:
+            messages.success(request, f"Inscripcion de {inscripcion.equipo.nombre} actualizada.")
     return redirect("hackaton:detalle", pk=inscripcion.hackathon_id)
 
 

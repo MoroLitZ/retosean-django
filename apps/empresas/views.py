@@ -12,7 +12,18 @@ from apps.evaluacion.models import Entregable
 from apps.notificaciones.services import notificar, notificar_admins
 from apps.usuarios.decorators import solo_admin, solo_empresa
 from apps.usuarios.roles import es_admin, url_dashboard_para
-from .services import puede_la_empresa_operar
+from apps.usuarios.services import cambiar_estado_cuenta
+from apps.seguimiento.services import TransicionInvalida, cambiar_estado, historial_de
+from apps.participaciones.services import MAQUINA_POSTULACION
+from .forms import ConvenioForm
+from .services import (
+    MAQUINA_CONVENIO,
+    cambiar_estado_convenio,
+    cargar_documento,
+    puede_la_empresa_operar,
+    rechazar_documentos_por_listas,
+    revisar_documento,
+)
 
 
 @login_required(login_url='usuarios:login')
@@ -33,20 +44,17 @@ def panel_documentos_empresa(request):
         form = CargarDocumentoForm(request.POST, request.FILES)
 
         if form.is_valid():
-            tipo = form.cleaned_data['tipo_documento']
-            archivo = form.cleaned_data['archivo']
-            fecha_expedicion = form.cleaned_data.get('fecha_expedicion')
-
-            documento, created = DocumentoEmpresa.objects.update_or_create(
-                empresa=empresa,
-                tipo_documento=tipo,
-                defaults={
-                    'archivo': archivo,
-                    'estado': 'CARGADO',
-                    'motivo_rechazo': '',
-                    'fecha_expedicion': fecha_expedicion
-                }
-            )
+            try:
+                documento, created = cargar_documento(
+                    empresa,
+                    form.cleaned_data['tipo_documento'],
+                    form.cleaned_data['archivo'],
+                    form.cleaned_data.get('fecha_expedicion'),
+                    request.user,
+                )
+            except TransicionInvalida as error:
+                messages.error(request, str(error))
+                return redirect('empresas:documentos')
 
             notificar_admins(
                 'DOCUMENTO_CARGADO_ADMIN',
@@ -149,8 +157,14 @@ def gestionar_postulacion(request, postulacion_id):
     accion = request.POST.get('accion')
     if accion in {'aceptar', 'rechazar'}:
         aceptada = accion == 'aceptar'
-        postulacion.estado = 'ACEPTADA' if aceptada else 'RECHAZADA'
-        postulacion.save(update_fields=['estado'])
+        try:
+            cambiar_estado(
+                postulacion, MAQUINA_POSTULACION, 'ACEPTADA' if aceptada else 'RECHAZADA',
+                request.user, 'Postulacion gestionada por la empresa.',
+            )
+        except TransicionInvalida as error:
+            messages.error(request, str(error))
+            return redirect('empresas:postulaciones')
         _notificar_respuesta_postulacion(postulacion, aceptada)
         if aceptada:
             messages.success(request, 'Postulación aceptada.')
@@ -236,7 +250,7 @@ def indicadores_empresa(request):
     context = {
         'titulo': 'Indicadores de Gestión',
         'total_retos': retos.count(),
-        'retos_activos': retos.filter(estado__in=['aprobado', 'en_curso']).count(),
+        'retos_activos': retos.filter(estado__in=Reto.ESTADOS_ACTIVOS).count(),
         'retos_finalizados': retos.filter(estado='finalizado').count(),
         'retos_en_revision': retos.filter(estado='en_revision').count(),
         'total_postulaciones': PostulacionReto.objects.filter(reto__in=retos).count(),
@@ -267,8 +281,44 @@ def admin_revisar_documentacion(request, empresa_id):
 
     return render(request, 'empresas/admin/revisar_documentos.html', {
         'empresa': empresa,
-        'pendientes': pendientes
+        'pendientes': pendientes,
+        'convenio_form': ConvenioForm(opciones=_opciones_convenio(empresa)),
+        'historial_convenio': historial_de(empresa, campo='estado_convenio')[:10],
     })
+
+
+def _opciones_convenio(empresa):
+    return [
+        (valor, etiqueta)
+        for valor, etiqueta in Empresa.ESTADO_CONVENIO
+        if MAQUINA_CONVENIO.puede(empresa.estado_convenio, valor)
+    ]
+
+
+@require_POST
+@solo_admin
+def actualizar_convenio(request, empresa_id):
+    """Avanza el tramite del convenio de la empresa (HU00)."""
+    empresa = get_object_or_404(Empresa, id=empresa_id)
+    form = ConvenioForm(request.POST, opciones=_opciones_convenio(empresa))
+    if not form.is_valid():
+        for errores in form.errors.values():
+            for error in errores:
+                messages.error(request, error)
+        return redirect('empresas:admin_revisar_documentacion', empresa_id=empresa.id)
+    try:
+        cambiar_estado_convenio(
+            empresa,
+            form.cleaned_data['estado_convenio'],
+            request.user,
+            form.cleaned_data['comentario'],
+            form.cleaned_data.get('fecha_vencimiento'),
+        )
+    except TransicionInvalida as error:
+        messages.error(request, str(error))
+    else:
+        messages.success(request, f'Convenio actualizado a "{empresa.get_estado_convenio_display()}".')
+    return redirect('empresas:admin_revisar_documentacion', empresa_id=empresa.id)
 
 
 @require_POST
@@ -290,9 +340,11 @@ def procesar_aprobacion(request, documento_id):
         messages.error(request, "Para rechazar un documento debes indicar el motivo.")
         return redirect('empresas:admin_revisar_documentacion', empresa_id=documento.empresa_id)
 
-    documento.estado = nuevo_estado
-    documento.motivo_rechazo = motivo if nuevo_estado == 'RECHAZADO' else ''
-    documento.save()
+    try:
+        revisar_documento(documento, nuevo_estado, request.user, motivo)
+    except TransicionInvalida as error:
+        messages.error(request, str(error))
+        return redirect('empresas:admin_revisar_documentacion', empresa_id=documento.empresa_id)
     _actualizar_estado_validacion(documento.empresa)
     _notificar_revision_documento(documento, nuevo_estado, motivo)
     messages.success(request, f"Documento {documento.get_tipo_documento_display()} procesado correctamente.")
@@ -334,16 +386,15 @@ def procesar_listas_restrictivas(request, empresa_id):
                 empresa.estado_validacion = 'RECHAZADA'
                 
                 # Rechazar automáticamente todos los documentos pendientes
-                DocumentoEmpresa.objects.filter(empresa=empresa).exclude(estado='VERIFICADO').update(
-                    estado='RECHAZADO',
-                    motivo_rechazo='Rechazado automáticamente por aparecer en listas restrictivas (Clinton/OFAC).'
-                )
+                rechazar_documentos_por_listas(empresa, request.user)
 
                 # Inhabilitar la cuenta del usuario para que no pueda volver a iniciar sesión
-                if empresa.usuario:
-                    empresa.usuario.is_active = False
-                    empresa.usuario.save()
-                
+                if empresa.usuario and empresa.usuario.is_active:
+                    cambiar_estado_cuenta(
+                        empresa.usuario, False, request.user,
+                        'Cuenta inhabilitada: la empresa aparece en listas restrictivas.',
+                    )
+
                 notificar(
                     empresa.usuario, 'EMPRESA_LISTAS_RESTRICTIVAS',
                     mensaje=(
@@ -364,8 +415,10 @@ def procesar_listas_restrictivas(request, empresa_id):
                 messages.success(request, f"Verificación de listas restrictivas aprobada para {empresa.razon_social}.")
                 # Si por error estuvo rechazada antes y ahora se aprueba, reactivamos la cuenta.
                 if empresa.usuario and not empresa.usuario.is_active:
-                    empresa.usuario.is_active = True
-                    empresa.usuario.save()
+                    cambiar_estado_cuenta(
+                        empresa.usuario, True, request.user,
+                        'Cuenta reactivada: verificacion en listas restrictivas aprobada.',
+                    )
 
             empresa.save()
 

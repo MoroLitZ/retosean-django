@@ -188,9 +188,10 @@ class Command(BaseCommand):
             },
         )
 
-        if created:
-            cambiar_estado_reto(reto, "aprobado", admin, "Reto de ejemplo aprobado por siembra --demo.")
-        elif reto.estado == "borrador":
+        if reto.estado == "borrador":
+            cambiar_estado_reto(reto, "en_revision", empresa_user, "Reto de ejemplo enviado por siembra --demo.",
+                                notificar_empresa=False)
+        if reto.estado == "en_revision":
             cambiar_estado_reto(reto, "aprobado", admin, "Reto de ejemplo aprobado por siembra --demo.")
 
         self.stdout.write(self.style.SUCCESS(

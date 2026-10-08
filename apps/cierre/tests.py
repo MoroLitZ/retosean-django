@@ -56,3 +56,19 @@ class CierreSprintTests(TestCase):
         self.assertRedirects(response, reverse("cierre:mis_encuestas"))
         encuesta.refresh_from_db()
         self.assertTrue(encuesta.respondida)
+
+    def test_no_se_finaliza_un_reto_que_no_esta_en_curso(self):
+        self.reto.estado = "abierto"
+        self.reto.save(update_fields=["estado"])
+        self.client.force_login(self.admin)
+        self.client.post(reverse("cierre:finalizar", args=[self.reto.pk]))
+        self.reto.refresh_from_db()
+        self.assertEqual(self.reto.estado, "abierto")
+        self.assertFalse(EncuestaSatisfaccion.objects.filter(cierre=self.cierre).exists())
+
+    def test_empresa_no_ve_el_boton_de_finalizar(self):
+        self.client.force_login(self.empresa)
+        response = self.client.get(reverse("cierre:gestionar", args=[self.reto.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context["puede_finalizar"])
+        self.assertNotContains(response, reverse("cierre:finalizar", args=[self.reto.pk]))

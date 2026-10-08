@@ -9,10 +9,14 @@ class RetoArchivoInline(admin.TabularInline):
 
 
 class RetoAdmin(admin.ModelAdmin):
-    list_display = ("titulo", "empresa", "tipo", "estado", "consecutivo", "actualizado_en")
+    list_display = ("titulo", "empresa", "tipo", "estado", "codigo", "eliminado_en", "actualizado_en")
     list_filter = ("estado", "tipo", "area")
     search_fields = ("titulo", "descripcion", "empresa__username", "empresa__email")
     inlines = (RetoArchivoInline,)
+
+    def get_queryset(self, request):
+        # El admin ve tambien los retos eliminados logicamente.
+        return Reto.todos.all()
 
 @admin.register(HistorialEstadoReto)
 class HistorialEstadoRetoAdmin(admin.ModelAdmin):
