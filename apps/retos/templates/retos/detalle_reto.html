@@ -23,8 +23,8 @@
             <span class="badge px-2 py-1" style="background: var(--accent-light); color: var(--accent); font-size: 0.75rem;">
               {{ reto.get_tipo_display|upper }}
             </span>
-            {% if reto.consecutivo %}
-              <span class="text-muted" style="font-size: 0.8rem;">#{{ reto.consecutivo }}</span>
+            {% if reto.codigo %}
+              <span class="text-muted" style="font-size: 0.8rem;">{{ reto.codigo }}</span>
             {% endif %}
           </div>
           <h1 style="font-size: 1.6rem; font-weight: 800; color: #111827; margin: 0 0 0.4rem;">
@@ -44,12 +44,16 @@
             <a href="{% url 'retos:editar' reto.pk %}" class="btn btn-sm btn-outline-secondary">
               <i class="bi bi-pencil me-1"></i>Editar
             </a>
+            {% if reto.estado == 'borrador' %}
             <a href="{% url 'retos:enviar_revision' reto.pk %}" class="btn btn-sm" style="background: var(--accent); color: #fff; border: none;">
               <i class="bi bi-send me-1"></i>Enviar a Revisi&oacute;n
             </a>
+            {% endif %}
+            {% if reto.puede_eliminar_empresa %}
             <a href="{% url 'retos:eliminar' reto.pk %}" class="btn btn-sm btn-outline-danger">
               <i class="bi bi-trash me-1"></i>Eliminar
             </a>
+            {% endif %}
           {% endif %}
           {% if user.is_superuser or user.rol == 'ADMIN' %}
             {% if reto.estado == 'en_revision' %}
@@ -110,7 +114,7 @@
   {% endif %}
 
   <!-- CTA postulación para estudiantes -->
-  {% if user.rol == 'ESTUDIANTE' and reto.estado == 'aprobado' %}
+  {% if user.rol == 'ESTUDIANTE' and reto.esta_abierto %}
     <div class="mb-4 p-4 rounded-3 d-flex flex-wrap justify-content-between align-items-center gap-3"
          style="background: var(--accent-light); border: 1.5px solid var(--accent);">
       <div>
@@ -172,7 +176,7 @@
                   <td class="ps-4 text-muted">{{ item.fecha|date:'d/m/Y H:i' }}</td>
                   <td><span class="badge bg-secondary bg-opacity-25 text-secondary">{{ item.estado_anterior|default:'-' }}</span></td>
                   <td>
-                    <span class="badge {% if item.estado_nuevo == 'aprobado' %}bg-success{% elif item.estado_nuevo == 'rechazado' %}bg-danger{% elif item.estado_nuevo == 'en_revision' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                    <span class="badge {% if item.estado_nuevo == 'aprobado' or item.estado_nuevo == 'abierto' %}bg-success{% elif item.estado_nuevo == 'rechazado' %}bg-danger{% elif item.estado_nuevo == 'en_revision' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
                       {{ item.get_estado_nuevo_display }}
                     </span>
                   </td>
@@ -277,7 +281,7 @@
       </div>
 
       {% if es_admin or user == reto.empresa or es_profesor %}
-        {% if reto.estado == 'aprobado' or reto.estado == 'en_curso' or reto.estado == 'pausado' or reto.estado == 'finalizado' %}
+        {% if reto.esta_aprobado_o_activo %}
         <div class="card-panel mb-4">
           <div class="card-panel-header">
             <i class="bi bi-flag me-2 text-primary"></i>Cierre y Certificación

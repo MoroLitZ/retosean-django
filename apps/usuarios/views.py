@@ -14,6 +14,7 @@ from apps.empresas.models import Empresa
 from apps.retos.models import Reto
 from .decorators import solo_admin, solo_empresa, solo_estudiante, solo_profesor
 from .roles import es_admin, url_dashboard_para
+from .services import cambiar_estado_cuenta, cambiar_rol
 
 
 # ── Rutas de autenticación y perfil ──────────────────────────────
@@ -203,15 +204,7 @@ def cambiar_rol_usuario(request, pk):
         messages.error(request, 'No puedes cambiar tu propio rol.')
         return redirect('usuarios:lista_usuarios')
 
-    anterior = usuario.rol
-    if anterior != nuevo_rol:
-        usuario.rol = nuevo_rol
-        usuario.save(update_fields=['rol'])
-        LogActividad.objects.create(
-            usuario=usuario, identificador=usuario.username, accion='CAMBIO_ROL',
-            detalle=f'Rol cambiado de {anterior or "sin rol"} a {nuevo_rol}.',
-            realizado_por=request.user,
-        )
+    if cambiar_rol(usuario, nuevo_rol, request.user):
         messages.success(request, f'{usuario.username} ahora tiene el rol {nuevo_rol}.')
     return redirect('usuarios:lista_usuarios')
 
@@ -225,14 +218,7 @@ def alternar_estado_usuario(request, pk):
         messages.error(request, 'No puedes desactivar tu propia cuenta.')
         return redirect('usuarios:lista_usuarios')
 
-    usuario.is_active = not usuario.is_active
-    usuario.activo = usuario.is_active
-    usuario.save(update_fields=['is_active', 'activo'])
-    LogActividad.objects.create(
-        usuario=usuario, identificador=usuario.username, accion='CAMBIO_ESTADO',
-        detalle='Cuenta activada.' if usuario.is_active else 'Cuenta desactivada.',
-        realizado_por=request.user,
-    )
+    cambiar_estado_cuenta(usuario, not usuario.is_active, request.user)
     estado = 'activada' if usuario.is_active else 'desactivada'
     messages.success(request, f'Cuenta de {usuario.username} {estado}.')
     return redirect('usuarios:lista_usuarios')

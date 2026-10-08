@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -31,7 +32,18 @@ from django.urls import reverse
 
 from apps.notificaciones.services import notificar, notificar_admins, notificar_muchos
 from apps.participaciones.services import sincronizar_equipo_academico
-from .services import cambiar_estado_reto, registrar_cambio_estado
+from apps.seguimiento.services import (
+    MAQUINA_INTEGRACION,
+    TransicionInvalida,
+    cambiar_estado as cambiar_estado_entidad,
+    registrar_cambio_estado as registrar_estado_inicial,
+)
+from .services import (
+    cambiar_estado_reto,
+    eliminar_reto_borrador,
+    estados_manuales_disponibles,
+    registrar_cambio_estado,
+)
 
 
 def rol_requerido(*roles, **kwargs):
@@ -57,7 +69,7 @@ def _puede_ver_reto(user, reto):
     # o retos donde forma parte de un equipo academico asignado
     if user.rol == 'ESTUDIANTE':
         from .models import EquipoRetoAcademico
-        if reto.esta_aprobado_o_activo:
+        if reto.estado in Reto.ESTADOS_VISIBLES_ESTUDIANTE:
             return True
         return EquipoRetoAcademico.objects.filter(reto=reto, estudiantes=user).exists()
     return False
@@ -108,6 +120,7 @@ def crear_reto(request):
         reto.empresa = request.user
         reto.estado = 'borrador'
         reto.save()
+        registrar_cambio_estado(reto, '', 'borrador', request.user, 'Reto creado.')
         _guardar_archivos_reto(reto, form.cleaned_data.get('archivos', []))
         messages.success(request, 'Reto guardado como borrador.')
         if request.POST.get('accion') == 'enviar':
@@ -129,11 +142,13 @@ def editar_reto(request, pk):
 
     form = RetoForm(request.POST or None, request.FILES or None, instance=reto)
     if request.method == 'POST' and form.is_valid():
-        reto = form.save(commit=False)
+        reto = form.save()
         if reto.estado == 'rechazado':
-            reto.estado = 'borrador'
-            reto.comentarios_revision = ''
-        reto.save()
+            # Rechazado -> Borrador: la empresa corrige y puede reenviar.
+            cambiar_estado_reto(
+                reto, 'borrador', request.user,
+                'La empresa edito el reto tras el rechazo.', notificar_empresa=False,
+            )
         _guardar_archivos_reto(reto, form.cleaned_data.get('archivos', []))
         messages.success(request, 'Reto actualizado.')
         if request.POST.get('accion') == 'enviar':
@@ -168,11 +183,14 @@ def enviar_revision(request, pk):
         messages.error(request, 'Completa estos campos antes de enviar: ' + ', '.join(faltantes) + '.')
         return redirect('retos:editar', pk=reto.pk)
 
-    estado_anterior = reto.estado
-    reto.estado = 'en_revision'
-    reto.fecha_envio_revision = timezone.now()
-    reto.save(update_fields=['estado', 'fecha_envio_revision', 'actualizado_en'])
-    registrar_cambio_estado(reto, estado_anterior, 'en_revision', request.user, 'Reto enviado a aprobacion.')
+    try:
+        cambiar_estado_reto(
+            reto, 'en_revision', request.user, 'Reto enviado a aprobacion.', notificar_empresa=False,
+        )
+    except TransicionInvalida as error:
+        # Un reto rechazado debe pasar primero por edicion (Rechazado -> Borrador).
+        messages.error(request, f'{error} Edita el reto antes de reenviarlo.')
+        return redirect('retos:detalle', pk=reto.pk)
     notificar_admins(
         'RETO_ENVIADO_REVISION',
         mensaje=f'La empresa {request.user.username} envio el reto "{reto.titulo}" para aprobacion.',
@@ -186,11 +204,11 @@ def enviar_revision(request, pk):
 @solo_empresa
 def eliminar_reto(request, pk):
     reto = get_object_or_404(Reto, pk=pk, empresa=request.user)
-    if reto.esta_aprobado_o_activo:
-        messages.error(request, 'No se pueden eliminar retos aprobados o activos.')
+    if not reto.puede_eliminar_empresa:
+        messages.error(request, 'Solo puedes eliminar retos en borrador.')
         return redirect('retos:detalle', pk=reto.pk)
     if request.method == 'POST':
-        reto.delete()
+        eliminar_reto_borrador(reto, request.user)
         messages.success(request, 'Reto eliminado.')
         return redirect('retos:mis_retos')
     return render(request, 'retos/confirmar_eliminar.html', {'reto': reto})
@@ -231,12 +249,15 @@ def revisar_reto(request, pk):
     if request.method == 'POST' and form.is_valid():
         accion = form.cleaned_data['accion']
         comentario = form.cleaned_data['comentario']
-        if accion == 'aprobar':
-            cambiar_estado_reto(reto, 'aprobado', request.user, comentario)
-            messages.success(request, 'Reto aprobado y consecutivo asignado.')
-        else:
-            cambiar_estado_reto(reto, 'rechazado', request.user, comentario)
-            messages.success(request, 'Reto rechazado con comentarios para la empresa.')
+        try:
+            if accion == 'aprobar':
+                cambiar_estado_reto(reto, 'aprobado', request.user, comentario)
+                messages.success(request, f'Reto aprobado con el numero {reto.codigo}.')
+            else:
+                cambiar_estado_reto(reto, 'rechazado', request.user, comentario)
+                messages.success(request, 'Reto rechazado con comentarios para la empresa.')
+        except TransicionInvalida as error:
+            messages.error(request, str(error))
         return redirect('retos:admin_panel')
     return render(request, 'retos/admin_revisar_reto.html', {'reto': reto, 'form': form})
 
@@ -244,17 +265,24 @@ def revisar_reto(request, pk):
 @solo_administrador
 def cambiar_estado(request, pk):
     reto = get_object_or_404(Reto, pk=pk)
-    form = EstadoRetoForm(request.POST or None, initial={'estado': reto.estado})
+    opciones = estados_manuales_disponibles(reto)
+    form = EstadoRetoForm(request.POST or None, opciones=opciones)
     if request.method == 'POST' and form.is_valid():
-        cambiar_estado_reto(
-            reto,
-            form.cleaned_data['estado'],
-            request.user,
-            form.cleaned_data['comentario'],
-        )
-        messages.success(request, 'Estado del reto actualizado.')
+        try:
+            cambiar_estado_reto(
+                reto,
+                form.cleaned_data['estado'],
+                request.user,
+                form.cleaned_data['comentario'],
+            )
+        except TransicionInvalida as error:
+            messages.error(request, str(error))
+        else:
+            messages.success(request, 'Estado del reto actualizado.')
         return redirect('retos:detalle', pk=reto.pk)
-    return render(request, 'retos/admin_cambiar_estado.html', {'reto': reto, 'form': form})
+    return render(request, 'retos/admin_cambiar_estado.html', {
+        'reto': reto, 'form': form, 'opciones': opciones,
+    })
 
 
 @rol_requerido('EMPRESA', 'PROFESOR', 'ADMIN')
@@ -298,6 +326,7 @@ def crear_integracion(request):
         integracion.profesor = request.user
         integracion.estado = 'borrador'
         integracion.save()
+        registrar_estado_inicial(integracion, '', 'borrador', request.user, 'Integracion creada.')
         messages.success(request, 'Integracion academica guardada como borrador.')
         if request.POST.get('accion') == 'enviar':
             return redirect('retos:enviar_integracion_revision', pk=integracion.pk)
@@ -313,11 +342,14 @@ def editar_integracion(request, pk):
         return redirect('retos:detalle_integracion', pk=integracion.pk)
     form = IntegracionAcademicaForm(request.POST or None, instance=integracion)
     if request.method == 'POST' and form.is_valid():
-        integracion = form.save(commit=False)
+        integracion = form.save()
         if integracion.estado == 'rechazada':
-            integracion.estado = 'borrador'
             integracion.comentarios_revision = ''
-        integracion.save()
+            cambiar_estado_entidad(
+                integracion, MAQUINA_INTEGRACION, 'borrador', request.user,
+                'El profesor edito la integracion tras el rechazo.',
+                update_fields=['comentarios_revision'],
+            )
         messages.success(request, 'Integracion academica actualizada.')
         if request.POST.get('accion') == 'enviar':
             return redirect('retos:enviar_integracion_revision', pk=integracion.pk)
@@ -336,9 +368,15 @@ def enviar_integracion_revision(request, pk):
     if faltantes:
         messages.error(request, 'Completa estos campos antes de enviar: ' + ', '.join(faltantes) + '.')
         return redirect('retos:editar_integracion', pk=integracion.pk)
-    integracion.estado = 'en_revision'
     integracion.fecha_envio_revision = timezone.now()
-    integracion.save(update_fields=['estado', 'fecha_envio_revision', 'actualizado_en'])
+    try:
+        cambiar_estado_entidad(
+            integracion, MAQUINA_INTEGRACION, 'en_revision', request.user,
+            'Integracion enviada a revision.', update_fields=['fecha_envio_revision'],
+        )
+    except TransicionInvalida as error:
+        messages.error(request, str(error))
+        return redirect('retos:detalle_integracion', pk=integracion.pk)
 
     nombre_profesor = request.user.get_full_name() or request.user.username
     link_empresa = reverse('retos:empresa_revisar_integracion', kwargs={'pk': integracion.pk})
@@ -389,12 +427,25 @@ def detalle_integracion(request, pk):
 @solo_profesor
 @require_POST
 def publicar_integracion(request, pk):
-    integracion = get_object_or_404(IntegracionAcademica, pk=pk, profesor=request.user)
+    integracion = get_object_or_404(
+        IntegracionAcademica.objects.select_related('reto'), pk=pk, profesor=request.user
+    )
     if integracion.estado != 'aprobada':
         messages.error(request, 'Solo puedes publicar integraciones aprobadas.')
         return redirect('retos:detalle_integracion', pk=integracion.pk)
-    integracion.estado = 'publicada'
-    integracion.save(update_fields=['estado', 'actualizado_en'])
+    with transaction.atomic():
+        cambiar_estado_entidad(
+            integracion, MAQUINA_INTEGRACION, 'publicada', request.user,
+            'Integracion publicada para los estudiantes.',
+        )
+        # Aprobado -> Abierto: con la configuracion academica aprobada y
+        # publicada, el reto queda visible para los estudiantes (HU10).
+        reto = integracion.reto
+        if reto.estado == 'aprobado':
+            cambiar_estado_reto(
+                reto, 'abierto', request.user,
+                'Integracion academica publicada: reto abierto a estudiantes.',
+            )
     messages.success(request, 'Integracion publicada para los estudiantes del programa.')
     return redirect('retos:detalle_integracion', pk=integracion.pk)
 
@@ -427,12 +478,19 @@ def _procesar_revision_integracion(request, pk, template, url_retorno, queryset=
     form = RevisionIntegracionForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         aprobar = form.cleaned_data['accion'] == 'aprobar'
-        integracion.comentarios_revision = form.cleaned_data['comentario']
-        integracion.estado = 'aprobada' if aprobar else 'rechazada'
-        integracion.fecha_aprobacion = timezone.now() if aprobar else None
-        integracion.save()
-        nombre = integracion.profesor.get_full_name() or integracion.profesor.username
         estado = 'aprobada' if aprobar else 'rechazada'
+        integracion.comentarios_revision = form.cleaned_data['comentario']
+        integracion.fecha_aprobacion = timezone.now() if aprobar else None
+        try:
+            cambiar_estado_entidad(
+                integracion, MAQUINA_INTEGRACION, estado, request.user,
+                integracion.comentarios_revision,
+                update_fields=['comentarios_revision', 'fecha_aprobacion'],
+            )
+        except TransicionInvalida as error:
+            messages.error(request, str(error))
+            return redirect(url_retorno)
+        nombre = integracion.profesor.get_full_name() or integracion.profesor.username
         mensaje = f'Tu integracion academica del reto "{integracion.reto.titulo}" fue {estado}.'
         if integracion.comentarios_revision:
             mensaje += chr(10) + f'Comentario: {integracion.comentarios_revision}'

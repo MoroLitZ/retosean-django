@@ -19,7 +19,7 @@ def explorar_retos(request):
     if not es_admin(request.user) and getattr(request.user, 'rol', None) != 'ESTUDIANTE':
         return redirect(url_dashboard_para(request.user))
 
-    retos_qs = Reto.objects.filter(estado__in=['aprobado', 'en_curso']).select_related('empresa', 'facultad', 'programa')
+    retos_qs = Reto.objects.filter(estado__in=Reto.ESTADOS_ABIERTOS).select_related('empresa', 'facultad', 'programa')
 
     # Buscador por texto
     q = request.GET.get('q', '').strip()

@@ -17,4 +17,5 @@ urlpatterns = [
     path('admin/revisar-documentos/<int:empresa_id>/', views.admin_revisar_documentacion, name='admin_revisar_documentacion'),
     path('admin/procesar-aprobacion/<int:documento_id>/', views.procesar_aprobacion, name='procesar_aprobacion'),
     path('admin/empresa/<int:empresa_id>/listas/', views.procesar_listas_restrictivas, name='procesar_listas_restrictivas'),
+    path('admin/empresa/<int:empresa_id>/convenio/', views.actualizar_convenio, name='actualizar_convenio'),
 ]

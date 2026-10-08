@@ -3,6 +3,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from apps.academico.models import Facultad, Programa
+from apps.empresas.models import Empresa
 from apps.evaluacion.models import Entregable
 from apps.notificaciones.models import Notificacion
 from apps.retos.models import EquipoRetoAcademico, Reto
@@ -17,7 +18,7 @@ class AccesoAEntregablesTests(TestCase):
 
     def setUp(self):
         self.empresa = Usuario.objects.create_user(username="empresa-part", password="x", rol="EMPRESA")
-        self.reto = Reto.objects.create(empresa=self.empresa, titulo="Reto abierto", estado="aprobado")
+        self.reto = Reto.objects.create(empresa=self.empresa, titulo="Reto abierto", estado="en_curso")
         self.aceptado = Usuario.objects.create_user(username="est-ok", password="x", rol="ESTUDIANTE")
         self.intruso = Usuario.objects.create_user(username="est-intruso", password="x", rol="ESTUDIANTE")
         Postulacion.objects.create(reto=self.reto, estudiante=self.aceptado, estado="ACEPTADA")
@@ -85,7 +86,7 @@ class PostulacionProgramaDropdownTests(TestCase):
             facultad=self.facultad,
         )
         self.empresa = Usuario.objects.create_user(username="empresa-pf", password="x", rol="EMPRESA")
-        self.reto = Reto.objects.create(empresa=self.empresa, titulo="Reto formulario", estado="aprobado")
+        self.reto = Reto.objects.create(empresa=self.empresa, titulo="Reto formulario", estado="abierto")
         self.estudiante = Usuario.objects.create_user(username="est-pf", password="x", rol="ESTUDIANTE")
 
     def test_formulario_programa_se_renderiza_como_select(self):
@@ -137,10 +138,12 @@ class FlujoNotificacionesYRevisionPostulacionTests(TestCase):
         self.estudiante = Usuario.objects.create_user(
             username="est-revision", password="x", rol="ESTUDIANTE", email="est@ean.edu.co"
         )
+        # La vista de postulaciones de la empresa exige un perfil de empresa.
+        Empresa.objects.create(usuario=self.empresa, nit="900555111", razon_social="Empresa Revision SAS")
         self.reto = Reto.objects.create(
             empresa=self.empresa,
             titulo="Reto para revisar postulaciones",
-            estado="aprobado",
+            estado="abierto",
         )
 
     def _postular(self):

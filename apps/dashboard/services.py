@@ -44,6 +44,7 @@ def kpis_admin(desde, hasta, facultad_id=None, programa_id=None):
     from apps.empresas.models import Empresa
     from apps.evaluacion.models import Entregable
     from apps.participaciones.models import Postulacion
+    from apps.retos.models import Reto
     from apps.usuarios.models import Usuario
 
     retos = _retos_filtrados(desde, hasta, facultad_id, programa_id)
@@ -51,7 +52,7 @@ def kpis_admin(desde, hasta, facultad_id=None, programa_id=None):
 
     return {
         "retos_total": retos.count(),
-        "retos_activos": retos.filter(estado__in=["aprobado", "en_curso"]).count(),
+        "retos_activos": retos.filter(estado__in=Reto.ESTADOS_ACTIVOS).count(),
         "retos_finalizados": retos.filter(estado="finalizado").count(),
         "retos_en_revision": retos.filter(estado="en_revision").count(),
         "empresas_total": Empresa.objects.count(),
@@ -126,7 +127,7 @@ def kpis_empresa(usuario, desde, hasta):
 
     return {
         "retos_total": retos.count(),
-        "retos_activos": retos.filter(estado__in=["aprobado", "en_curso"]).count(),
+        "retos_activos": retos.filter(estado__in=Reto.ESTADOS_ACTIVOS).count(),
         "retos_finalizados": retos.filter(estado="finalizado").count(),
         "retos_en_revision": retos.filter(estado="en_revision").count(),
         # Antes este KPI contaba integraciones academicas y se rotulaba
@@ -227,7 +228,7 @@ def kpis_estudiante(usuario, desde, hasta):
     entregables = Entregable.objects.filter(estudiante=usuario)
 
     return {
-        "retos_disponibles": Reto.objects.filter(estado__in=["aprobado", "en_curso"]).count(),
+        "retos_disponibles": Reto.objects.filter(estado__in=Reto.ESTADOS_ABIERTOS).count(),
         "favoritos_total": RetoFavorito.objects.filter(usuario=usuario).count(),
         "postulaciones_total": postulaciones.count(),
         "postulaciones_pendientes": postulaciones.filter(estado="PENDIENTE").count(),

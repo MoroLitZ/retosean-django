@@ -58,6 +58,7 @@ class DocumentacionEmpresaTests(TestCase):
             {
                 "tipo_documento": "RUT",
                 "archivo": SimpleUploadedFile("rut.pdf", b"contenido"),
+                "fecha_expedicion": date.today().isoformat(),
             },
         )
 
@@ -143,3 +144,66 @@ class GateDeDocumentacionTests(TestCase):
         self.empresa.renuncio_a_convenio = True
         self.empresa.save()
         self.assertTrue(puede_la_empresa_operar(self.empresa))
+
+
+class ConvenioEmpresaTests(TestCase):
+    """Tramite del convenio (HU00): No radicado -> Radicado -> Juridica -> Firmado."""
+
+    def setUp(self):
+        self.admin = Usuario.objects.create_user(username="admin-conv", password="x", rol="ADMIN")
+        self.usuario_empresa = Usuario.objects.create_user(username="empresa-conv", password="x", rol="EMPRESA")
+        self.empresa = Empresa.objects.create(usuario=self.usuario_empresa, nit="900333444", razon_social="Conv SAS")
+        self.url = reverse("empresas:actualizar_convenio", args=[self.empresa.pk])
+
+    def _avanzar(self, estado, **extra):
+        self.client.force_login(self.admin)
+        return self.client.post(self.url, {"estado_convenio": estado, **extra})
+
+    def test_tramite_completo_queda_firmado_con_vencimiento_e_historial(self):
+        from apps.seguimiento.services import historial_de
+
+        vence = date.today() + timedelta(days=365)
+        self._avanzar("RADICADO")
+        self._avanzar("EN_JURIDICA", comentario="En revision de Juridica")
+        self._avanzar("FIRMADO", fecha_vencimiento=vence.isoformat())
+
+        self.empresa.refresh_from_db()
+        self.assertEqual(self.empresa.estado_convenio, "FIRMADO")
+        self.assertEqual(self.empresa.fecha_vencimiento_convenio, vence)
+        self.assertTrue(self.empresa.tiene_convenio_vigente)
+        pasos = list(historial_de(self.empresa, campo="estado_convenio").order_by("fecha", "id")
+                     .values_list("estado_anterior", "estado_nuevo"))
+        self.assertEqual(pasos, [
+            ("NO_RADICADO", "RADICADO"), ("RADICADO", "EN_JURIDICA"), ("EN_JURIDICA", "FIRMADO"),
+        ])
+        self.assertTrue(Notificacion.objects.filter(
+            usuario=self.usuario_empresa, evento="CONVENIO_ACTUALIZADO", tipo="EXITO"
+        ).exists())
+
+    def test_no_se_salta_juridica(self):
+        self._avanzar("RADICADO")
+        self._avanzar("FIRMADO", fecha_vencimiento=(date.today() + timedelta(days=30)).isoformat())
+        self.empresa.refresh_from_db()
+        self.assertEqual(self.empresa.estado_convenio, "RADICADO")
+
+    def test_firmar_exige_fecha_de_vencimiento(self):
+        self._avanzar("FIRMADO")
+        self.empresa.refresh_from_db()
+        self.assertEqual(self.empresa.estado_convenio, "NO_RADICADO")
+
+    def test_convenio_vigente_registrado_directamente(self):
+        """Respuesta "Si" del brief: la empresa ya llega con convenio firmado."""
+        self._avanzar("FIRMADO", fecha_vencimiento=(date.today() + timedelta(days=30)).isoformat())
+        self.empresa.refresh_from_db()
+        self.assertTrue(self.empresa.tiene_convenio_vigente)
+
+    def test_convenio_vencido_no_esta_vigente(self):
+        self.empresa.estado_convenio = "FIRMADO"
+        self.empresa.fecha_vencimiento_convenio = date.today() - timedelta(days=1)
+        self.assertFalse(self.empresa.tiene_convenio_vigente)
+
+    def test_solo_el_admin_actualiza_el_convenio(self):
+        self.client.force_login(self.usuario_empresa)
+        self.client.post(self.url, {"estado_convenio": "RADICADO"})
+        self.empresa.refresh_from_db()
+        self.assertEqual(self.empresa.estado_convenio, "NO_RADICADO")

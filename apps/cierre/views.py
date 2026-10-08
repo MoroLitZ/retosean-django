@@ -9,7 +9,7 @@ from apps.academico.services import emitir_certificados_de_reto
 from apps.notificaciones.services import notificar_muchos
 from apps.participaciones.models import MiembroEquipo, Postulacion
 from apps.retos.models import Reto
-from apps.retos.services import cambiar_estado_reto
+from apps.retos.services import MAQUINA_RETO, cambiar_estado_reto
 from apps.usuarios.decorators import rol_requerido
 from apps.seguimiento.models import IntegracionAcademica
 
@@ -50,19 +50,19 @@ def _usuario_puede_finalizar_cierre(usuario, reto):
 @rol_requerido("ADMIN", "EMPRESA", "PROFESOR", raise_exception=True)
 def panel(request):
     if es_admin(request.user):
-        retos = Reto.objects.select_related("empresa").filter(estado__in=["aprobado", "en_curso", "pausado", "finalizado"])
+        retos = Reto.objects.select_related("empresa").filter(estado__in=Reto.ESTADOS_VIGENTES)
     elif getattr(request.user, "rol", None) == "EMPRESA":
-        retos = Reto.objects.select_related("empresa").filter(empresa=request.user, estado__in=["aprobado", "en_curso", "pausado", "finalizado"])
+        retos = Reto.objects.select_related("empresa").filter(empresa=request.user, estado__in=Reto.ESTADOS_VIGENTES)
     else:
         retos_ids = IntegracionAcademica.objects.filter(profesor=request.user).values_list("reto_id", flat=True)
-        retos = Reto.objects.select_related("empresa").filter(id__in=retos_ids, estado__in=["aprobado", "en_curso", "pausado", "finalizado"])
+        retos = Reto.objects.select_related("empresa").filter(id__in=retos_ids, estado__in=Reto.ESTADOS_VIGENTES)
     return render(request, "cierre/panel.html", {"retos": retos})
 
 
 @rol_requerido("ADMIN", "EMPRESA", "PROFESOR", raise_exception=True)
 def gestionar(request, reto_id):
     reto = get_object_or_404(
-        Reto, pk=reto_id, estado__in=["aprobado", "en_curso", "pausado", "finalizado"]
+        Reto, pk=reto_id, estado__in=Reto.ESTADOS_VIGENTES
     )
     if not _usuario_puede_gestionar_cierre(request.user, reto):
         raise PermissionDenied("No tienes permiso para gestionar el cierre de este reto.")
@@ -92,6 +92,7 @@ def gestionar(request, reto_id):
         "reto": reto, "agenda_form": agenda_form, "cierre_form": cierre_form, "cierre": cierre,
         "entregable_form": EntregableFinalForm(), "reconocimiento_form": ReconocimientoForm(),
         "entregables_estudiantes": entregables_estudiantes,
+        "puede_finalizar": _usuario_puede_finalizar_cierre(request.user, reto),
     })
 
 
@@ -146,10 +147,18 @@ def agregar_reconocimiento(request, reto_id):
 def finalizar(request, reto_id):
     reto = get_object_or_404(
         Reto.objects.select_for_update(), pk=reto_id,
-        estado__in=["aprobado", "en_curso", "pausado", "finalizado"],
+        estado__in=Reto.ESTADOS_VIGENTES,
     )
-    if not _usuario_puede_gestionar_cierre(request.user, reto):
-        raise PermissionDenied("No tienes permiso para gestionar el cierre de este reto.")
+    # La empresa gestiona agenda y acta, pero finalizar es del admin o del profesor (HU08).
+    if not _usuario_puede_finalizar_cierre(request.user, reto):
+        raise PermissionDenied("Solo el administrador o el profesor del reto pueden finalizarlo.")
+
+    if reto.estado != "finalizado" and not MAQUINA_RETO.puede(reto.estado, "finalizado"):
+        messages.error(
+            request,
+            f'Solo se puede finalizar un reto en curso; este esta en "{reto.get_estado_display()}".',
+        )
+        return redirect("cierre:gestionar", reto_id=reto.pk)
 
     agenda, _ = AgendaCierre.objects.get_or_create(reto=reto)
     cierre, _ = CierreReto.objects.get_or_create(reto=reto, defaults={"cerrado_por": request.user})

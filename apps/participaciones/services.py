@@ -1,6 +1,22 @@
-"""Servicios de participacion: equipos operativos y su sincronizacion."""
+"""Servicios de participacion: postulaciones, equipos operativos y su sincronizacion."""
 
-from .models import Equipo, MiembroEquipo
+from apps.seguimiento.services import MaquinaEstados
+
+from .models import Equipo, MiembroEquipo, Postulacion
+
+
+# Postulacion del estudiante (HU11). Aceptada y Rechazada son finales; una
+# postulacion retirada puede reenviarse y vuelve a Pendiente.
+MAQUINA_POSTULACION = MaquinaEstados(
+    "la postulacion",
+    {
+        "PENDIENTE": {"ACEPTADA", "RECHAZADA", "RETIRADA"},
+        "RETIRADA": {"PENDIENTE"},
+        "ACEPTADA": set(),
+        "RECHAZADA": set(),
+    },
+    dict(Postulacion.ESTADOS),
+)
 
 
 def sincronizar_equipo_academico(equipo_academico):
