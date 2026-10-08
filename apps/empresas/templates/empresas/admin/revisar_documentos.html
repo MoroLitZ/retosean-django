@@ -43,6 +43,65 @@
 </div>
 <!-- FIN SECCIÓN LISTAS RESTRICTIVAS -->
 
+<!-- SECCIÓN CONVENIO (HU00) -->
+<div class="card-panel mb-4">
+    <div class="card-panel-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-file-earmark-text me-2 text-muted"></i>Convenio institucional</span>
+        <span class="badge {% if empresa.tiene_convenio_vigente %}bg-success{% elif empresa.estado_convenio == 'NO_RADICADO' %}bg-secondary{% else %}bg-warning text-dark{% endif %}">
+            {{ empresa.get_estado_convenio_display }}
+        </span>
+    </div>
+    <div class="p-4">
+        <p class="small mb-3">
+            <strong>¿Tiene convenio vigente?</strong>
+            {% if empresa.tiene_convenio_vigente %}
+                Sí, vigente hasta el {{ empresa.fecha_vencimiento_convenio|date:'d/m/Y' }}.
+            {% elif empresa.estado_convenio == 'FIRMADO' %}
+                No: el convenio firmado venció el {{ empresa.fecha_vencimiento_convenio|date:'d/m/Y' }}.
+            {% else %}
+                No. Trámite en estado <strong>{{ empresa.get_estado_convenio_display }}</strong>.
+            {% endif %}
+        </p>
+        <form action="{% url 'empresas:actualizar_convenio' empresa.id %}" method="post" class="row g-3 align-items-end">
+            {% csrf_token %}
+            <div class="col-md-3">
+                <label for="{{ convenio_form.estado_convenio.id_for_label }}" class="form-label small fw-bold text-muted">{{ convenio_form.estado_convenio.label }}</label>
+                {{ convenio_form.estado_convenio }}
+            </div>
+            <div class="col-md-3">
+                <label for="{{ convenio_form.fecha_vencimiento.id_for_label }}" class="form-label small fw-bold text-muted">{{ convenio_form.fecha_vencimiento.label }}</label>
+                {{ convenio_form.fecha_vencimiento }}
+            </div>
+            <div class="col-md-4">
+                <label for="{{ convenio_form.comentario.id_for_label }}" class="form-label small fw-bold text-muted">{{ convenio_form.comentario.label }}</label>
+                {{ convenio_form.comentario }}
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-sm btn-primary w-100">
+                    <i class="bi bi-arrow-right-circle me-1"></i>Actualizar
+                </button>
+            </div>
+        </form>
+        {% if historial_convenio %}
+        <table class="table table-sm mt-4 mb-0 small">
+            <thead><tr><th>Fecha</th><th>De</th><th>A</th><th>Por</th><th>Comentario</th></tr></thead>
+            <tbody>
+                {% for item in historial_convenio %}
+                <tr>
+                    <td>{{ item.fecha|date:'d/m/Y H:i' }}</td>
+                    <td>{{ item.estado_anterior|default:'-' }}</td>
+                    <td>{{ item.estado_nuevo }}</td>
+                    <td>{{ item.realizado_por|default:'Sistema' }}</td>
+                    <td>{{ item.comentario|default:'-' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+    </div>
+</div>
+<!-- FIN SECCIÓN CONVENIO -->
+
 <div class="card-panel">
     <div class="card-panel-header d-flex justify-content-between align-items-center">
         <span><i class="bi bi-file-text me-2 text-muted"></i>Documentos pendientes de revisión</span>

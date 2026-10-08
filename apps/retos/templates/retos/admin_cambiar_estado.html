@@ -4,6 +4,7 @@
 <div class="container mt-4">
   <h1 class="h3">Cambiar estado</h1>
   <p>{{ reto }} · estado actual: <strong>{{ reto.get_estado_display }}</strong></p>
+  {% if opciones %}
   <form method="post" class="row g-3">
     {% csrf_token %}
     {% for field in form %}
@@ -18,5 +19,13 @@
       <a href="{% url 'retos:detalle' reto.pk %}" class="btn btn-outline-secondary">Cancelar</a>
     </div>
   </form>
+  {% else %}
+  <div class="alert alert-info">
+    Desde el estado actual no hay cambios manuales disponibles.
+    La aprobación se hace desde la revisión del reto, la apertura al publicar la integración
+    académica y la finalización desde el cierre formal.
+  </div>
+  <a href="{% url 'retos:detalle' reto.pk %}" class="btn btn-outline-secondary">Volver al reto</a>
+  {% endif %}
 </div>
 {% endblock %}

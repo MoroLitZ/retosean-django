@@ -1,5 +1,6 @@
 import os
 
+from django.contrib.contenttypes.fields import GenericForeignKey
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
@@ -66,13 +67,14 @@ class IntegracionAcademica(models.Model):
 
     @property
     def puede_editar_profesor(self):
-        return self.estado in {"borrador", "rechazada"} or self.reto.estado == "en_curso"
+        # HU03: la configuracion sigue editable mientras el reto esta abierto o en curso.
+        return self.estado in {"borrador", "rechazada"} or self.reto.estado in {"abierto", "en_curso"}
 
     def clean(self):
         if self.profesor_id and getattr(self.profesor, "rol", None) != "PROFESOR":
             raise ValidationError({"profesor": "La integracion debe pertenecer a un usuario Profesor."})
-        if self.reto_id and not self.reto.esta_aprobado_o_activo:
-            raise ValidationError({"reto": "Solo se pueden integrar retos aprobados o en curso."})
+        if self.reto_id and self.reto.estado not in self.reto.ESTADOS_INTEGRABLES:
+            raise ValidationError({"reto": "Solo se pueden integrar retos aprobados, abiertos o en curso."})
 
 
 class SeguimientoReto(models.Model):
@@ -123,3 +125,41 @@ class SeguimientoArchivo(models.Model):
 
     def __str__(self):
         return self.nombre_original or os.path.basename(self.archivo.name)
+
+
+class HistorialEstado(models.Model):
+    """Bitacora unica de cambios de estado de cualquier entidad del sistema.
+
+    Documentos de empresa, convenios, integraciones, postulaciones, entregables,
+    inscripciones de hackathon y cuentas de usuario escriben aqui a traves de
+    `apps.seguimiento.services.cambiar_estado`. Los retos conservan su propio
+    `retos.HistorialEstadoReto`, que ya muestra la UI del detalle del reto.
+    """
+
+    content_type = models.ForeignKey(
+        "contenttypes.ContentType", on_delete=models.CASCADE, related_name="+"
+    )
+    object_id = models.PositiveBigIntegerField()
+    objeto = GenericForeignKey("content_type", "object_id")
+    campo = models.CharField(max_length=50, default="estado")
+    estado_anterior = models.CharField(max_length=30, blank=True)
+    estado_nuevo = models.CharField(max_length=30)
+    comentario = models.TextField(blank=True)
+    realizado_por = models.ForeignKey(
+        "usuarios.Usuario",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cambios_estado",
+    )
+    fecha = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = "historial_estados"
+        ordering = ["-fecha", "-id"]
+        indexes = [models.Index(fields=["content_type", "object_id"])]
+        verbose_name = "Historial de estado"
+        verbose_name_plural = "Historial de estados"
+
+    def __str__(self):
+        return f"{self.content_type.model}#{self.object_id}: {self.estado_anterior} -> {self.estado_nuevo}"
