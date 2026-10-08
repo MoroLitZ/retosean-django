@@ -25,60 +25,112 @@
                         <p class="text-muted small mb-0">{{ reto.descripcion }}</p>
                     </div>
 
-                    {% if entregables_subidos %}
+                    {% for entregable in entregables_subidos %}
                         <div class="card mt-3 bg-light border-0 shadow-sm">
                             <div class="card-body">
-                                <h6 class="fw-bold text-dark mb-3"><i class="bi bi-info-circle-fill text-info"></i> Tus entregas y evaluaciones</h6>
-                                {% for entregable in entregables_subidos %}
-                                <div class="border-bottom pb-3 mb-3">
-                                  <strong>{{ entregable.titulo }}</strong>
-                                  <span class="badge {% if entregable.estado == 'CALIFICADO' %}bg-success{% else %}bg-info text-dark{% endif %}">{{ entregable.get_estado_display }}</span>
-                                  {% if entregable.nota != None %}<div>Nota: <strong>{{ entregable.nota }} / {{ entregable.puntaje_maximo }}</strong></div>{% endif %}
-                                  {% if entregable.comentario_profesor %}<p class="small mb-1"><strong>Retroalimentacion:</strong> {{ entregable.comentario_profesor }}</p>{% endif %}
-                                  <a href="{{ entregable.archivo.url }}" target="_blank" class="small">Ver archivo</a>
-                                  {% for item in entregable.historial_comentarios.all %}<div class="small text-muted">{{ item.creado_en|date:'d/m/Y H:i' }} · {{ item.autor }}: {{ item.comentario }}</div>{% endfor %}
-                                  <form method="post" action="{% url 'evaluacion:comentario' entregable.pk %}" class="d-flex gap-2 mt-2">{% csrf_token %}<input class="form-control form-control-sm" name="comentario" required placeholder="Responder"><button class="btn btn-sm btn-outline-primary">Enviar</button></form>
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <h6 class="fw-bold text-dark mb-0">
+                                        <i class="bi bi-file-earmark-text text-info"></i> {{ entregable.titulo }}
+                                    </h6>
+                                    <span class="badge {% if entregable.estado == 'CALIFICADO' %}bg-success{% elif entregable.estado == 'EN_REVISION' %}bg-warning text-dark{% else %}bg-info text-dark{% endif %}">
+                                        {{ entregable.get_estado_display }}
+                                    </span>
                                 </div>
-                                {% endfor %}
+
+                                {% if entregable.es_final %}
+                                    <span class="badge bg-dark mb-2">Entrega final</span>
+                                {% endif %}
+
+                                {% if entregable.archivo %}
+                                    <p class="mb-2 text-truncate">
+                                        <a href="{{ entregable.archivo.url }}" target="_blank" class="text-primary small">
+                                            <i class="bi bi-file-earmark-arrow-down"></i> Ver documento cargado
+                                        </a>
+                                    </p>
+                                {% endif %}
+
+                                <p class="text-muted small mb-3">
+                                    Enviado el {{ entregable.fecha_entrega|date:"d/m/Y H:i" }}
+                                </p>
+
+                                {% if entregable.nota is not None %}
+                                    <div class="p-3 bg-white rounded border-start border-success border-3 mb-2">
+                                        <span class="text-muted text-uppercase small fw-bold">Calificación</span>
+                                        <h3 class="fw-bold text-success mb-0">
+                                            {{ entregable.nota }} <small class="text-muted fs-6">/ {{ entregable.puntaje_maximo }}</small>
+                                        </h3>
+                                    </div>
+                                {% else %}
+                                    <div class="alert alert-light border small mb-2 py-2">
+                                        <i class="bi bi-hourglass-split"></i> Aún sin calificar.
+                                    </div>
+                                {% endif %}
+
+                                {% if entregable.comentario_profesor %}
+                                    <div class="mb-2">
+                                        <span class="text-muted text-uppercase small fw-bold">Retroalimentación del docente</span>
+                                        <p class="mb-0 small">{{ entregable.comentario_profesor|linebreaksbr }}</p>
+                                    </div>
+                                {% endif %}
+
+                                {% if entregable.historial_comentarios.all %}
+                                    <hr class="my-2">
+                                    <span class="text-muted text-uppercase small fw-bold">Historial de comentarios</span>
+                                    <ul class="list-unstyled mb-0 mt-2">
+                                        {% for comentario in entregable.historial_comentarios.all %}
+                                            <li class="small mb-2">
+                                                <strong>{{ comentario.autor.get_full_name|default:comentario.autor.username }}</strong>
+                                                <span class="text-muted">· {{ comentario.creado_en|date:"d/m/Y H:i" }}</span><br>
+                                                {{ comentario.comentario|linebreaksbr }}
+                                            </li>
+                                        {% endfor %}
+                                    </ul>
+                                {% endif %}
                             </div>
                         </div>
-                    {% endif %}
+                    {% endfor %}
                 </div>
 
                 <div class="col-md-7">
                     <div class="card border-0 shadow-sm">
                         <div class="card-body p-4">
-                            <h5 class="fw-bold text-dark mb-3"><i class="bi bi-cloud-arrow-up text-primary"></i> Subir o actualizar entregable</h5>
-                            
-
-                            <form method="POST" enctype="multipart/form-data" class="needs-validation">
-                                {% csrf_token %}
-                                
-                                {% if form.non_field_errors %}
-                                    <div class="alert alert-danger">
-                                        {{ form.non_field_errors }}
-                                    </div>
-                                {% endif %}
-
-                                {% for field in form %}
-                                    <div class="mb-3">
-                                        <label for="{{ field.id_for_label }}" class="form-label fw-semibold text-secondary small">{{ field.label }}</label>
-                                        {{ field }}
-                                        {% if field.help_text %}
-                                            <div class="form-text small text-muted">{{ field.help_text }}</div>
-                                        {% endif %}
-                                        {% if field.errors %}
-                                            <div class="text-danger small mt-1">{{ field.errors }}</div>
-                                        {% endif %}
-                                    </div>
-                                {% endfor %}
-
-                                <div class="mt-4 d-grid">
-                                    <button type="submit" class="btn btn-primary py-2 fw-bold">
-                                        <i class="bi bi-check-circle-fill"></i> Guardar y Enviar Entregable
-                                    </button>
+                            {% if reto.estado == 'finalizado' %}
+                                <div class="alert alert-secondary border-0 p-4 mb-0">
+                                    <h5 class="fw-bold text-dark mb-2"><i class="bi bi-lock-fill text-secondary me-2"></i>Reto Cerrado Formalmente</h5>
+                                    <p class="mb-0 small text-muted">Este reto ya concluyó y no admite nuevos envíos. Puedes revisar los documentos cargados, tus calificaciones y la retroalimentación en la lista lateral.</p>
                                 </div>
-                            </form>
+                            {% else %}
+                                <h5 class="fw-bold text-dark mb-3"><i class="bi bi-cloud-arrow-up text-primary"></i> Subir o actualizar entregable</h5>
+
+                                <form method="POST" enctype="multipart/form-data" class="needs-validation">
+                                    {% csrf_token %}
+                                    
+                                    {% if form.non_field_errors %}
+                                        <div class="alert alert-danger">
+                                            {{ form.non_field_errors }}
+                                        </div>
+                                    {% endif %}
+
+                                    {% for field in form %}
+                                        <div class="mb-3">
+                                            <label for="{{ field.id_for_label }}" class="form-label fw-semibold text-secondary small">{{ field.label }}</label>
+                                            {{ field }}
+                                            {% if field.help_text %}
+                                                <div class="form-text small text-muted">{{ field.help_text }}</div>
+                                            {% endif %}
+                                            {% if field.errors %}
+                                                <div class="text-danger small mt-1">{{ field.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    {% endfor %}
+
+                                    <div class="mt-4 d-grid">
+                                        <button type="submit" class="btn btn-primary py-2 fw-bold">
+                                            <i class="bi bi-check-circle-fill"></i> Guardar y Enviar Entregable
+                                        </button>
+                                    </div>
+                                </form>
+                            {% endif %}
                         </div>
                     </div>
                 </div>

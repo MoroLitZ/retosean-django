@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ titulo }}{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+
+{# ── Filtro de periodo, comun a todos los roles ── #}
+<div class="card-panel mb-4">
+  <div class="p-3">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-sm-6 col-md-3">
+        <label for="periodo" class="form-label small fw-semibold text-secondary mb-1">Periodo</label>
+        <select name="periodo" id="periodo" class="form-select form-select-sm" onchange="this.form.submit()">
+          {% for valor, nombre in periodos %}
+            <option value="{{ valor }}" {% if periodo == valor %}selected{% endif %}>{{ nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-sm-6 col-md-2 {% if periodo != 'custom' %}d-none{% endif %}">
+        <label for="desde" class="form-label small fw-semibold text-secondary mb-1">Desde</label>
+        <input type="date" name="desde" id="desde" value="{{ desde }}" class="form-control form-control-sm">
+      </div>
+      <div class="col-sm-6 col-md-2 {% if periodo != 'custom' %}d-none{% endif %}">
+        <label for="hasta" class="form-label small fw-semibold text-secondary mb-1">Hasta</label>
+        <input type="date" name="hasta" id="hasta" value="{{ hasta }}" class="form-control form-control-sm">
+      </div>
+
+      {% block filtros_extra %}{% endblock %}
+
+      <div class="col-sm-6 col-md-2">
+        <button type="submit" class="btn btn-sm btn-primary w-100">
+          <i class="bi bi-funnel"></i> Aplicar
+        </button>
+      </div>
+    </form>
+    <p class="text-muted small mb-0 mt-2">
+      <i class="bi bi-calendar3"></i> Mostrando: <strong>{{ etiqueta_periodo }}</strong>
+    </p>
+  </div>
+</div>
+
+{% if sin_rol %}
+<div class="alert alert-warning mb-4">
+  <i class="bi bi-exclamation-triangle"></i>
+  Tu usuario no tiene un rol asignado, por lo que no hay indicadores que mostrar.
+  Contacta con el administrador para que te asigne uno.
+</div>
+{% endif %}
+
+{% block kpis %}{% endblock %}
+{% block graficas %}{% endblock %}
+
+{% endblock %}
+
+
+{% block extra_js %}
+  <script src="{% static 'vendor/chart.umd.min.js' %}"></script>
+  {{ series|json_script:"datos-dashboard" }}
+  <script>
+    (function () {
+      const datos = JSON.parse(document.getElementById('datos-dashboard').textContent);
+
+      Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
+      Chart.defaults.color = '#6b7280';
+      Chart.defaults.plugins.legend.labels.boxWidth = 12;
+
+      // Cada canvas declara que serie pinta y con que tipo mediante data-*.
+      document.querySelectorAll('canvas[data-serie]').forEach(function (canvas) {
+        const serie = datos[canvas.dataset.serie];
+        if (!serie || !serie.data.length) {
+          const vacio = document.createElement('p');
+          vacio.className = 'text-muted text-center small py-5 mb-0';
+          vacio.textContent = 'Sin datos en el periodo seleccionado.';
+          canvas.replaceWith(vacio);
+          return;
+        }
+
+        const tipo = canvas.dataset.tipo || 'bar';
+        const esCircular = tipo === 'doughnut' || tipo === 'pie';
+
+        new Chart(canvas, {
+          type: tipo,
+          data: {
+            labels: serie.labels,
+            datasets: [{
+              label: canvas.dataset.etiqueta || 'Total',
+              data: serie.data,
+              backgroundColor: esCircular ? serie.colors : (tipo === 'line' ? 'rgba(37,99,235,.12)' : serie.colors),
+              borderColor: tipo === 'line' ? '#2563eb' : '#ffffff',
+              borderWidth: tipo === 'line' ? 2 : 1,
+              fill: tipo === 'line',
+              tension: 0.3,
+              pointRadius: 3,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: esCircular, position: 'bottom' },
+            },
+            scales: esCircular ? {} : {
+              y: { beginAtZero: true, ticks: { precision: 0 } },
+              x: { grid: { display: false } },
+            },
+          }
+        });
+      });
+    })();
+  </script>
+{% endblock %}

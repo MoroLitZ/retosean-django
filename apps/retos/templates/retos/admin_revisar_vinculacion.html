@@ -84,6 +84,48 @@
         </div>
         {% endif %}
 
+        {% if integracion.equipo_profesores %}
+        <div class="mb-3">
+          <small class="text-muted d-block">Equipo de profesores</small>
+          <p class="mb-0">{{ integracion.equipo_profesores|linebreaks }}</p>
+        </div>
+        {% endif %}
+
+        {% if integracion.equipo_estudiantes %}
+        <div class="mb-3">
+          <small class="text-muted d-block">Equipo de estudiantes</small>
+          <p class="mb-0">{{ integracion.equipo_estudiantes|linebreaks }}</p>
+        </div>
+        {% endif %}
+
+        {% if integracion.expertos_invitados %}
+        <div class="mb-3">
+          <small class="text-muted d-block">Expertos invitados</small>
+          <p class="mb-0">{{ integracion.expertos_invitados|linebreaks }}</p>
+        </div>
+        {% endif %}
+
+        {% if integracion.requerimientos_empresa %}
+        <div class="mb-3">
+          <small class="text-muted d-block">Requerimientos de la empresa</small>
+          <p class="mb-0">{{ integracion.requerimientos_empresa|linebreaks }}</p>
+        </div>
+        {% endif %}
+
+        {% if integracion.requerimientos_internos %}
+        <div class="mb-3">
+          <small class="text-muted d-block">Requerimientos internos</small>
+          <p class="mb-0">{{ integracion.requerimientos_internos|linebreaks }}</p>
+        </div>
+        {% endif %}
+
+        {% if integracion.espacio_fisico %}
+        <div class="mb-3">
+          <small class="text-muted d-block">Espacio físico</small>
+          <p class="mb-0">{{ integracion.espacio_fisico }}</p>
+        </div>
+        {% endif %}
+
         <hr>
 
         {% if integracion.estado == 'en_revision' %}

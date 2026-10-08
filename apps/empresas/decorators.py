@@ -17,7 +17,7 @@ def empresa_verificada(view_func):
             empresa = request.user.empresa_perfil 
         except (AttributeError, Empresa.DoesNotExist):
             messages.error(request, "Perfil de empresa no encontrado.")
-            return redirect('usuarios:registro_empresa') # O la ruta de registro
+            return redirect('empresas:elegir_convenio')
 
         # 2. Ahora pasamos el objeto Empresa al servicio, no el Usuario
         if not puede_la_empresa_operar(empresa):
@@ -26,3 +26,19 @@ def empresa_verificada(view_func):
             
         return view_func(request, *args, **kwargs)
     return _wrapped_view
+
+def solo_empresa_con_documentos(view_func):
+    """Empresa que ademas puede operar: documentacion aprobada o renuncia a convenio.
+
+    Vive aqui y no en `usuarios` porque depende de `empresas.services`.
+    """
+    from apps.usuarios.decorators import rol_requerido
+
+    @rol_requerido('EMPRESA', raise_exception=True)
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        empresa = getattr(request.user, 'empresa_perfil', None)
+        if not empresa or not puede_la_empresa_operar(empresa):
+            return redirect('empresas:elegir_convenio')
+        return view_func(request, *args, **kwargs)
+    return _wrapped

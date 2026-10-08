@@ -31,7 +31,16 @@ class Empresa(models.Model):
     fecha_ultima_actualizacion = models.DateTimeField(auto_now=True)
     observaciones_admin = models.TextField(null=True, blank=True)
     renuncio_a_convenio = models.BooleanField(default=False)
-    
+    # Tramite del convenio marco (HU00). Las transiciones validas viven en
+    # `empresas.services.MAQUINA_CONVENIO`; una vez firmado se registra su vencimiento.
+    ESTADO_CONVENIO = [
+        ("NO_RADICADO", "No radicado"),
+        ("RADICADO", "Radicado"),
+        ("EN_JURIDICA", "En proceso en Jurídica"),
+        ("FIRMADO", "Firmado por las partes"),
+    ]
+    estado_convenio = models.CharField(max_length=20, choices=ESTADO_CONVENIO, default="NO_RADICADO")
+    fecha_vencimiento_convenio = models.DateField(null=True, blank=True)
     usuario = models.OneToOneField(
         "usuarios.Usuario",
         on_delete=models.CASCADE,
@@ -47,6 +56,15 @@ class Empresa(models.Model):
 
     def __str__(self):
         return self.razon_social
+
+    @property
+    def tiene_convenio_vigente(self):
+        """Si: convenio firmado y no vencido. No: cualquier otro caso."""
+        if self.estado_convenio != "FIRMADO":
+            return False
+        from django.utils import timezone
+
+        return self.fecha_vencimiento_convenio is None or self.fecha_vencimiento_convenio >= timezone.localdate()
 
 
 class ContactoEmpresa(models.Model):
@@ -108,12 +126,17 @@ class DocumentoEmpresa(models.Model):
         
         if self.pk:
             try:
-                this = DocumentoEmpresa.objects.get(id=self.id)
-                if this.archivo != self.archivo:
-                    if os.path.isfile(this.archivo.path):
-                        os.remove(this.archivo.path)
+                anterior = DocumentoEmpresa.objects.get(id=self.id)
             except DocumentoEmpresa.DoesNotExist:
-                pass
+                anterior = None
+            # Solo intentamos borrar si realmente habia archivo previo:
+            # sobre un FileField vacio, .path lanza ValueError.
+            if anterior and anterior.archivo and anterior.archivo != self.archivo:
+                try:
+                    if os.path.isfile(anterior.archivo.path):
+                        os.remove(anterior.archivo.path)
+                except (ValueError, NotImplementedError, OSError):
+                    pass
         super().save(*args, **kwargs)
 
     def __str__(self):
