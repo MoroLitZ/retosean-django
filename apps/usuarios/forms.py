@@ -112,12 +112,16 @@ class RegistroEmpresaForm(UserCreationForm):
 class EntregableForm(forms.ModelForm):
     class Meta:
         model = Entregable
-        fields = ["archivo", "comentario_estudiante"]
+        fields = ["titulo", "es_final", "archivo", "comentario_estudiante"]
         widgets = {
+            "titulo": forms.TextInput(attrs={"class": "form-control"}),
+            "es_final": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "archivo": forms.FileInput(attrs={"class": "form-control", "accept": ".pdf,.zip,.rar,.docx"}),
             "comentario_estudiante": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
         }
         labels = {
+            "titulo": "Nombre del entregable",
+            "es_final": "Este es el entregable final",
             "archivo": "Selecciona tu archivo de evidencia",
             "comentario_estudiante": "Comentarios adicionales",
         }

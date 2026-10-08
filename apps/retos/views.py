@@ -260,6 +260,8 @@ def agregar_seguimiento(request, pk):
     reto = get_object_or_404(Reto, pk=pk)
     if not _puede_ver_reto(request.user, reto):
         raise PermissionDenied('No tienes acceso al seguimiento de este reto.')
+    if request.user.rol == 'EMPRESA' and request.method == 'POST':
+        raise PermissionDenied('La empresa puede monitorear, pero no modificar el seguimiento academico.')
     form = SeguimientoRetoForm(request.POST or None, request.FILES or None)
     if request.method == 'POST' and form.is_valid():
         seguimiento = form.save(commit=False)

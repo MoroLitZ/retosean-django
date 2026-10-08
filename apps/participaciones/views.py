@@ -4,7 +4,7 @@ from django.contrib import messages
 
 from apps.retos.models import Reto
 from apps.retos.views import rol_requerido
-from apps.participaciones.models import Postulacion as PostulacionReto
+from apps.participaciones.models import MiembroEquipo, Postulacion as PostulacionReto
 from apps.evaluacion.models import Entregable
 from apps.usuarios.forms import EntregableForm
 from apps.usuarios.views import _url_para_usuario
@@ -53,27 +53,45 @@ def mis_entregables(request, reto_id=None):
     todas_mis_postulaciones = PostulacionReto.objects.filter(estudiante=request.user).select_related('reto')
 
     if reto_id:
-        reto = get_object_or_404(Reto, pk=reto_id, estado='aprobado')
+        reto = get_object_or_404(Reto, pk=reto_id, estado__in=['aprobado', 'en_curso', 'pausado'])
+        if not PostulacionReto.objects.filter(reto=reto, estudiante=request.user, estado='ACEPTADA').exists():
+            messages.error(request, 'Solo los estudiantes aceptados pueden cargar entregables.')
+            return redirect('participaciones:mis_entregables')
         # ... (tu lógica de validación de acceso se mantiene igual) ...
         
         if request.method == 'POST':
             form = EntregableForm(request.POST, request.FILES)
             if form.is_valid():
                 # CORRECCIÓN: Actualizar o Crear para evitar IntegrityError
+                miembro = MiembroEquipo.objects.filter(
+                    equipo__reto=reto, estudiante=request.user
+                ).select_related('equipo').first()
                 entregable, created = Entregable.objects.update_or_create(
                     reto=reto,
                     estudiante=request.user,
+                    titulo=form.cleaned_data['titulo'],
                     defaults={
                         'archivo': form.cleaned_data['archivo'],
+                        'equipo': miembro.equipo if miembro else None,
+                        'es_final': form.cleaned_data['es_final'],
+                        'comentario_estudiante': form.cleaned_data['comentario_estudiante'],
+                        'nota': None,
+                        'comentario_profesor': '',
                         'estado': 'ENVIADO',
                     }
                 )
+                if form.cleaned_data['comentario_estudiante']:
+                    entregable.historial_comentarios.create(
+                        autor=request.user, comentario=form.cleaned_data['comentario_estudiante']
+                    )
                 messages.success(request, '¡Entregable guardado con éxito!')
                 return redirect('participaciones:mis_entregables_reto', reto_id=reto.id)
         else:
             form = EntregableForm()
             
-        entregables_subidos = Entregable.objects.filter(reto=reto, estudiante=request.user).order_by('-fecha_entrega')
+        entregables_subidos = Entregable.objects.filter(reto=reto, estudiante=request.user).prefetch_related(
+            'historial_comentarios__autor'
+        ).order_by('-fecha_entrega')
 
     return render(request, 'estudiante/mis_entregables.html', {
         'titulo': 'Mis Entregables',
