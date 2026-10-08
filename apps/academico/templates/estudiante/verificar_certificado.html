@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+
+{% block title %}Verificación de certificado{% endblock %}
+{% block page_title %}Verificación de Certificado{% endblock %}
+
+{% block content %}
+<div style="max-width:720px;margin:0 auto;">
+  {% if certificado %}
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-4 text-center">
+        <div class="mb-3">
+          <i class="bi bi-patch-check-fill text-success" style="font-size:3.5rem;"></i>
+        </div>
+        <h3 class="fw-bold text-dark mb-1">Certificado válido</h3>
+        <p class="text-muted mb-4">
+          Este certificado fue emitido por la Universidad EAN a través de la plataforma RetosEAN.
+        </p>
+
+        <div class="text-start bg-light rounded p-4">
+          <div class="row g-3">
+            <div class="col-sm-6">
+              <span class="text-muted text-uppercase small fw-bold">Participante</span>
+              <div class="fw-bold text-dark">{{ certificado.nombre_participante }}</div>
+            </div>
+            <div class="col-sm-6">
+              <span class="text-muted text-uppercase small fw-bold">Rol</span>
+              <div class="fw-bold text-dark">{{ certificado.get_rol_participacion_display }}</div>
+            </div>
+            <div class="col-12">
+              <span class="text-muted text-uppercase small fw-bold">Reto</span>
+              <div class="fw-bold text-dark">{{ certificado.reto.titulo }}</div>
+            </div>
+            <div class="col-sm-6">
+              <span class="text-muted text-uppercase small fw-bold">Empresa proponente</span>
+              <div class="text-dark">
+                {{ certificado.reto.empresa.get_full_name|default:certificado.reto.empresa.username }}
+              </div>
+            </div>
+            <div class="col-sm-6">
+              <span class="text-muted text-uppercase small fw-bold">Fecha de emisión</span>
+              <div class="text-dark">{{ certificado.emitido_en|date:"d/m/Y" }}</div>
+            </div>
+            {% if certificado.horas %}
+              <div class="col-sm-6">
+                <span class="text-muted text-uppercase small fw-bold">Intensidad</span>
+                <div class="text-dark">{{ certificado.horas }} horas</div>
+              </div>
+            {% endif %}
+            <div class="col-12">
+              <span class="text-muted text-uppercase small fw-bold">Código de verificación</span>
+              <div><code>{{ certificado.codigo_verificacion }}</code></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-5 text-center">
+        <i class="bi bi-x-octagon-fill text-danger" style="font-size:3.5rem;"></i>
+        <h3 class="fw-bold text-dark mt-3 mb-1">Certificado no encontrado</h3>
+        <p class="text-muted mb-0">
+          No existe ningún certificado con el código <code>{{ codigo }}</code>.
+          Verifica que lo hayas copiado completo.
+        </p>
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

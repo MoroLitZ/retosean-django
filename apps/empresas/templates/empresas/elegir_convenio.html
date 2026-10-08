@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+
+{% block title %}Convenio Institucional{% endblock %}
+
+{% block content %}
+<div class="container mt-5" style="max-width: 650px;">
+  <div class="card shadow-sm border-0 p-4">
+    <div class="card-body text-center">
+      <h2 class="h4 mb-3 fw-bold">¿Deseas gestionar un Convenio Institucional?</h2>
+      <p class="text-muted mb-4">
+        Los convenios institucionales requieren el envío de documentación legal (como RUT y Cámara de Comercio). 
+        Si solo deseas publicar retos de forma rápida y directa, puedes omitir este paso.
+      </p>
+
+      <form method="post" class="d-flex flex-column gap-3">
+        {% csrf_token %}
+        <button type="submit" name="opcion" value="si_convenio" class="btn btn-outline-primary py-3 text-start px-4">
+          <div class="fw-bold">Sí, deseo hacer un convenio institucional</div>
+          <div class="small text-muted">Quiero adjuntar la documentación legal requerida.</div>
+        </button>
+
+        <button type="submit" name="opcion" value="no_convenio" class="btn btn-success py-3 text-start px-4 text-white">
+          <div class="fw-bold">No, prefiero publicar directamente</div>
+          <div class="small text-white-50">Omitir documentos y continuar de forma rápida.</div>
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

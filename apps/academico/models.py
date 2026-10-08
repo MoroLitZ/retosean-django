@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 
 
@@ -23,6 +25,7 @@ class Programa(models.Model):
         db_table = "programas"
         verbose_name = "Programa"
         verbose_name_plural = "Programas"
+        unique_together = (("nombre", "facultad"),)
 
     def __str__(self):
         return f"{self.nombre} - {self.facultad.nombre}"
@@ -52,7 +55,7 @@ class Profesor(models.Model):
         verbose_name_plural = "Profesores"
 
     def __str__(self):
-        return f"Profesor: {self.usuario.username}"
+        return self.usuario.get_full_name() or self.usuario.username
 
 
 class Estudiante(models.Model):
@@ -66,4 +69,50 @@ class Estudiante(models.Model):
         verbose_name_plural = "Estudiantes"
 
     def __str__(self):
-        return f"Estudiante: {self.usuario.username}"
+        return self.usuario.get_full_name() or self.usuario.username
+
+
+class Certificado(models.Model):
+    """Certificado de participacion en un reto finalizado (HU16).
+
+    Se emite al cerrar el reto. El PDF se genera bajo demanda y se cachea en
+    `archivo`; `codigo_verificacion` permite validarlo publicamente sin login.
+    """
+
+    ROLES = [
+        ("ESTUDIANTE", "Estudiante"),
+        ("PROFESOR", "Docente"),
+        ("EMPRESA", "Empresa"),
+        ("JURADO", "Jurado"),
+    ]
+    reto = models.ForeignKey("retos.Reto", on_delete=models.CASCADE, related_name="certificados")
+    usuario = models.ForeignKey(
+        "usuarios.Usuario", on_delete=models.CASCADE, related_name="certificados"
+    )
+    rol_participacion = models.CharField(max_length=20, choices=ROLES)
+    codigo_verificacion = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    horas = models.PositiveIntegerField(null=True, blank=True)
+    emitido_en = models.DateTimeField(auto_now_add=True)
+    emitido_por = models.ForeignKey(
+        "usuarios.Usuario", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="certificados_emitidos",
+    )
+    archivo = models.FileField(upload_to="certificados/", null=True, blank=True)
+
+    class Meta:
+        db_table = "certificados"
+        verbose_name = "Certificado"
+        verbose_name_plural = "Certificados"
+        unique_together = ["reto", "usuario", "rol_participacion"]
+        ordering = ["-emitido_en"]
+
+    def __str__(self):
+        return f"Certificado de {self.usuario.username} - {self.reto.titulo}"
+
+    @property
+    def nombre_participante(self):
+        return self.usuario.get_full_name() or self.usuario.username
+
+    @property
+    def codigo_corto(self):
+        return str(self.codigo_verificacion).split("-")[0].upper()

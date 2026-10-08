@@ -1,0 +1,11 @@
+Hola {{ usuario.get_full_name|default:usuario.username }},
+
+{{ notificacion.titulo }}
+
+{{ notificacion.mensaje }}
+{% if url_absoluta %}
+Ver en la plataforma: {{ url_absoluta }}
+{% endif %}
+--
+RetosEAN - Universidad EAN
+Puedes ajustar que avisos recibes desde tu perfil de notificaciones.

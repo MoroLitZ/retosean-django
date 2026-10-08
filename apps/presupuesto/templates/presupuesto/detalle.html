@@ -1,0 +1,156 @@
+{% extends 'base.html' %}
+
+{% block title %}Presupuesto del reto{% endblock %}
+{% block page_title %}Presupuesto: {{ reto.titulo }}{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-4">
+    <div class="card-panel mb-3">
+      <div class="card-panel-header">Resumen</div>
+      <div class="p-4">
+        {% if presupuesto %}
+          <div class="mb-3">
+            <span class="text-muted text-uppercase small fw-bold">Asignado</span>
+            <h3 class="fw-bold text-dark mb-0">${{ presupuesto.monto_total|floatformat:2 }}</h3>
+          </div>
+          <div class="mb-3">
+            <span class="text-muted text-uppercase small fw-bold">Ejecutado</span>
+            <h4 class="fw-bold mb-0 {% if porcentaje >= 100 %}text-danger{% elif porcentaje >= 80 %}text-warning{% else %}text-success{% endif %}">
+              ${{ presupuesto.monto_ejecutado|floatformat:2 }}
+            </h4>
+          </div>
+          <div class="mb-3">
+            <span class="text-muted text-uppercase small fw-bold">Disponible</span>
+            <h4 class="fw-bold mb-0 {% if presupuesto.monto_disponible < 0 %}text-danger{% endif %}">
+              ${{ presupuesto.monto_disponible|floatformat:2 }}
+            </h4>
+          </div>
+
+          <div class="progress mb-2" style="height:22px;">
+            <div class="progress-bar {% if porcentaje >= 100 %}bg-danger{% elif porcentaje >= 80 %}bg-warning text-dark{% else %}bg-success{% endif %}"
+                 role="progressbar"
+                 style="width: {% if porcentaje > 100 %}100{% else %}{{ porcentaje|floatformat:0 }}{% endif %}%;">
+              {{ porcentaje|floatformat:1 }}%
+            </div>
+          </div>
+
+          {% if porcentaje >= 80 %}
+            <div class="alert alert-warning small mb-0 py-2">
+              <i class="bi bi-exclamation-triangle-fill"></i>
+              La ejecución superó el 80% del presupuesto. Los administradores y la empresa
+              fueron notificados.
+            </div>
+          {% endif %}
+        {% else %}
+          <p class="text-muted mb-0">Este reto todavía no tiene presupuesto asignado.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if puede_editar %}
+      <div class="card-panel mb-3">
+        <div class="card-panel-header">{% if presupuesto %}Ajustar{% else %}Asignar{% endif %} presupuesto</div>
+        <div class="p-3">
+          <form method="post" action="{% url 'presupuesto:definir' reto.pk %}">
+            {% csrf_token %}
+            <label for="{{ form_presupuesto.monto_total.id_for_label }}" class="form-label small fw-semibold text-secondary">
+              {{ form_presupuesto.monto_total.label }}
+            </label>
+            {{ form_presupuesto.monto_total }}
+            {{ form_presupuesto.monto_total.errors }}
+            <button type="submit" class="btn btn-primary btn-sm w-100 mt-3 fw-bold">
+              <i class="bi bi-check-circle-fill"></i> Guardar
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {% if presupuesto %}
+        <div class="card-panel">
+          <div class="card-panel-header">Registrar gasto</div>
+          <div class="p-3">
+            <form method="post" action="{% url 'presupuesto:agregar_gasto' reto.pk %}" enctype="multipart/form-data">
+              {% csrf_token %}
+              {% for campo in form_gasto %}
+                <div class="mb-2">
+                  <label for="{{ campo.id_for_label }}" class="form-label small fw-semibold text-secondary">
+                    {{ campo.label }}
+                  </label>
+                  {{ campo }}
+                  {% if campo.errors %}<div class="text-danger small">{{ campo.errors }}</div>{% endif %}
+                </div>
+              {% endfor %}
+              <button type="submit" class="btn btn-outline-primary btn-sm w-100 mt-2 fw-bold">
+                <i class="bi bi-plus-lg"></i> Añadir gasto
+              </button>
+            </form>
+          </div>
+        </div>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card-panel">
+      <div class="card-panel-header d-flex justify-content-between align-items-center">
+        <span>Gastos registrados</span>
+        <a href="{% url 'retos:detalle' reto.pk %}" class="btn btn-sm btn-outline-light">
+          <i class="bi bi-arrow-left"></i> Ver reto
+        </a>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th class="ps-4">Categoría</th>
+              <th>Descripción</th>
+              <th class="text-end">Monto</th>
+              <th>Registrado por</th>
+              <th>Fecha</th>
+              <th class="text-end pe-4"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for gasto in gastos %}
+              <tr>
+                <td class="ps-4">
+                  <span class="badge bg-secondary">{{ gasto.get_categoria_display }}</span>
+                </td>
+                <td class="text-muted small">{{ gasto.descripcion|default:"-"|truncatechars:70 }}</td>
+                <td class="text-end fw-semibold">${{ gasto.monto|floatformat:2 }}</td>
+                <td class="text-muted small">
+                  {{ gasto.registrado_por.get_full_name|default:gasto.registrado_por.username|default:"-" }}
+                </td>
+                <td class="text-muted small">{{ gasto.creado_en|date:"d/m/Y" }}</td>
+                <td class="text-end pe-4">
+                  {% if gasto.comprobante %}
+                    <a href="{{ gasto.comprobante.url }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Comprobante">
+                      <i class="bi bi-paperclip"></i>
+                    </a>
+                  {% endif %}
+                  {% if puede_editar %}
+                    <form method="post" action="{% url 'presupuesto:eliminar_gasto' gasto.pk %}" class="d-inline">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar gasto">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="6" class="text-center text-muted py-5">
+                  <i class="bi bi-receipt d-block mb-2" style="font-size:2.5rem;"></i>
+                  Sin gastos registrados.
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
