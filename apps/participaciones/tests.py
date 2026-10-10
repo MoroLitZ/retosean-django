@@ -186,3 +186,25 @@ class FlujoNotificacionesYRevisionPostulacionTests(TestCase):
         self.assertContains(response, "Motivación del estudiante")
         self.assertContains(response, "Python, analitica y trabajo en equipo")
         self.assertContains(response, "Ingenieria de Sistemas")
+
+
+class ListaMisEntregablesTests(TestCase):
+    """La lista de retos del estudiante en "Mis entregables" enlaza a cada reto.
+
+    El template recorria los retos como si fueran postulaciones
+    (`postulacion.reto.id`), asi que el enlace salia vacio y la pagina fallaba
+    en cuanto el estudiante participaba en algun reto.
+    """
+
+    def test_lista_de_retos_del_estudiante_se_muestra(self):
+        empresa = Usuario.objects.create_user(username="empresa-lista", password="x", rol="EMPRESA")
+        estudiante = Usuario.objects.create_user(username="est-lista", password="x", rol="ESTUDIANTE")
+        reto = Reto.objects.create(empresa=empresa, titulo="Reto con entregables", estado="en_curso")
+        Postulacion.objects.create(reto=reto, estudiante=estudiante, estado="ACEPTADA")
+
+        self.client.force_login(estudiante)
+        response = self.client.get(reverse("participaciones:mis_entregables"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Reto con entregables")
+        self.assertContains(response, reverse("participaciones:mis_entregables_reto", args=[reto.pk]))
