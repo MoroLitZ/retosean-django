@@ -33,7 +33,6 @@ def _participantes_del_reto(reto):
     from apps.evaluacion.models import Entregable
     from apps.hackaton.models import Jurado
     from apps.participaciones.models import Postulacion
-    from apps.retos.models import EquipoRetoAcademico
     from apps.seguimiento.models import IntegracionAcademica
     from apps.usuarios.models import Usuario
 
@@ -64,7 +63,6 @@ def _participantes_del_reto(reto):
     if reto.empresa_id:
         elegibles.setdefault(reto.empresa_id, (reto.empresa, "EMPRESA"))
 
-    del EquipoRetoAcademico
     return list(elegibles.values())
 
 

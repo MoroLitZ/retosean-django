@@ -607,8 +607,17 @@ def elegir_modo_convenio(request):
         if opcion == 'no_convenio':
             empresa.renuncio_a_convenio = True
             empresa.save(update_fields=['renuncio_a_convenio'])
-            messages.success(request, 'Has seleccionado publicar de forma directa sin convenio.')
-            return redirect('retos:crear')
+            # Sin convenio no se exigen la minuta ni el convenio firmado, pero el
+            # resto de documentos si: ir a crear el reto devolveria aqui en bucle.
+            if puede_la_empresa_operar(empresa):
+                messages.success(request, 'Has seleccionado participar sin convenio.')
+                return redirect('retos:crear')
+            messages.info(
+                request,
+                'Participarás sin convenio: no necesitas la minuta ni el convenio firmado. '
+                'Carga el resto de documentos para poder publicar retos.',
+            )
+            return redirect('empresas:documentos')
         messages.error(request, 'Selecciona una de las dos opciones para continuar.')
 
     return render(request, 'empresas/elegir_convenio.html', {'empresa': empresa})
