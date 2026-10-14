@@ -131,3 +131,44 @@ class AccesoAPresupuestoTests(TestCase):
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(Gasto.objects.count(), 0)
+
+
+class ExportacionPresupuestoTests(TestCase):
+    """HU07: reporte de gastos en Excel y PDF."""
+
+    def setUp(self):
+        self.empresa = Usuario.objects.create_user(username="empresa-exp", password="x", rol="EMPRESA")
+        self.admin = Usuario.objects.create_user(username="admin-exp", password="x", rol="ADMIN")
+        self.reto = Reto.objects.create(empresa=self.empresa, titulo="Reto exportable", estado="en_curso")
+        self.presupuesto = Presupuesto.objects.create(reto=self.reto, monto_total=Decimal("1000.00"))
+        Gasto.objects.create(presupuesto=self.presupuesto, categoria="MATERIALES", monto=Decimal("250.00"),
+                             descripcion="Cartulinas")
+
+    def test_excel_trae_resumen_y_detalle(self):
+        import io
+
+        from openpyxl import load_workbook
+
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("presupuesto:exportar", args=[self.reto.pk, "xlsx"]))
+        self.assertEqual(response.status_code, 200)
+        valores = [c for fila in load_workbook(io.BytesIO(response.content)).active.iter_rows(values_only=True) for c in fila]
+        self.assertIn("Cartulinas", valores)
+        self.assertIn(250.0, valores)
+        self.assertIn(1000.0, valores)
+
+    def test_pdf_se_genera(self):
+        self.client.force_login(self.empresa)
+        response = self.client.get(reverse("presupuesto:exportar", args=[self.reto.pk, "pdf"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.content.startswith(b"%PDF"))
+
+    def test_otra_empresa_no_exporta(self):
+        otra = Usuario.objects.create_user(username="empresa-ajena", password="x", rol="EMPRESA")
+        self.client.force_login(otra)
+        response = self.client.get(reverse("presupuesto:exportar", args=[self.reto.pk, "pdf"]))
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_formato_desconocido_es_404(self):
+        self.client.force_login(self.admin)
+        self.assertEqual(self.client.get(reverse("presupuesto:exportar", args=[self.reto.pk, "doc"])).status_code, 404)

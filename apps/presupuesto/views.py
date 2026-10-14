@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db.models import Prefetch
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -10,7 +11,7 @@ from apps.usuarios.roles import es_admin
 
 from .forms import GastoForm, PresupuestoForm
 from .models import Gasto, Presupuesto
-from .services import registrar_gasto, revisar_umbral
+from .services import exportar_excel, exportar_pdf, registrar_gasto, revisar_umbral
 
 
 def _puede_ver(user, reto):
@@ -128,3 +129,25 @@ def eliminar_gasto(request, pk):
     revisar_umbral(presupuesto)
     messages.success(request, "Gasto eliminado.")
     return redirect("presupuesto:detalle", reto_id=presupuesto.reto_id)
+
+
+FORMATOS_EXPORTACION = {
+    "xlsx": (exportar_excel, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    "pdf": (exportar_pdf, "application/pdf"),
+}
+
+
+@rol_requerido("ADMIN", "EMPRESA")
+def exportar(request, reto_id, formato):
+    """Descarga el reporte de gastos del reto en Excel o PDF (HU07)."""
+    if formato not in FORMATOS_EXPORTACION:
+        raise Http404("Formato no soportado.")
+    reto = get_object_or_404(Reto.objects.select_related("empresa"), pk=reto_id)
+    if not _puede_ver(request.user, reto):
+        messages.error(request, "No tienes acceso al presupuesto de ese reto.")
+        return redirect("dashboard:panel")
+    presupuesto = get_object_or_404(Presupuesto, reto=reto)
+    generar, tipo = FORMATOS_EXPORTACION[formato]
+    respuesta = HttpResponse(generar(presupuesto), content_type=tipo)
+    respuesta["Content-Disposition"] = f'attachment; filename="presupuesto-reto-{reto.pk}.{formato}"'
+    return respuesta
