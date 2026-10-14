@@ -22,14 +22,6 @@ MAQUINA_INSCRIPCION = MaquinaEstados(
 )
 
 
-def etapa_vigente(hackathon, tipo):
-    """Devuelve la etapa del tipo indicado si esta abierta hoy, o None."""
-    etapa = hackathon.etapas.filter(tipo=tipo).first()
-    if etapa is None:
-        return None
-    return etapa if etapa.vigente else None
-
-
 def inscripciones_abiertas(hackathon):
     if hackathon.estado not in {"publicado", "en_curso"}:
         return False

@@ -148,6 +148,13 @@ class GateDeDocumentacionTests(TestCase):
             response, reverse("empresas:elegir_convenio"), fetch_redirect_response=False
         )
 
+    def test_elegir_sin_convenio_lleva_a_documentos_y_no_en_bucle(self):
+        self.client.force_login(self.usuario)
+        response = self.client.post(reverse("empresas:elegir_convenio"), {"opcion": "no_convenio"})
+        self.assertRedirects(response, reverse("empresas:documentos"))
+        self.empresa.refresh_from_db()
+        self.assertTrue(self.empresa.renuncio_a_convenio)
+
     def test_sin_convenio_no_se_salta_la_documentacion(self):
         """Elegir participar sin convenio ya no habilita a la empresa por si solo."""
         self.empresa.renuncio_a_convenio = True
