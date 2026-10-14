@@ -26,21 +26,26 @@ EVENTOS = _registrar(
     Evento("DOCUMENTO_CARGADO_ADMIN", "INFO", "Documento legal cargado por empresa"),
     Evento("EMPRESA_LISTAS_RESTRICTIVAS", "ERROR", "Verificacion en listas restrictivas"),
     Evento("CONVENIO_ACTUALIZADO", "INFO", "Avance en el tramite de tu convenio"),
+    Evento("EMPRESA_PARTICIPACION", "INFO", "Estado de participacion de tu empresa"),
     # --- Ciclo de vida del reto (HU02, HU04) ---
     Evento("RETO_ESTADO_CAMBIADO", "INFO", "Cambio de estado de tu reto"),
     Evento("RETO_ENVIADO_REVISION", "INFO", "Reto enviado a revision"),
+    Evento("RETO_SIN_ACTUALIZAR", "ADVERTENCIA", "Reto vencido sin actualizaciones"),
     # --- Integracion academica (HU03) ---
     Evento("INTEGRACION_ENVIADA_REVISION", "INFO", "Nueva postulacion docente a reto"),
     Evento("INTEGRACION_REVISADA", "INFO", "Integracion academica revisada"),
     Evento("EQUIPO_ASIGNADO", "EXITO", "Fuiste asignado a un equipo"),
     # --- Participacion estudiantil (HU10, HU11) ---
     Evento("POSTULACION_NUEVA", "INFO", "Nueva postulacion"),
+    Evento("POSTULACION_RECIBIDA", "EXITO", "Recibimos tu postulacion"),
     Evento("POSTULACION_GESTIONADA", "INFO", "Respuesta a tu postulacion"),
     # --- Evaluacion y seguimiento (HU12, HU14) ---
     Evento("ENTREGABLE_RECIBIDO", "INFO", "Nuevo entregable recibido"),
     Evento("ENTREGABLE_CALIFICADO", "EXITO", "Tu entregable fue calificado"),
+    Evento("COMENTARIO_EMPRESA", "INFO", "Comentario de la empresa a un entregable"),
     # --- Cierre (HU08) y certificacion (HU16) ---
     Evento("RETO_FINALIZADO", "EXITO", "Reto finalizado"),
+    Evento("LOGISTICA_SOLICITADA", "INFO", "Nueva solicitud de logistica"),
     Evento("CERTIFICADO_DISPONIBLE", "EXITO", "Tu certificado esta disponible"),
     Evento("ENCUESTA_PENDIENTE", "INFO", "Encuesta de satisfaccion"),
     # --- Presupuesto (HU07) ---

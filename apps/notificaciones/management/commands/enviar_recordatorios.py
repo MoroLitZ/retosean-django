@@ -48,11 +48,45 @@ class Command(BaseCommand):
             total += self._etapas_de_hackaton(objetivo, antelacion)
 
         total += self._entregables_sin_calificar(dias_espera=max(dias))
+        total += self._retos_vencidos_sin_actualizar(hoy)
 
         prefijo = "[dry-run] " if self.dry_run else ""
         self.stdout.write(self.style.SUCCESS(f"{prefijo}{total} recordatorio(s) generado(s)."))
 
     # ------------------------------------------------------------------
+    def _retos_vencidos_sin_actualizar(self, hoy):
+        """HU04: avisa a los administradores de retos activos cuya fecha de fin
+        tentativa ya paso sin ningun seguimiento registrado desde entonces.
+
+        Se repite como maximo una vez por semana y por reto.
+        """
+        from apps.retos.models import Reto
+        from apps.seguimiento.models import SeguimientoReto
+        from apps.usuarios.models import Usuario
+
+        admins = list(Usuario.objects.filter(Q(rol="ADMIN") | Q(is_superuser=True), is_active=True))
+        if not admins:
+            return 0
+        total = 0
+        vencidos = Reto.objects.filter(
+            estado__in=Reto.ESTADOS_ACTIVOS, fecha_fin_tentativa__lt=hoy
+        ).select_related("empresa")
+        semana = hoy.strftime("%G-%V")
+        for reto in vencidos:
+            if SeguimientoReto.objects.filter(reto=reto, creado_en__date__gte=reto.fecha_fin_tentativa).exists():
+                continue
+            dias = (hoy - reto.fecha_fin_tentativa).days
+            total += self._emitir(
+                admins, "RETO_SIN_ACTUALIZAR",
+                mensaje=(
+                    f'El reto "{reto.titulo}" ({reto.get_estado_display()}) paso su fecha de fin tentativa '
+                    f'hace {dias} dia(s) y no tiene seguimientos registrados desde entonces.'
+                ),
+                link=reverse("retos:seguimientos", kwargs={"pk": reto.pk}),
+                clave=f"reto-sin-actualizar:{reto.pk}:{semana}",
+            )
+        return total
+
     def _emitir(self, usuarios, evento, mensaje, link, clave):
         usuarios = [u for u in usuarios if u is not None]
         if not usuarios:
@@ -82,7 +116,7 @@ class Command(BaseCommand):
             # Estudiantes interesados: lo tienen en favoritos o ya se postularon.
             interesados = Usuario.objects.filter(
                 Q(favoritos__reto=reto)
-                | Q(postulaciones__reto=reto, postulaciones__estado="PENDIENTE"),
+                | Q(postulaciones__reto=reto, postulaciones__estado__in=["PENDIENTE", "EN_REVISION"]),
                 rol="ESTUDIANTE", is_active=True,
             ).distinct()
             total += self._emitir(
@@ -133,19 +167,22 @@ class Command(BaseCommand):
         """
         from apps.empresas.models import DocumentoEmpresa
 
-        from apps.empresas.services import documentos_camara_vencidos, marcar_documento_vencido
-
-        # La Camara de Comercio no trae fecha de vencimiento: vence a los 30 dias de expedida.
-        por_fecha = DocumentoEmpresa.objects.filter(
+        vencidos = DocumentoEmpresa.objects.filter(
             fecha_vencimiento__lt=hoy, estado__in=["VERIFICADO", "CARGADO"]
         )
-        vencidos = list({d.pk: d for d in [*por_fecha, *documentos_camara_vencidos(hoy)]}.values())
+        if self.dry_run:
+            for documento in vencidos:
+                self.stdout.write(
+                    f"  - VENCIDO: {documento} ({documento.fecha_vencimiento})"
+                )
+            return vencidos.count()
+        from apps.empresas.services import marcar_documento_vencido
+
+        total = 0
         for documento in vencidos:
-            if self.dry_run:
-                self.stdout.write(f"  - VENCIDO: {documento}")
-            else:
-                marcar_documento_vencido(documento)
-        return len(vencidos)
+            marcar_documento_vencido(documento)
+            total += 1
+        return total
 
     def _documentos_por_vencer(self, objetivo, antelacion):
         from apps.empresas.models import DocumentoEmpresa

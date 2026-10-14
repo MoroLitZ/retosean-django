@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+{% block title %}Registro de notificaciones{% endblock %}
+{% block page_title %}Registro de notificaciones{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3"><div class="card-stat"><div class="small text-muted">Total</div><div class="fs-4 fw-bold">{{ resumen.total }}</div></div></div>
+  <div class="col-6 col-lg-3"><div class="card-stat"><div class="small text-muted">Enviadas por correo</div><div class="fs-4 fw-bold text-success">{{ resumen.enviadas }}</div></div></div>
+  <div class="col-6 col-lg-3"><div class="card-stat"><div class="small text-muted">Fallidas</div><div class="fs-4 fw-bold text-danger">{{ resumen.fallidas }}</div></div></div>
+  <div class="col-6 col-lg-3"><div class="card-stat"><div class="small text-muted">Leídas</div><div class="fs-4 fw-bold">{{ resumen.leidas }}</div></div></div>
+</div>
+
+<div class="card-panel">
+  <div class="p-3 border-bottom">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-sm-6 col-md-2">
+        <label class="form-label small fw-semibold text-secondary mb-1" for="estado">Estado</label>
+        <select name="estado" id="estado" class="form-select form-select-sm">
+          <option value="">Todos</option>
+          {% for valor, nombre in estados %}
+            <option value="{{ valor }}" {% if filtros.estado == valor %}selected{% endif %}>{{ nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-6 col-md-3">
+        <label class="form-label small fw-semibold text-secondary mb-1" for="evento">Evento</label>
+        <select name="evento" id="evento" class="form-select form-select-sm">
+          <option value="">Todos</option>
+          {% for valor, nombre in eventos %}
+            <option value="{{ valor }}" {% if filtros.evento == valor %}selected{% endif %}>{{ nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-6 col-md-2">
+        <label class="form-label small fw-semibold text-secondary mb-1" for="usuario">Usuario</label>
+        <input type="text" name="usuario" id="usuario" value="{{ filtros.usuario }}" class="form-control form-control-sm">
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label small fw-semibold text-secondary mb-1" for="desde">Desde</label>
+        <input type="date" name="desde" id="desde" value="{{ filtros.desde }}" class="form-control form-control-sm">
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label small fw-semibold text-secondary mb-1" for="hasta">Hasta</label>
+        <input type="date" name="hasta" id="hasta" value="{{ filtros.hasta }}" class="form-control form-control-sm">
+      </div>
+      <div class="col-md-1"><button class="btn btn-sm btn-primary w-100">Filtrar</button></div>
+    </form>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0 small">
+      <thead>
+        <tr><th class="ps-4">Fecha</th><th>Usuario</th><th>Evento</th><th>Título</th><th>Correo</th><th class="pe-4">Leída</th></tr>
+      </thead>
+      <tbody>
+        {% for n in registros %}
+        <tr>
+          <td class="ps-4 text-muted">{{ n.creada_en|date:'d/m/Y H:i' }}</td>
+          <td>{{ n.usuario.username }}</td>
+          <td><code>{{ n.evento|default:'-' }}</code></td>
+          <td>{{ n.titulo }}</td>
+          <td>
+            {% if n.error_envio %}
+              <span class="badge bg-danger" title="{{ n.error_envio }}">Fallido</span>
+            {% elif n.enviada_por_correo %}
+              <span class="badge bg-success">Enviado</span>
+            {% else %}
+              <span class="badge bg-light text-muted border">Solo plataforma</span>
+            {% endif %}
+          </td>
+          <td class="pe-4">{% if n.leida %}{{ n.leida_en|date:'d/m/Y H:i'|default:'Sí' }}{% else %}No{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center text-muted py-4">No hay notificaciones con esos filtros.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if registros.has_other_pages %}
+  <nav class="p-3">
+    <ul class="pagination pagination-sm justify-content-center mb-0">
+      {% if registros.has_previous %}
+        <li class="page-item"><a class="page-link" href="?{{ querystring }}&page={{ registros.previous_page_number }}">Anterior</a></li>
+      {% endif %}
+      <li class="page-item disabled"><span class="page-link">{{ registros.number }} de {{ registros.paginator.num_pages }}</span></li>
+      {% if registros.has_next %}
+        <li class="page-item"><a class="page-link" href="?{{ querystring }}&page={{ registros.next_page_number }}">Siguiente</a></li>
+      {% endif %}
+    </ul>
+  </nav>
+  {% endif %}
+</div>
+{% endblock %}

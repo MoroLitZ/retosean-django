@@ -258,6 +258,14 @@
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Retroalimentación / Comentarios</label>
                         <textarea class="form-control" name="comentario" rows="3" placeholder="Ingresa observaciones o retroalimentación para el estudiante...">{{ e.comentario_profesor|default:'' }}</textarea>
+          {% if e.estado == 'CALIFICADO' %}
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" name="confirmar_recalificacion" value="1" id="recalificar-{{ e.pk }}">
+            <label class="form-check-label small" for="recalificar-{{ e.pk }}">
+              Confirmo que quiero volver a calificar (nota actual: {{ e.nota }}). La nueva nota quedará sin publicar.
+            </label>
+          </div>
+          {% endif %}
                     </div>
 
                     {% if e.historial_comentarios.all %}

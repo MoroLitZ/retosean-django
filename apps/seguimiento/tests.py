@@ -106,7 +106,7 @@ class HistorialEstadoTests(TestCase):
         reto = Reto.objects.create(empresa=self.empresa_user, titulo="Reto abierto", estado="abierto")
         self.client.force_login(self.estudiante)
         self.client.post(reverse("participaciones:postular_a_reto", args=[reto.pk]), {
-            "motivacion": "Me interesa", "habilidades": "Python", "semestre": 5, "programa": programa.nombre,
+            "motivacion": "Me interesa", "habilidades": "Python", "semestre": 5, "programa": programa.nombre, "acepta_terminos": "on",
         })
         postulacion = Postulacion.objects.get(reto=reto, estudiante=self.estudiante)
         self.client.post(reverse("participaciones:retirar_postulacion", args=[reto.pk]))
@@ -145,7 +145,7 @@ class HistorialEstadoTests(TestCase):
             alcance="a", entregable_esperado="e", cronograma_sesiones="c",
         )
         self.client.force_login(self.profesor)
-        self.client.get(reverse("retos:enviar_integracion_revision", args=[integracion.pk]))
+        self.client.post(reverse("retos:enviar_integracion_revision", args=[integracion.pk]))
         integracion.refresh_from_db()
         self.assertEqual(integracion.estado, "aprobada")
         self.assertFalse(HistorialEstado.objects.filter(object_id=integracion.pk, estado_nuevo="en_revision").exists())

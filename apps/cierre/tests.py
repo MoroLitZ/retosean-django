@@ -72,3 +72,38 @@ class CierreSprintTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.context["puede_finalizar"])
         self.assertNotContains(response, reverse("cierre:finalizar", args=[self.reto.pk]))
+
+    def test_empresa_solicita_logistica_y_el_admin_la_confirma(self):
+        from apps.seguimiento.services import historial_de
+
+        from .models import SolicitudLogistica
+
+        self.client.force_login(self.empresa)
+        self.client.post(reverse("cierre:agregar_solicitud_logistica", args=[self.reto.pk]), {
+            "evento": "CIERRE", "tipo": "ESPACIO", "descripcion": "Auditorio para 80 personas",
+        })
+        solicitud = SolicitudLogistica.objects.get(reto=self.reto)
+        self.assertEqual(solicitud.estado, "SOLICITADA")
+        self.assertTrue(Notificacion.objects.filter(usuario=self.admin, evento="LOGISTICA_SOLICITADA").exists())
+
+        url = reverse("cierre:estado_solicitud_logistica", args=[solicitud.pk])
+        self.assertEqual(self.client.post(url, {"estado": "CONFIRMADA"}).status_code, 403)
+
+        self.client.force_login(self.admin)
+        self.client.post(url, {"estado": "CONFIRMADA"})
+        solicitud.refresh_from_db()
+        self.assertEqual(solicitud.estado, "CONFIRMADA")
+        self.assertEqual(
+            list(historial_de(solicitud).order_by("fecha", "id").values_list("estado_nuevo", flat=True)),
+            ["SOLICITADA", "CONFIRMADA"],
+        )
+
+    def test_estudiante_no_pide_logistica(self):
+        from .models import SolicitudLogistica
+
+        self.client.force_login(self.estudiante)
+        response = self.client.post(reverse("cierre:agregar_solicitud_logistica", args=[self.reto.pk]), {
+            "evento": "INICIO", "tipo": "OTRO", "descripcion": "x",
+        })
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(SolicitudLogistica.objects.exists())

@@ -217,7 +217,7 @@ class Command(BaseCommand):
         self._sembrar_documentos(u["admin"], empresas)
         self.stdout.write(
             f"Empresas: {len(empresas)} (una por cada estado de validacion + una que renuncia al convenio), "
-            "documentos en sus 5 estados, convenio en sus 4 tramites e historial documental."
+            "los 8 documentos de HU00 en distintos estados, convenio en sus 4 tramites e historial documental."
         )
         return empresas
 
@@ -551,7 +551,10 @@ class Command(BaseCommand):
     # ----------------------------------------------------------- notificaciones
     # ------------------------------------------------- documentos (HU00)
     def _sembrar_documentos(self, admin, empresas):
-        """Cada empresa ilustra un caso de HU00. Pasa por los servicios para dejar historial."""
+        """Cada empresa ilustra un caso de HU00 sobre el catalogo de tipos.
+
+        Pasa por los servicios (no por el ORM) para dejar el historial y los avisos como en un caso real.
+        """
         from apps.empresas.models import DocumentoEmpresa
         from apps.empresas.services import (
             cambiar_estado_convenio, cargar_documento, marcar_documento_vencido, revisar_documento,
@@ -559,17 +562,23 @@ class Command(BaseCommand):
         from apps.seguimiento.services import registrar_cambio_estado
 
         hoy = timezone.localdate()
+        # Los ocho documentos obligatorios de la historia. La minuta es propia del convenio.
+        requeridos = [
+            "MINUTA_CONVENIO", "CAMARA_COMERCIO", "RUT", "CEDULA_REPRESENTANTE",
+            "LISTAS_INFORMA", "FORMATO_COMPROMISO", "TERMINOS_REFERENCIA", "FICHA_RETO",
+        ]
 
-        def documento(empresa, tipo, final, dias=None, motivo=""):
-            if DocumentoEmpresa.objects.filter(empresa=empresa, tipo_documento=tipo).exists():
+        def documento(empresa, codigo, final, dias=1, motivo=""):
+            if DocumentoEmpresa.objects.filter(empresa=empresa, tipo_documento=codigo).exists():
                 return  # idempotente: no reabrir lo ya sembrado
             if final == "PENDIENTE":  # solicitado, aun sin archivo
-                doc = DocumentoEmpresa.objects.create(empresa=empresa, tipo_documento=tipo, estado="PENDIENTE")
+                doc = DocumentoEmpresa.objects.create(empresa=empresa, tipo_documento=codigo, estado="PENDIENTE")
                 registrar_cambio_estado(doc, "", "PENDIENTE", admin, "Documento solicitado a la empresa.")
                 return
-            expedicion = hoy - timedelta(days=dias) if dias is not None else None
-            archivo = ContentFile(b"%PDF-1.4 demo", name=f"{tipo.lower()}-{empresa.nit}.pdf")
-            doc, _ = cargar_documento(empresa, tipo, archivo, expedicion, empresa.usuario)
+            archivo = ContentFile(b"%PDF-1.4 demo", name=f"{codigo.lower()}-{empresa.nit}.pdf")
+            # Listas Informa la sube la universidad (permiso especial), no la empresa.
+            quien = admin if codigo == "LISTAS_INFORMA" else empresa.usuario
+            doc, _ = cargar_documento(empresa, codigo, archivo, hoy - timedelta(days=dias), quien)
             if final in ("VERIFICADO", "RECHAZADO"):
                 revisar_documento(doc, final, admin, motivo)
             elif final == "VENCIDO":
@@ -581,36 +590,38 @@ class Command(BaseCommand):
             for estado, comentario, vence in pasos:
                 cambiar_estado_convenio(empresa, estado, admin, comentario, vence)
 
-        # Completa: todo verificado, camara reciente, convenio firmado y vigente.
+        def al_dia(empresa, omitir=()):
+            for codigo in requeridos:
+                if codigo not in omitir:
+                    documento(empresa, codigo, "VERIFICADO", dias=5 if codigo == "CAMARA_COMERCIO" else 1)
+
+        # Completa: los ocho al dia, mas el convenio firmado (opcional) y su tramite.
         e = empresas["verificada"]
-        documento(e, "CAMARA_COMERCIO", "VERIFICADO", dias=5)
-        for tipo in ("RUT", "CEDULA_REPRESENTANTE", "CONVENIO"):
-            documento(e, tipo, "VERIFICADO")
+        al_dia(e)
+        documento(e, "CONVENIO", "VERIFICADO")
         convenio(e, ("FIRMADO", "Convenio firmado por las partes.", hoy + timedelta(days=300)))
 
-        # Sin nada cargado: ve la alerta de "falta cargar".
-        e = empresas["pendiente"]
-        documento(e, "RUT", "PENDIENTE")
+        # Sin nada cargado: ve la alerta de "falta cargarlo".
+        documento(empresas["pendiente"], "RUT", "PENDIENTE")
 
-        # En revision: documentos cargados esperando al administrador, convenio radicado.
+        # En revision: le falta cargar los Terminos de referencia y tiene dos documentos
+        # esperando al administrador. Sirve para completar el ciclo en vivo.
         e = empresas["revision"]
+        for codigo in ("MINUTA_CONVENIO", "RUT", "CEDULA_REPRESENTANTE", "LISTAS_INFORMA", "FORMATO_COMPROMISO"):
+            documento(e, codigo, "VERIFICADO")
         documento(e, "CAMARA_COMERCIO", "CARGADO", dias=3)
-        documento(e, "RUT", "CARGADO")
-        documento(e, "CEDULA_REPRESENTANTE", "VERIFICADO")
+        documento(e, "FICHA_RETO", "CARGADO", dias=2)
         convenio(e, ("RADICADO", "Convenio recibido para tramite.", None))
 
-        # Rechazada: documento rechazado, camara vencida y convenio atascado en Juridica.
+        # Rechazada: un documento rechazado, la camara vencida y el convenio atascado en Juridica.
         e = empresas["rechazada"]
         documento(e, "RUT", "RECHAZADO", motivo="El documento no corresponde al NIT registrado.")
         documento(e, "CAMARA_COMERCIO", "VENCIDO", dias=45)
         convenio(e, ("RADICADO", "Convenio recibido para tramite.", None),
                  ("EN_JURIDICA", "En revision del area juridica.", None))
 
-        # Via directa: renuncia al convenio y queda exenta del control documental (aun asi tiene sus documentos al dia).
-        e = empresas["sinconvenio"]
-        documento(e, "CAMARA_COMERCIO", "VERIFICADO", dias=8)
-        documento(e, "RUT", "VERIFICADO")
-        documento(e, "CEDULA_REPRESENTANTE", "VERIFICADO")
+        # Sin convenio: se le eximen solo los documentos propios del convenio (la minuta).
+        al_dia(empresas["sinconvenio"], omitir=("MINUTA_CONVENIO",))
 
     # ------------------------------------------------------- presupuestos
     def _sembrar_presupuestos(self, u):

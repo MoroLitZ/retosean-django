@@ -197,3 +197,18 @@ class CierreEmiteCertificadosTests(TestCase):
         self.assertTrue(
             Certificado.objects.filter(reto=reto, usuario=estudiante).exists()
         )
+
+
+class NombreEnCertificadoTests(TestCase):
+    def test_el_certificado_de_empresa_lleva_la_razon_social(self):
+        from apps.empresas.models import Empresa
+        from apps.retos.models import Reto
+        from apps.usuarios.models import Usuario
+
+        from .models import Certificado
+
+        cuenta = Usuario.objects.create_user(username="cuenta-empresa", password="x", rol="EMPRESA")
+        Empresa.objects.create(usuario=cuenta, nit="900456456", razon_social="Innovaciones Andinas S.A.S.")
+        reto = Reto.objects.create(empresa=cuenta, titulo="Reto certificado", estado="finalizado")
+        certificado = Certificado.objects.create(reto=reto, usuario=cuenta, rol_participacion="EMPRESA")
+        self.assertEqual(certificado.nombre_participante, "Innovaciones Andinas S.A.S.")

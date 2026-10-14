@@ -45,7 +45,7 @@ def _puede_ver(user, hackathon):
 # ------------------------------------------------------------- LISTADOS
 @rol_requerido("ADMIN", "PROFESOR", "EMPRESA", "ESTUDIANTE")
 def lista(request):
-    hackathones = Hackathon.objects.select_related("reto", "reto__empresa").prefetch_related("etapas")
+    hackathones = Hackathon.objects.select_related("reto", "reto__empresa").prefetch_related("etapas", "inscripciones")
     if not es_admin(request.user):
         rol = request.user.rol
         if rol == "EMPRESA":

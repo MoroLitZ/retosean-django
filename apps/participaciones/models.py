@@ -4,10 +4,15 @@ from django.db import models
 class Postulacion(models.Model):
     ESTADOS = [
         ("PENDIENTE", "Pendiente de Aprobacion"),
+        ("EN_REVISION", "En revision"),
         ("ACEPTADA", "Aceptada"),
         ("RECHAZADA", "Rechazada"),
         ("RETIRADA", "Retirada"),
     ]
+    # Postulaciones aun sin respuesta de la empresa (la cuentan los tableros y
+    # el estudiante todavia puede retirarlas).
+    ESTADOS_SIN_RESOLVER = ("PENDIENTE", "EN_REVISION")
+
     reto = models.ForeignKey("retos.Reto", on_delete=models.CASCADE, related_name="postulaciones")
     estudiante = models.ForeignKey("usuarios.Usuario", on_delete=models.CASCADE, related_name="postulaciones")
     fecha_postulacion = models.DateTimeField(auto_now_add=True)
@@ -16,6 +21,8 @@ class Postulacion(models.Model):
     habilidades = models.TextField(blank=True, help_text="Habilidades y conocimientos relevantes")
     semestre = models.IntegerField(null=True, blank=True)
     programa = models.CharField(max_length=150, blank=True, help_text="Programa academico del estudiante")
+    hoja_de_vida = models.FileField(upload_to="postulaciones/hojas_de_vida/", null=True, blank=True)
+    acepta_terminos = models.BooleanField(default=False)
 
     class Meta:
         db_table = "postulaciones"
@@ -25,6 +32,10 @@ class Postulacion(models.Model):
 
     def __str__(self):
         return f"{self.estudiante.username} -> Reto {self.reto_id} ({self.estado})"
+
+    @property
+    def sin_resolver(self):
+        return self.estado in self.ESTADOS_SIN_RESOLVER
 
 
 class Equipo(models.Model):

@@ -106,7 +106,7 @@ def generar_excel(definicion, queryset, columnas, filtros):
 
 
 # -------------------------------------------------------------------- PDF
-def _encabezado_y_pie(canvas, documento):
+def encabezado_de_marca(canvas, documento):
     """Misma franja de marca en cada pagina: acento verde arriba, wordmark +
     Universidad EAN, y pie con paginacion. Reemplaza la marca de agua generica
     (gris/azul, sin identidad) que tenia el PDF antes."""
@@ -211,7 +211,7 @@ def generar_pdf(definicion, queryset, columnas, filtros):
             ParagraphStyle("Total", parent=estilo_meta, alignment=TA_RIGHT),
         ))
 
-    documento.build(elementos, onFirstPage=_encabezado_y_pie, onLaterPages=_encabezado_y_pie)
+    documento.build(elementos, onFirstPage=encabezado_de_marca, onLaterPages=encabezado_de_marca)
     return buffer.getvalue(), total
 
 

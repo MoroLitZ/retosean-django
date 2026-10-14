@@ -39,6 +39,7 @@ class LogActividad(models.Model):
         ("CAMBIO_ROL", "Cambio de rol"),
         ("CAMBIO_ESTADO", "Activacion o desactivacion"),
         ("IMPORTACION", "Importacion masiva"),
+        ("CAMBIO_PERMISOS", "Cambio de permisos especiales"),
     ]
     usuario = models.ForeignKey(
         "usuarios.Usuario", on_delete=models.SET_NULL, null=True, blank=True,

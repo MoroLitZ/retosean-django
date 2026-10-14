@@ -229,7 +229,7 @@ class FlujoIntegracionAcademicaTests(TestCase):
         self.assertEqual(integracion.ecosistema, "Ecosistema de innovacion")
 
         # 2. Enviar a revision: ya no quedan campos obligatorios pendientes.
-        response = self.client.get(
+        response = self.client.post(
             reverse("retos:enviar_integracion_revision", args=[integracion.pk])
         )
         integracion.refresh_from_db()
@@ -255,7 +255,7 @@ class FlujoIntegracionAcademicaTests(TestCase):
         integracion.alcance = ""
         integracion.save(update_fields=["alcance"])
 
-        self.client.get(
+        self.client.post(
             reverse("retos:enviar_integracion_revision", args=[integracion.pk])
         )
         integracion.refresh_from_db()
@@ -270,12 +270,14 @@ class NotificacionEnvioRevisionRetoTests(TestCase):
         self.admin = Usuario.objects.create_superuser(
             username="admin-envio-reto", password="x", email="admin-envio@ean.edu.co"
         )
-        Empresa.objects.create(
+        from apps.empresas.testing import habilitar_empresa
+
+        habilitar_empresa(Empresa.objects.create(
             usuario=self.empresa_usuario,
             nit="901111222",
             razon_social="Empresa Envio Reto",
             renuncio_a_convenio=True,
-        )
+        ))
         hoy = timezone.localdate()
         self.reto = Reto.objects.create(
             empresa=self.empresa_usuario,
@@ -291,7 +293,7 @@ class NotificacionEnvioRevisionRetoTests(TestCase):
     def test_enviar_reto_a_revision_notifica_al_admin(self):
         self.client.force_login(self.empresa_usuario)
 
-        response = self.client.get(reverse("retos:enviar_revision", args=[self.reto.pk]))
+        response = self.client.post(reverse("retos:enviar_revision", args=[self.reto.pk]))
 
         self.assertRedirects(response, reverse("retos:detalle", args=[self.reto.pk]))
         self.reto.refresh_from_db()
@@ -434,7 +436,7 @@ class NotificacionPostulacionDocenteTests(TestCase):
     def test_enviar_postulacion_docente_notifica_a_empresa_y_admin(self):
         self.client.force_login(self.profesor)
 
-        response = self.client.get(
+        response = self.client.post(
             reverse("retos:enviar_integracion_revision", args=[self.integracion.pk])
         )
 
@@ -468,7 +470,9 @@ class CicloDeVidaRetoTests(TestCase):
 
         self.admin = Usuario.objects.create_user(username="admin-ciclo", password="x", rol="ADMIN")
         self.empresa = Usuario.objects.create_user(username="empresa-ciclo", password="x", rol="EMPRESA")
-        Empresa.objects.create(usuario=self.empresa, nit="900100200", razon_social="Ciclo SAS", renuncio_a_convenio=True)
+        from apps.empresas.testing import habilitar_empresa
+
+        habilitar_empresa(Empresa.objects.create(usuario=self.empresa, nit="900100200", razon_social="Ciclo SAS"))
         self.profesor = Usuario.objects.create_user(username="profe-ciclo", password="x", rol="PROFESOR")
         self.estudiante = Usuario.objects.create_user(username="est-ciclo", password="x", rol="ESTUDIANTE")
 
@@ -522,7 +526,7 @@ class CicloDeVidaRetoTests(TestCase):
     def test_reto_rechazado_no_se_reenvia_sin_editar(self):
         reto = self._reto("rechazado")
         self.client.force_login(self.empresa)
-        self.client.get(reverse("retos:enviar_revision", args=[reto.pk]))
+        self.client.post(reverse("retos:enviar_revision", args=[reto.pk]))
         reto.refresh_from_db()
         self.assertEqual(reto.estado, "rechazado")
 
@@ -596,3 +600,38 @@ class CicloDeVidaRetoTests(TestCase):
         self.client.force_login(self.empresa)
         response = self.client.get(reverse("retos:detalle", args=[reto.pk]))
         self.assertEqual(response.status_code, 404)
+
+    def test_enviar_a_revision_no_acepta_get(self):
+        """Un enlace o una precarga del navegador no deben cambiar el estado."""
+        reto = self._reto("borrador")
+        self.client.force_login(self.empresa)
+        self.assertEqual(self.client.get(reverse("retos:enviar_revision", args=[reto.pk])).status_code, 405)
+        reto.refresh_from_db()
+        self.assertEqual(reto.estado, "borrador")
+
+
+
+class FechasEnFormulariosTests(TestCase):
+    """Los <input type="date"> solo aceptan ISO: con la localizacion es-co Django
+    los rellenaba como dd/mm/aaaa, el navegador los mostraba vacios y al guardar
+    la edicion se perdian las fechas del reto."""
+
+    def test_editar_reto_muestra_las_fechas_en_iso(self):
+        from datetime import date
+
+        empresa = Usuario.objects.create_user(username="empresa-fechas", password="x", rol="EMPRESA")
+        reto = Reto.objects.create(empresa=empresa, titulo="Con fechas", fecha_inicio_tentativa=date(2026, 10, 18))
+        self.assertIn('value="2026-10-18"', str(RetoForm(instance=reto)["fecha_inicio_tentativa"]))
+
+    def test_agenda_de_cierre_muestra_fecha_y_hora_en_iso(self):
+        from datetime import datetime
+
+        from apps.cierre.forms import AgendaCierreForm
+        from apps.cierre.models import AgendaCierre
+
+        empresa = Usuario.objects.create_user(username="empresa-agenda", password="x", rol="EMPRESA")
+        reto = Reto.objects.create(empresa=empresa, titulo="Con agenda", estado="en_curso")
+        agenda = AgendaCierre.objects.create(
+            reto=reto, fecha_hora=timezone.make_aware(datetime(2026, 10, 9, 8, 1)),
+        )
+        self.assertIn('value="2026-10-09T08:01"', str(AgendaCierreForm(instance=agenda)["fecha_hora"]))

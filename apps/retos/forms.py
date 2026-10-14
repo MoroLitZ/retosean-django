@@ -60,6 +60,7 @@ class RetoForm(BootstrapModelForm):
         fields = [
             'tipo',
             'titulo',
+            'nombre_corto',
             'descripcion',
             'area',
             'nivel_academico',
@@ -71,16 +72,22 @@ class RetoForm(BootstrapModelForm):
             'fecha_limite_postulacion',
             'premios',
             'criterios_evaluacion',
+            'uso_esperado_resultados',
+            'insumos_inicio',
+            'insumos_cierre',
             'tiene_convenio_institucional',
             'archivos',
         ]
         widgets = {
-            'fecha_inicio_tentativa': forms.DateInput(attrs={'type': 'date'}),
-            'fecha_fin_tentativa': forms.DateInput(attrs={'type': 'date'}),
-            'fecha_limite_postulacion': forms.DateInput(attrs={'type': 'date'}),
+            'fecha_inicio_tentativa': forms.DateInput(attrs={'type': 'date'}, format="%Y-%m-%d"),
+            'fecha_fin_tentativa': forms.DateInput(attrs={'type': 'date'}, format="%Y-%m-%d"),
+            'fecha_limite_postulacion': forms.DateInput(attrs={'type': 'date'}, format="%Y-%m-%d"),
             'descripcion': forms.Textarea(attrs={'rows': 4}),
             'premios': forms.Textarea(attrs={'rows': 3}),
             'criterios_evaluacion': forms.Textarea(attrs={'rows': 4}),
+            'uso_esperado_resultados': forms.Textarea(attrs={'rows': 3}),
+            'insumos_inicio': forms.Textarea(attrs={'rows': 3}),
+            'insumos_cierre': forms.Textarea(attrs={'rows': 3}),
             'tiene_convenio_institucional': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
@@ -90,9 +97,10 @@ class RetoForm(BootstrapModelForm):
         if 'facultad' in self.fields:
             self.fields['facultad'].queryset = Facultad.objects.all().order_by('nombre')
         if 'programa' in self.fields:
-            self.fields['programa'].queryset = Programa.objects.filter(
-                facultad_id=self.instance.facultad_id
-            ).order_by('nombre') if self.instance and self.instance.facultad_id else Programa.objects.all().order_by('nombre')
+            programas = Programa.objects.select_related('facultad').order_by('nombre')
+            if self.instance and self.instance.facultad_id:
+                programas = programas.filter(facultad_id=self.instance.facultad_id)
+            self.fields['programa'].queryset = programas
         if 'ecosistema' in self.fields:
             self.fields['ecosistema'].queryset = Ecosistema.objects.all().order_by('nombre')
 
@@ -139,7 +147,7 @@ class SeguimientoRetoForm(BootstrapModelForm):
         model = SeguimientoReto
         fields = ['tipo_sesion', 'fecha_sesion', 'porcentaje_avance', 'avances', 'observaciones', 'acuerdos', 'archivos']
         widgets = {
-            'fecha_sesion': forms.DateInput(attrs={'type': 'date'}),
+            'fecha_sesion': forms.DateInput(attrs={'type': 'date'}, format="%Y-%m-%d"),
             'avances': forms.Textarea(attrs={'rows': 4}),
             'observaciones': forms.Textarea(attrs={'rows': 4}),
             'acuerdos': forms.Textarea(attrs={'rows': 4}),
@@ -322,7 +330,7 @@ class SesionRetoAcademicoForm(BootstrapModelForm):
         model = SesionRetoAcademico
         fields = ['reto', 'tipo', 'fecha_hora', 'enlace_reunion', 'observaciones']
         widgets = {
-            'fecha_hora': forms.DateTimeInput(attrs={'type': 'datetime-local', 'class': 'form-control'}),
+            'fecha_hora': forms.DateTimeInput(attrs={'type': 'datetime-local', 'class': 'form-control'}, format="%Y-%m-%dT%H:%M"),
             'observaciones': forms.Textarea(attrs={'rows': 3, 'class': 'form-control'}),
         }
 

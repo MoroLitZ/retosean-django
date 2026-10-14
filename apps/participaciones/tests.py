@@ -126,6 +126,7 @@ class PostulacionProgramaDropdownTests(TestCase):
                 "habilidades": "Analisis de datos",
                 "semestre": 7,
                 "programa": self.programa.nombre,
+                "acepta_terminos": "on",
             },
         )
         self.assertRedirects(response, reverse("academico:mis_postulaciones"))
@@ -166,6 +167,7 @@ class FlujoNotificacionesYRevisionPostulacionTests(TestCase):
                 "habilidades": "Python, analitica y trabajo en equipo",
                 "semestre": 6,
                 "programa": self.programa.nombre,
+                "acepta_terminos": "on",
             },
         )
 
@@ -219,3 +221,70 @@ class ListaMisEntregablesTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Reto con entregables")
         self.assertContains(response, reverse("participaciones:mis_entregables_reto", args=[reto.pk]))
+
+
+class PostulacionCompletaTests(TestCase):
+    """HU10/HU11: filtro por ecosistema, terminos, hoja de vida, confirmacion y revision."""
+
+    def setUp(self):
+        from apps.academico.models import Ecosistema
+
+        self.empresa = Usuario.objects.create_user(username="empresa-hu11", password="x", rol="EMPRESA")
+        Empresa.objects.create(usuario=self.empresa, nit="900123123", razon_social="HU11 SAS")
+        self.estudiante = Usuario.objects.create_user(username="est-hu11", password="x", rol="ESTUDIANTE")
+        self.programa = Programa.objects.create(nombre="Sistemas", facultad=Facultad.objects.create(nombre="Ingenieria"))
+        self.ecosistema = Ecosistema.objects.create(nombre="Innovacion social")
+        self.reto = Reto.objects.create(
+            empresa=self.empresa, titulo="Reto HU11", estado="abierto", ecosistema=self.ecosistema
+        )
+        self.otro = Reto.objects.create(empresa=self.empresa, titulo="Reto sin ecosistema", estado="abierto")
+
+    def _datos(self, **extra):
+        return {"motivacion": "Me interesa", "habilidades": "Python", "semestre": 5,
+                "programa": self.programa.nombre, **extra}
+
+    def test_explorador_filtra_por_ecosistema(self):
+        self.client.force_login(self.estudiante)
+        response = self.client.get(reverse("academico:explorar_retos"), {"ecosistema": self.ecosistema.pk})
+        self.assertEqual([r.pk for r in response.context["retos"]], [self.reto.pk])
+
+    def test_sin_aceptar_terminos_no_se_postula(self):
+        self.client.force_login(self.estudiante)
+        self.client.post(reverse("participaciones:postular_a_reto", args=[self.reto.pk]), self._datos())
+        self.assertFalse(Postulacion.objects.filter(reto=self.reto).exists())
+
+    def test_postulacion_con_hoja_de_vida_y_confirmacion_al_estudiante(self):
+        self.client.force_login(self.estudiante)
+        self.client.post(reverse("participaciones:postular_a_reto", args=[self.reto.pk]), self._datos(
+            acepta_terminos="on", hoja_de_vida=SimpleUploadedFile("cv.pdf", b"%PDF-1.4"),
+        ))
+        postulacion = Postulacion.objects.get(reto=self.reto, estudiante=self.estudiante)
+        self.assertTrue(postulacion.acepta_terminos)
+        self.assertTrue(postulacion.hoja_de_vida)
+        self.assertTrue(Notificacion.objects.filter(usuario=self.estudiante, evento="POSTULACION_RECIBIDA").exists())
+
+    def test_hoja_de_vida_que_no_es_pdf_se_rechaza(self):
+        self.client.force_login(self.estudiante)
+        self.client.post(reverse("participaciones:postular_a_reto", args=[self.reto.pk]), self._datos(
+            acepta_terminos="on", hoja_de_vida=SimpleUploadedFile("cv.exe", b"MZ"),
+        ))
+        self.assertFalse(Postulacion.objects.filter(reto=self.reto).exists())
+
+    def test_la_empresa_al_abrir_la_lista_deja_la_postulacion_en_revision(self):
+        postulacion = Postulacion.objects.create(reto=self.reto, estudiante=self.estudiante, estado="PENDIENTE")
+        self.client.force_login(self.empresa)
+        self.client.get(reverse("empresas:postulaciones"))
+        postulacion.refresh_from_db()
+        self.assertEqual(postulacion.estado, "EN_REVISION")
+
+        self.client.post(reverse("empresas:gestionar_postulacion", args=[postulacion.pk]), {"accion": "aceptar"})
+        postulacion.refresh_from_db()
+        self.assertEqual(postulacion.estado, "ACEPTADA")
+
+    def test_el_estudiante_retira_una_postulacion_en_revision(self):
+        postulacion = Postulacion.objects.create(reto=self.reto, estudiante=self.estudiante, estado="EN_REVISION")
+        self.client.force_login(self.estudiante)
+        self.client.post(reverse("participaciones:retirar_postulacion", args=[self.reto.pk]))
+        postulacion.refresh_from_db()
+        self.assertEqual(postulacion.estado, "RETIRADA")
+
