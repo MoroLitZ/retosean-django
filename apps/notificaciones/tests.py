@@ -139,6 +139,50 @@ class BandejaTests(TestCase):
         self.assertEqual(response.context["notificaciones_no_leidas"], 1)
 
 
+class RetoVencidoSinActualizarTests(TestCase):
+    """HU04: alerta al admin cuando un reto pasa su fecha sin seguimientos."""
+
+    def setUp(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        self.hoy = timezone.localdate()
+        self.admin = Usuario.objects.create_user(username="admin-venc", password="x", rol="ADMIN")
+        empresa = Usuario.objects.create_user(username="empresa-venc", password="x", rol="EMPRESA")
+        self.vencido = Reto.objects.create(
+            empresa=empresa, titulo="Reto atrasado", estado="en_curso",
+            fecha_fin_tentativa=self.hoy - timedelta(days=5),
+        )
+        self.al_dia = Reto.objects.create(
+            empresa=empresa, titulo="Reto al dia", estado="en_curso",
+            fecha_fin_tentativa=self.hoy + timedelta(days=30),
+        )
+
+    def _ejecutar(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        call_command("enviar_recordatorios", stdout=StringIO())
+        return Notificacion.objects.filter(usuario=self.admin, evento="RETO_SIN_ACTUALIZAR")
+
+    def test_avisa_al_admin_del_reto_vencido(self):
+        avisos = self._ejecutar()
+        self.assertEqual(avisos.count(), 1)
+        self.assertIn("Reto atrasado", avisos.get().mensaje)
+
+    def test_no_repite_el_aviso_la_misma_semana(self):
+        self._ejecutar()
+        self.assertEqual(self._ejecutar().count(), 1)
+
+    def test_un_seguimiento_posterior_silencia_la_alerta(self):
+        from apps.seguimiento.models import SeguimientoReto
+
+        SeguimientoReto.objects.create(reto=self.vencido, porcentaje_avance=90, avances="Casi listo")
+        self.assertEqual(self._ejecutar().count(), 0)
+
+
 class RegistroEnviosAdminTests(TestCase):
     """HU15: el administrador consulta el estado de las notificaciones."""
 
