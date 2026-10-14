@@ -7,7 +7,7 @@ class AgendaCierreForm(forms.ModelForm):
     class Meta:
         model = AgendaCierre
         fields = ["fecha_hora", "espacio", "recursos", "invitados", "agenda"]
-        widgets = {"fecha_hora": forms.DateTimeInput(attrs={"type": "datetime-local"})}
+        widgets = {"fecha_hora": forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M")}
 
 
 class CierreRetoForm(forms.ModelForm):

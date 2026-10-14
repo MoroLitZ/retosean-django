@@ -609,3 +609,29 @@ class CicloDeVidaRetoTests(TestCase):
         reto.refresh_from_db()
         self.assertEqual(reto.estado, "borrador")
 
+
+
+class FechasEnFormulariosTests(TestCase):
+    """Los <input type="date"> solo aceptan ISO: con la localizacion es-co Django
+    los rellenaba como dd/mm/aaaa, el navegador los mostraba vacios y al guardar
+    la edicion se perdian las fechas del reto."""
+
+    def test_editar_reto_muestra_las_fechas_en_iso(self):
+        from datetime import date
+
+        empresa = Usuario.objects.create_user(username="empresa-fechas", password="x", rol="EMPRESA")
+        reto = Reto.objects.create(empresa=empresa, titulo="Con fechas", fecha_inicio_tentativa=date(2026, 10, 18))
+        self.assertIn('value="2026-10-18"', str(RetoForm(instance=reto)["fecha_inicio_tentativa"]))
+
+    def test_agenda_de_cierre_muestra_fecha_y_hora_en_iso(self):
+        from datetime import datetime
+
+        from apps.cierre.forms import AgendaCierreForm
+        from apps.cierre.models import AgendaCierre
+
+        empresa = Usuario.objects.create_user(username="empresa-agenda", password="x", rol="EMPRESA")
+        reto = Reto.objects.create(empresa=empresa, titulo="Con agenda", estado="en_curso")
+        agenda = AgendaCierre.objects.create(
+            reto=reto, fecha_hora=timezone.make_aware(datetime(2026, 10, 9, 8, 1)),
+        )
+        self.assertIn('value="2026-10-09T08:01"', str(AgendaCierreForm(instance=agenda)["fecha_hora"]))

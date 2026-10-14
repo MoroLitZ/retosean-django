@@ -21,7 +21,7 @@ class CargarDocumentoForm(forms.Form):
     fecha_expedicion = forms.DateField(
         label="Fecha de expedicion",
         required=False,
-        widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+        widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}, format="%Y-%m-%d"),
     )
 
     def __init__(self, *args, incluir_especiales=False, solo_especiales=False, **kwargs):
@@ -103,7 +103,7 @@ class ConvenioForm(forms.Form):
     fecha_vencimiento = forms.DateField(
         label="Fecha de vencimiento (si queda firmado)",
         required=False,
-        widget=forms.DateInput(attrs={"class": "form-control form-control-sm", "type": "date"}),
+        widget=forms.DateInput(attrs={"class": "form-control form-control-sm", "type": "date"}, format="%Y-%m-%d"),
     )
     comentario = forms.CharField(
         label="Comentario",
