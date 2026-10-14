@@ -6,15 +6,23 @@ from django.views.decorators.http import require_POST
 from django.utils import timezone
 
 from apps.academico.services import emitir_certificados_de_reto
-from apps.notificaciones.services import notificar_muchos
+from apps.notificaciones.services import notificar_admins, notificar_muchos
+from apps.seguimiento.services import MaquinaEstados, TransicionInvalida, cambiar_estado, registrar_cambio_estado
 from apps.participaciones.models import MiembroEquipo, Postulacion
 from apps.retos.models import Reto
 from apps.retos.services import MAQUINA_RETO, cambiar_estado_reto
 from apps.usuarios.decorators import rol_requerido
 from apps.seguimiento.models import IntegracionAcademica
 
-from .forms import AgendaCierreForm, CierreRetoForm, EncuestaSatisfaccionForm, EntregableFinalForm, ReconocimientoForm
-from .models import AgendaCierre, CierreReto, EncuestaSatisfaccion
+from .forms import (
+    AgendaCierreForm,
+    CierreRetoForm,
+    EncuestaSatisfaccionForm,
+    EntregableFinalForm,
+    ReconocimientoForm,
+    SolicitudLogisticaForm,
+)
+from .models import AgendaCierre, CierreReto, EncuestaSatisfaccion, SolicitudLogistica
 
 
 from django.core.exceptions import PermissionDenied
@@ -93,6 +101,8 @@ def gestionar(request, reto_id):
         "entregable_form": EntregableFinalForm(), "reconocimiento_form": ReconocimientoForm(),
         "entregables_estudiantes": entregables_estudiantes,
         "puede_finalizar": _usuario_puede_finalizar_cierre(request.user, reto),
+        "solicitudes_logistica": reto.solicitudes_logistica.select_related("solicitada_por"),
+        "solicitud_form": SolicitudLogisticaForm(),
     })
 
 
@@ -114,6 +124,64 @@ def agregar_entregable(request, reto_id):
     else:
         messages.error(request, "No fue posible cargar el entregable final. Verifica los datos o el archivo.")
     return redirect("cierre:gestionar", reto_id=reto_id)
+
+
+MAQUINA_SOLICITUD_LOGISTICA = MaquinaEstados(
+    "la solicitud",
+    {
+        "SOLICITADA": {"CONFIRMADA", "DESCARTADA"},
+        "CONFIRMADA": {"SOLICITADA"},
+        "DESCARTADA": {"SOLICITADA"},
+    },
+    dict(SolicitudLogistica.ESTADOS),
+)
+
+
+@require_POST
+@rol_requerido("ADMIN", "EMPRESA", "PROFESOR", raise_exception=True)
+def agregar_solicitud_logistica(request, reto_id):
+    """Empresa, profesor o admin piden espacio, comunicaciones o extras para un evento (HU08)."""
+    reto = get_object_or_404(Reto, pk=reto_id)
+    if not _usuario_puede_gestionar_cierre(request.user, reto):
+        raise PermissionDenied("No tienes permiso para gestionar la logística de este reto.")
+    form = SolicitudLogisticaForm(request.POST)
+    if form.is_valid():
+        solicitud = form.save(commit=False)
+        solicitud.reto = reto
+        solicitud.solicitada_por = request.user
+        solicitud.save()
+        registrar_cambio_estado(solicitud, "", "SOLICITADA", request.user, solicitud.descripcion)
+        notificar_admins(
+            "LOGISTICA_SOLICITADA",
+            mensaje=(
+                f'{solicitud.get_tipo_display()} para el {solicitud.get_evento_display().lower()} '
+                f'del reto "{reto.titulo}": {solicitud.descripcion}'
+            ),
+            excluir=request.user,
+            link=reverse("cierre:gestionar", kwargs={"reto_id": reto.pk}),
+            clave_dedupe=f"logistica:{solicitud.pk}:solicitada",
+        )
+        messages.success(request, "Solicitud de logística registrada.")
+    else:
+        messages.error(request, "Revisa los datos de la solicitud.")
+    return redirect("cierre:gestionar", reto_id=reto_id)
+
+
+@require_POST
+@rol_requerido("ADMIN", raise_exception=True)
+def cambiar_estado_solicitud_logistica(request, pk):
+    """El administrador confirma o descarta una solicitud de logística (HU08)."""
+    solicitud = get_object_or_404(SolicitudLogistica.objects.select_related("reto"), pk=pk)
+    nuevo = request.POST.get("estado", "")
+    try:
+        cambiar_estado(
+            solicitud, MAQUINA_SOLICITUD_LOGISTICA, nuevo, request.user, request.POST.get("comentario", ""),
+        )
+    except TransicionInvalida as error:
+        messages.error(request, str(error))
+    else:
+        messages.success(request, f"Solicitud marcada como {solicitud.get_estado_display().lower()}.")
+    return redirect("cierre:gestionar", reto_id=solicitud.reto_id)
 
 
 @require_POST

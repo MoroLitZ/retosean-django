@@ -45,6 +45,7 @@ EVENTOS = _registrar(
     Evento("COMENTARIO_EMPRESA", "INFO", "Comentario de la empresa a un entregable"),
     # --- Cierre (HU08) y certificacion (HU16) ---
     Evento("RETO_FINALIZADO", "EXITO", "Reto finalizado"),
+    Evento("LOGISTICA_SOLICITADA", "INFO", "Nueva solicitud de logistica"),
     Evento("CERTIFICADO_DISPONIBLE", "EXITO", "Tu certificado esta disponible"),
     Evento("ENCUESTA_PENDIENTE", "INFO", "Encuesta de satisfaccion"),
     # --- Presupuesto (HU07) ---
