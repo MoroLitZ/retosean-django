@@ -24,6 +24,16 @@ class CierreReto(models.Model):
     reto = models.OneToOneField("retos.Reto", on_delete=models.CASCADE, related_name="cierre")
     acta_url = models.FileField(upload_to="actas_cierre/", null=True, blank=True)
     notas = models.TextField(blank=True)
+    # HU05: si la empresa aplico la solucion del reto.
+    IMPACTO = [
+        ("", "Sin registrar"),
+        ("SI", "Sí, la aplicó"),
+        ("NO", "No la aplicó"),
+        ("EN_EVALUACION", "En evaluación"),
+    ]
+    impacto = models.CharField(
+        "¿La empresa aplicó la solución?", max_length=20, choices=IMPACTO, blank=True, default=""
+    )
     encuesta_enviada = models.BooleanField(default=False)
     cerrado_por = models.ForeignKey("usuarios.Usuario", on_delete=models.SET_NULL, null=True, related_name="cierres")
     cerrado_en = models.DateTimeField(null=True, blank=True)

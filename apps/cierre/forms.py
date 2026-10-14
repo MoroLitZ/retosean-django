@@ -13,7 +13,7 @@ class AgendaCierreForm(forms.ModelForm):
 class CierreRetoForm(forms.ModelForm):
     class Meta:
         model = CierreReto
-        fields = ["acta_url", "notas"]
+        fields = ["acta_url", "notas", "impacto"]
 
 
 class EntregableFinalForm(forms.ModelForm):

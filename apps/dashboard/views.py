@@ -31,12 +31,14 @@ def panel(request):
     if rol == ROL_ADMIN:
         facultad_id = request.GET.get('facultad') or None
         programa_id = request.GET.get('programa') or None
+        ecosistema_id = request.GET.get('ecosistema') or None
         contexto.update(services.opciones_de_filtro())
         contexto.update({
-            'kpis': services.kpis_admin(desde, hasta, facultad_id, programa_id),
-            'series': services.series_admin(desde, hasta, facultad_id, programa_id),
+            'kpis': services.kpis_admin(desde, hasta, facultad_id, programa_id, ecosistema_id),
+            'series': services.series_admin(desde, hasta, facultad_id, programa_id, ecosistema_id),
             'facultad_id': facultad_id,
             'programa_id': programa_id,
+            'ecosistema_id': ecosistema_id,
         })
         plantilla = 'dashboard/admin.html'
     elif rol == ROL_EMPRESA:
