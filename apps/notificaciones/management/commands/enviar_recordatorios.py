@@ -133,22 +133,19 @@ class Command(BaseCommand):
         """
         from apps.empresas.models import DocumentoEmpresa
 
-        vencidos = DocumentoEmpresa.objects.filter(
+        from apps.empresas.services import documentos_camara_vencidos, marcar_documento_vencido
+
+        # La Camara de Comercio no trae fecha de vencimiento: vence a los 30 dias de expedida.
+        por_fecha = DocumentoEmpresa.objects.filter(
             fecha_vencimiento__lt=hoy, estado__in=["VERIFICADO", "CARGADO"]
         )
-        if self.dry_run:
-            for documento in vencidos:
-                self.stdout.write(
-                    f"  - VENCIDO: {documento} ({documento.fecha_vencimiento})"
-                )
-            return vencidos.count()
-        from apps.empresas.services import marcar_documento_vencido
-
-        total = 0
+        vencidos = list({d.pk: d for d in [*por_fecha, *documentos_camara_vencidos(hoy)]}.values())
         for documento in vencidos:
-            marcar_documento_vencido(documento)
-            total += 1
-        return total
+            if self.dry_run:
+                self.stdout.write(f"  - VENCIDO: {documento}")
+            else:
+                marcar_documento_vencido(documento)
+        return len(vencidos)
 
     def _documentos_por_vencer(self, objetivo, antelacion):
         from apps.empresas.models import DocumentoEmpresa
