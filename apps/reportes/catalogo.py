@@ -48,10 +48,16 @@ def _fecha(valor):
 
 
 # --------------------------------------------------------------- RETOS
+def _impacto_del_cierre(reto):
+    """Respuesta de la empresa sobre si aplico la solucion; vacio si el reto aun no tiene cierre."""
+    cierre = getattr(reto, "cierre", None)
+    return cierre.get_impacto_display() if cierre and cierre.impacto else ""
+
+
 def _qs_retos(filtros):
     from apps.retos.models import Reto
 
-    qs = Reto.objects.select_related("empresa", "facultad", "programa", "ecosistema").prefetch_related(
+    qs = Reto.objects.select_related("empresa", "facultad", "programa", "ecosistema", "cierre").prefetch_related(
         "postulaciones", "equipos_academicos", "archivos"
     )
     qs = acotar(qs, "creado_en", filtros.get("desde"), filtros.get("hasta"))
@@ -98,6 +104,13 @@ REPORTE_RETOS = DefinicionReporte(
         Columna("archivos", "Archivos adjuntos", lambda r: r.archivos.count(), 16),
         Columna("comentarios_revision", "Comentarios de revision",
                 lambda r: _texto(r.comentarios_revision), 40),
+        Columna("nombre_corto", "Nombre corto", lambda r: _texto(r.nombre_corto), 22),
+        Columna("uso_esperado", "Uso esperado de los resultados",
+                lambda r: _texto(r.uso_esperado_resultados), 40),
+        Columna("insumos_inicio", "Insumos al inicio", lambda r: _texto(r.insumos_inicio), 36),
+        Columna("insumos_cierre", "Insumos al cierre", lambda r: _texto(r.insumos_cierre), 36),
+        Columna("impacto", "La empresa aplico la solucion",
+                lambda r: _impacto_del_cierre(r), 24),
         Columna("creado_en", "Creado", lambda r: _fecha(r.creado_en), 16),
     ],
 )
@@ -138,6 +151,8 @@ REPORTE_PARTICIPACION = DefinicionReporte(
         Columna("estado", "Estado", lambda p: p.get_estado_display(), 20),
         Columna("motivacion", "Motivacion", lambda p: _texto(p.motivacion), 44),
         Columna("habilidades", "Habilidades", lambda p: _texto(p.habilidades), 36),
+        Columna("hoja_de_vida", "Adjunto hoja de vida", lambda p: "Si" if p.hoja_de_vida else "No", 18),
+        Columna("acepta_terminos", "Acepto los terminos", lambda p: "Si" if p.acepta_terminos else "No", 18),
         Columna("fecha", "Fecha de postulacion", lambda p: _fecha(p.fecha_postulacion), 20),
     ],
     roles=("ADMIN", "PROFESOR"),
@@ -192,6 +207,10 @@ REPORTE_EVALUACION = DefinicionReporte(
                 lambda e: _texto(getattr(_evaluacion_formal(e), "profesor", "")), 26),
         Columna("historial_comentarios", "N.o de comentarios",
                 lambda e: len(e.historial_comentarios.all()), 16),
+        Columna("calificacion_publicada", "Calificacion publicada al estudiante",
+                lambda e: "Si" if e.calificacion_publicada else "No", 22),
+        Columna("fecha_publicacion", "Fecha de publicacion",
+                lambda e: _fecha(e.calificacion_publicada_en), 18),
         Columna("fecha", "Fecha de entrega", lambda e: _fecha(e.fecha_entrega), 18),
         Columna("actualizado_en", "Ultima actualizacion", lambda e: _fecha(e.actualizado_en), 18),
     ],
@@ -227,7 +246,7 @@ def _gastos_por_estado_y_categoria(presupuesto):
             comprometido += gasto.monto
         else:
             ejecutado += gasto.monto
-        por_categoria[gasto.categoria] += gasto.monto
+        por_categoria[gasto.categoria] = por_categoria.get(gasto.categoria, Decimal("0.00")) + gasto.monto
     return comprometido, ejecutado, por_categoria
 
 
@@ -280,6 +299,15 @@ def _qs_empresas(filtros):
     return qs.order_by("razon_social")
 
 
+def _motivos_para_no_operar(empresa):
+    """Motivos por los que la empresa aun no puede participar; se calcula una vez por fila."""
+    if not hasattr(empresa, "_motivos_reporte"):
+        from apps.empresas.services import motivos_para_no_operar
+
+        empresa._motivos_reporte = motivos_para_no_operar(empresa)
+    return empresa._motivos_reporte
+
+
 def _contacto_principal(empresa):
     contactos = list(empresa.contactos.all())
     principal = next((c for c in contactos if c.es_principal), None)
@@ -314,6 +342,19 @@ REPORTE_EMPRESAS = DefinicionReporte(
                 lambda e: _texto(getattr(_contacto_principal(e), "telefono", "")), 18),
         Columna("correo", "Correo de contacto",
                 lambda e: _texto(e.usuario.email if e.usuario else ""), 30),
+        Columna("tipo_convocatoria", "Tipo de convocatoria", lambda e: e.get_tipo_convocatoria_display(), 20),
+        Columna("area_responsable", "Area responsable", lambda e: _texto(e.area_responsable), 26),
+        Columna("sitio_web", "Sitio web", lambda e: _texto(e.sitio_web), 30),
+        Columna("estado_convenio", "Tramite del convenio", lambda e: e.get_estado_convenio_display(), 22),
+        Columna("vence_convenio", "Vencimiento del convenio",
+                lambda e: _fecha(e.fecha_vencimiento_convenio), 22),
+        Columna("puede_participar", "Puede participar",
+                lambda e: "No" if _motivos_para_no_operar(e) else "Si", 16),
+        Columna("pendientes_documentales", "Pendientes para participar",
+                lambda e: "; ".join(_motivos_para_no_operar(e)), 60),
+        Columna("bloqueada", "Participacion bloqueada",
+                lambda e: "Si" if e.participacion_bloqueada else "No", 20),
+        Columna("motivo_bloqueo", "Motivo del bloqueo", lambda e: _texto(e.motivo_bloqueo), 36),
         Columna("observaciones", "Observaciones del admin",
                 lambda e: _texto(e.observaciones_admin), 40),
         Columna("fecha_creacion", "Registrada el", lambda e: _fecha(e.fecha_creacion), 18),

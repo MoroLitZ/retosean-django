@@ -123,6 +123,8 @@ def exportar_excel(presupuesto):
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill
 
+    from apps.reportes.services import agregar_fila
+
     libro = Workbook()
     hoja = libro.active
     hoja.title = "Gastos"
@@ -137,7 +139,7 @@ def exportar_excel(presupuesto):
 
     hoja.append(["retosean · Universidad EAN"])
     hoja["A1"].font = Font(bold=True, size=11, color="3BAC52")
-    hoja.append([f"Presupuesto del reto: {presupuesto.reto.titulo}"])
+    agregar_fila(hoja, [f"Presupuesto del reto: {presupuesto.reto.titulo}"])
     hoja["A2"].font = Font(bold=True, size=14)
     hoja.append([f"Generado el {timezone.localtime():%d/%m/%Y %H:%M}"])
     hoja.append([])
@@ -153,7 +155,7 @@ def exportar_excel(presupuesto):
     hoja.append([])
     encabezado("Fecha", "Categoria", "Estado", "Descripcion", "Monto", "Registrado por", "Comprobante")
     for gasto in _gastos_ordenados(presupuesto):
-        hoja.append([
+        agregar_fila(hoja, [
             timezone.localtime(gasto.creado_en).strftime("%d/%m/%Y"),
             gasto.get_categoria_display(),
             gasto.get_estado_display(),
@@ -180,6 +182,8 @@ def exportar_pdf(presupuesto):
     from reportlab.lib.styles import getSampleStyleSheet
     from reportlab.lib.units import mm
     from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    from xml.sax.saxutils import escape
 
     from apps.reportes.services import VERDE_EAN, encabezado_de_marca
 
@@ -212,14 +216,14 @@ def exportar_pdf(presupuesto):
             timezone.localtime(gasto.creado_en).strftime("%d/%m/%Y"),
             gasto.get_categoria_display(),
             gasto.get_estado_display(),
-            Paragraph(gasto.descripcion or "-", estilos["Normal"]),
+            Paragraph(escape(gasto.descripcion or "-"), estilos["Normal"]),
             pesos(gasto.monto),
         ]
         for gasto in _gastos_ordenados(presupuesto)
     ]
     resumen = _resumen_general(presupuesto)
     documento.build([
-        Paragraph(f"Presupuesto del reto: {presupuesto.reto.titulo}", estilos["Title"]),
+        Paragraph(escape(f"Presupuesto del reto: {presupuesto.reto.titulo}"), estilos["Title"]),
         Paragraph(f"Generado el {timezone.localtime():%d/%m/%Y %H:%M}", estilos["Normal"]),
         Spacer(1, 6 * mm),
         tabla([

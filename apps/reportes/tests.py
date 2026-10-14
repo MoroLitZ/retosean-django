@@ -169,3 +169,100 @@ class AccesoAReportesTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("attachment", response["Content-Disposition"])
         self.assertEqual(ReporteGenerado.objects.count(), 1)
+
+
+class DatosNuevosEnLosReportesTests(TestCase):
+    """Los campos que trajo la integracion con la rama de Caicedo se exportan con su valor real."""
+
+    def setUp(self):
+        from apps.empresas.models import Empresa
+
+        self.admin = Usuario.objects.create_superuser(username="admin-nuevos", password="x", email="a@ean.edu.co")
+        self.usuario = Usuario.objects.create_user(username="empresa-nuevos", password="x", rol="EMPRESA")
+        self.empresa = Empresa.objects.create(
+            usuario=self.usuario, nit="900111000", razon_social="Epsilon SAS",
+            tipo_convocatoria="AMBOS", area_responsable="Innovacion", sitio_web="https://epsilon.example",
+            participacion_bloqueada=True, motivo_bloqueo="Pendiente de revision juridica",
+        )
+        self.reto = Reto.objects.create(
+            empresa=self.usuario, titulo="Reto con registro completo", estado="aprobado",
+            nombre_corto="RCRC", uso_esperado_resultados="Prototipo en produccion",
+            insumos_inicio="Datos historicos", insumos_cierre="Informe final",
+        )
+        self.filtros = {"desde": None, "hasta": None}
+
+    def _filas(self, clave):
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        definicion = obtener(clave)
+        _, contenido, _, _ = construir_reporte(self.admin, definicion, definicion.columnas, "EXCEL", self.filtros)
+        filas = list(load_workbook(BytesIO(contenido)).active.iter_rows(values_only=True))
+        encabezado = next(f for f in filas if f and f[0] and f[1] and f[0] != definicion.nombre and "Generado" not in str(f[0]))
+        return encabezado, filas
+
+    def _valor(self, clave, marca, columna):
+        encabezado, filas = self._filas(clave)
+        fila = next(f for f in filas if marca in [str(c) for c in f if c])
+        return fila[encabezado.index(columna)]
+
+    def test_empresas_exporta_registro_bloqueo_y_pendientes_documentales(self):
+        marca = "Epsilon SAS"
+        self.assertEqual(self._valor("empresas", marca, "Tipo de convocatoria"), "Reto y hackathon")
+        self.assertEqual(self._valor("empresas", marca, "Area responsable"), "Innovacion")
+        self.assertEqual(self._valor("empresas", marca, "Sitio web"), "https://epsilon.example")
+        self.assertEqual(self._valor("empresas", marca, "Participacion bloqueada"), "Si")
+        self.assertEqual(self._valor("empresas", marca, "Motivo del bloqueo"), "Pendiente de revision juridica")
+        self.assertEqual(self._valor("empresas", marca, "Puede participar"), "No")
+        self.assertIn("Falta cargarlo", self._valor("empresas", marca, "Pendientes para participar"))
+
+    def test_retos_exporta_registro_e_impacto_del_cierre(self):
+        from apps.cierre.models import CierreReto
+
+        CierreReto.objects.create(reto=self.reto, impacto="SI")
+        marca = "Reto con registro completo"
+        self.assertEqual(self._valor("retos", marca, "Nombre corto"), "RCRC")
+        self.assertEqual(self._valor("retos", marca, "Uso esperado de los resultados"), "Prototipo en produccion")
+        self.assertEqual(self._valor("retos", marca, "Insumos al inicio"), "Datos historicos")
+        self.assertEqual(self._valor("retos", marca, "Insumos al cierre"), "Informe final")
+        self.assertEqual(self._valor("retos", marca, "La empresa aplico la solucion"), "Sí, la aplicó")
+
+    def test_participacion_y_evaluacion_exportan_los_campos_nuevos(self):
+        from apps.evaluacion.models import Entregable
+
+        estudiante = Usuario.objects.create_user(username="est-nuevos", password="x", rol="ESTUDIANTE", first_name="Eva", last_name="Nueva")
+        Postulacion.objects.create(reto=self.reto, estudiante=estudiante, estado="PENDIENTE", acepta_terminos=True)
+        Entregable.objects.create(
+            reto=self.reto, estudiante=estudiante, titulo="Avance publicado", estado="CALIFICADO",
+            nota=4, calificacion_publicada=True,
+        )
+        self.assertEqual(self._valor("participacion", "Eva Nueva", "Acepto los terminos"), "Si")
+        self.assertEqual(self._valor("participacion", "Eva Nueva", "Adjunto hoja de vida"), "No")
+        self.assertEqual(self._valor("evaluacion", "Avance publicado", "Calificacion publicada al estudiante"), "Si")
+
+
+class ReportesConDatosHostilesTests(TestCase):
+    """Los reportes llevan texto libre de la base: no debe romper ni el PDF ni el Excel."""
+
+    def setUp(self):
+        from apps.presupuesto.models import Gasto, Presupuesto
+
+        self.admin = Usuario.objects.create_superuser(username="admin-hostil-rep", password="x", email="a@ean.edu.co")
+        empresa = Usuario.objects.create_user(username="empresa-hostil-rep", password="x", rol="EMPRESA")
+        self.reto = Reto.objects.create(empresa=empresa, titulo="Reto <b & =cmd", estado="aprobado",
+                                        descripcion="con\x01control y <i")
+        presupuesto = Presupuesto.objects.create(reto=self.reto, monto_total=100)
+        # Una categoria que ya no existe en el catalogo (dato antiguo o cargado desde el admin).
+        Gasto.objects.create(presupuesto=presupuesto, categoria="VIEJA", monto=10)
+        self.filtros = {"desde": None, "hasta": None}
+
+    def test_todos_los_reportes_se_generan_en_pdf_y_excel(self):
+        from .catalogo import REPORTES
+
+        for clave, definicion in REPORTES.items():
+            for formato, firma in (("PDF", b"%PDF"), ("EXCEL", b"PK")):
+                with self.subTest(reporte=clave, formato=formato):
+                    _, contenido, _, _ = construir_reporte(
+                        self.admin, definicion, definicion.columnas, formato, self.filtros)
+                    self.assertTrue(contenido.startswith(firma))
