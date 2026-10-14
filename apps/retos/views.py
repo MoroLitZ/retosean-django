@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -26,7 +27,7 @@ from .forms import (
     EquipoRetoAcademicoForm, 
     SesionRetoAcademicoForm
 )
-from .models import Reto, RetoArchivo, EquipoRetoAcademico
+from .models import EquipoRetoAcademico, HistorialEstadoReto, Reto, RetoArchivo
 from apps.seguimiento.models import IntegracionAcademica, SeguimientoArchivo, SeguimientoReto
 from django.urls import reverse
 
@@ -124,7 +125,7 @@ def crear_reto(request):
         _guardar_archivos_reto(reto, form.cleaned_data.get('archivos', []))
         messages.success(request, 'Reto guardado como borrador.')
         if request.POST.get('accion') == 'enviar':
-            return redirect('retos:enviar_revision', pk=reto.pk)
+            return _enviar_reto(request, reto)
         return redirect('retos:mis_retos')
     return render(request, 'retos/reto_form.html', {
         'form': form,
@@ -152,7 +153,7 @@ def editar_reto(request, pk):
         _guardar_archivos_reto(reto, form.cleaned_data.get('archivos', []))
         messages.success(request, 'Reto actualizado.')
         if request.POST.get('accion') == 'enviar':
-            return redirect('retos:enviar_revision', pk=reto.pk)
+            return _enviar_reto(request, reto)
         return redirect('retos:detalle', pk=reto.pk)
     return render(request, 'retos/reto_form.html', {
         'form': form,
@@ -172,8 +173,13 @@ def _programas_por_facultad():
 
 
 @solo_empresa_con_documentos
+@require_POST
 def enviar_revision(request, pk):
-    reto = get_object_or_404(Reto, pk=pk, empresa=request.user)
+    # Solo POST: un enlace o una precarga del navegador no deben enviar el reto.
+    return _enviar_reto(request, get_object_or_404(Reto, pk=pk, empresa=request.user))
+
+
+def _enviar_reto(request, reto):
     if not reto.puede_editar_empresa:
         messages.error(request, 'Este reto no puede enviarse a aprobacion desde su estado actual.')
         return redirect('retos:detalle', pk=reto.pk)
@@ -216,7 +222,12 @@ def eliminar_reto(request, pk):
 
 @rol_requerido('EMPRESA', 'ADMIN', 'PROFESOR', 'ESTUDIANTE')
 def detalle_reto(request, pk):
-    reto = get_object_or_404(Reto.objects.select_related('empresa'), pk=pk)
+    reto = get_object_or_404(
+        Reto.objects.select_related('empresa').prefetch_related(
+            Prefetch('historial_estados', queryset=HistorialEstadoReto.objects.select_related('realizado_por'))
+        ),
+        pk=pk,
+    )
     if not _puede_ver_reto(request.user, reto):
         raise PermissionDenied('No tienes acceso a este reto.')
     es_favorito = reto.favoritos.filter(usuario=request.user).exists()
@@ -339,7 +350,7 @@ def crear_integracion(request):
         registrar_estado_inicial(integracion, '', 'borrador', request.user, 'Integracion creada.')
         messages.success(request, 'Integracion academica guardada como borrador.')
         if request.POST.get('accion') == 'enviar':
-            return redirect('retos:enviar_integracion_revision', pk=integracion.pk)
+            return _enviar_integracion(request, integracion)
         return redirect('retos:mis_integraciones')
     return render(request, 'retos/integracion_form.html', {'form': form, 'titulo': 'Crear integracion academica'})
 
@@ -362,7 +373,7 @@ def editar_integracion(request, pk):
             )
         messages.success(request, 'Integracion academica actualizada.')
         if request.POST.get('accion') == 'enviar':
-            return redirect('retos:enviar_integracion_revision', pk=integracion.pk)
+            return _enviar_integracion(request, integracion)
         return redirect('retos:detalle_integracion', pk=integracion.pk)
     return render(request, 'retos/integracion_form.html', {
         'form': form,
@@ -372,8 +383,15 @@ def editar_integracion(request, pk):
 
 
 @solo_profesor
+@require_POST
 def enviar_integracion_revision(request, pk):
-    integracion = get_object_or_404(IntegracionAcademica, pk=pk, profesor=request.user)
+    # Solo POST: un enlace o una precarga del navegador no deben enviar la integracion.
+    return _enviar_integracion(
+        request, get_object_or_404(IntegracionAcademica, pk=pk, profesor=request.user)
+    )
+
+
+def _enviar_integracion(request, integracion):
     faltantes = integracion.campos_faltantes_para_revision()
     if faltantes:
         messages.error(request, 'Completa estos campos antes de enviar: ' + ', '.join(faltantes) + '.')
@@ -531,7 +549,7 @@ def revisar_integracion(request, pk):
 @solo_administrador
 def admin_vinculaciones(request):
     integraciones = IntegracionAcademica.objects.select_related(
-        'reto', 'profesor'
+        'reto', 'reto__empresa', 'profesor'
     ).order_by('-creado_en')
     return render(request, 'retos/admin_vinculaciones.html', {
         'integraciones': integraciones,
