@@ -270,12 +270,14 @@ class NotificacionEnvioRevisionRetoTests(TestCase):
         self.admin = Usuario.objects.create_superuser(
             username="admin-envio-reto", password="x", email="admin-envio@ean.edu.co"
         )
-        Empresa.objects.create(
+        from apps.empresas.testing import habilitar_empresa
+
+        habilitar_empresa(Empresa.objects.create(
             usuario=self.empresa_usuario,
             nit="901111222",
             razon_social="Empresa Envio Reto",
             renuncio_a_convenio=True,
-        )
+        ))
         hoy = timezone.localdate()
         self.reto = Reto.objects.create(
             empresa=self.empresa_usuario,
@@ -468,7 +470,9 @@ class CicloDeVidaRetoTests(TestCase):
 
         self.admin = Usuario.objects.create_user(username="admin-ciclo", password="x", rol="ADMIN")
         self.empresa = Usuario.objects.create_user(username="empresa-ciclo", password="x", rol="EMPRESA")
-        Empresa.objects.create(usuario=self.empresa, nit="900100200", razon_social="Ciclo SAS", renuncio_a_convenio=True)
+        from apps.empresas.testing import habilitar_empresa
+
+        habilitar_empresa(Empresa.objects.create(usuario=self.empresa, nit="900100200", razon_social="Ciclo SAS"))
         self.profesor = Usuario.objects.create_user(username="profe-ciclo", password="x", rol="PROFESOR")
         self.estudiante = Usuario.objects.create_user(username="est-ciclo", password="x", rol="ESTUDIANTE")
 

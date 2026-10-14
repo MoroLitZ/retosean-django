@@ -191,31 +191,35 @@ class Command(BaseCommand):
                 defaults={"nombre": eu.first_name, "cargo": "Gerente de Innovacion", "telefono": "3000000000", "es_principal": True},
             )
 
-        # Documentos legales: uno por cada estado posible. DocumentoEmpresa tiene
-        # unique_together (empresa, tipo_documento) y solo hay 4 tipos, asi que
-        # el 5to estado (VENCIDO) usa el mismo tipo que el primero pero en OTRA
-        # empresa, en vez de repetir una combinacion ya creada.
-        estados_doc = ["PENDIENTE", "CARGADO", "VERIFICADO", "RECHAZADO"]
-        tipos_doc = ["CAMARA_COMERCIO", "RUT", "CEDULA_REPRESENTANTE", "CONVENIO"]
-        empresas_lista = list(empresas.values())
+        # Documentos legales. La empresa "verificada" tiene todos los
+        # obligatorios del catalogo aprobados y vigentes, asi que puede operar.
+        # Las demas muestran cada estado posible (pendiente, en revision,
+        # rechazado, vencido) sobre tipos distintos del catalogo.
+        from apps.empresas.models import TipoDocumentoLegal
 
         def _crear_documento(empresa, tipo, estado):
             defaults = {"estado": estado}
             if estado in ("CARGADO", "VERIFICADO", "RECHAZADO", "VENCIDO"):
-                defaults["archivo"] = ContentFile(b"%PDF-1.4 demo", name=f"{tipo.lower()}-{empresa.nit}.pdf")
-            if tipo == "CAMARA_COMERCIO":
-                defaults["fecha_expedicion"] = timezone.localdate() - timedelta(days=200)
+                defaults["archivo"] = ContentFile(b"%PDF-1.4 demo", name=f"{tipo.codigo.lower()}-{empresa.nit}.pdf")
+                defaults["fecha_expedicion"] = timezone.localdate() - timedelta(days=5)
+                if tipo.vigencia_dias:
+                    defaults["fecha_vencimiento"] = defaults["fecha_expedicion"] + timedelta(days=tipo.vigencia_dias)
             if estado == "VENCIDO":
+                defaults["fecha_expedicion"] = timezone.localdate() - timedelta(days=200)
                 defaults["fecha_vencimiento"] = timezone.localdate() - timedelta(days=10)
             elif estado == "RECHAZADO":
                 defaults["motivo_rechazo"] = "El documento no corresponde al NIT registrado."
-            DocumentoEmpresa.objects.get_or_create(empresa=empresa, tipo_documento=tipo, defaults=defaults)
+            DocumentoEmpresa.objects.get_or_create(empresa=empresa, tipo_documento=tipo.codigo, defaults=defaults)
 
-        for i, (tipo, estado) in enumerate(zip(tipos_doc, estados_doc)):
-            _crear_documento(empresas_lista[i % len(empresas_lista)], tipo, estado)
-        # 5ta combinacion, en la empresa que en el loop anterior recibio RUT (no
-        # CAMARA_COMERCIO), asi (empresa, CAMARA_COMERCIO) sigue siendo unica.
-        _crear_documento(empresas_lista[1 % len(empresas_lista)], "CAMARA_COMERCIO", "VENCIDO")
+        tipos = list(TipoDocumentoLegal.objects.filter(activo=True))
+        for tipo in tipos:
+            if tipo.es_requerido_para(empresas["verificada"]):
+                _crear_documento(empresas["verificada"], tipo, "VERIFICADO")
+
+        estados_doc = ["PENDIENTE", "CARGADO", "VERIFICADO", "RECHAZADO", "VENCIDO"]
+        otras = [empresas["pendiente"], empresas["revision"], empresas["rechazada"]]
+        for i, (tipo, estado) in enumerate(zip(tipos, estados_doc)):
+            _crear_documento(otras[i % len(otras)], tipo, estado)
 
         self.stdout.write(f"Empresas: {len(empresas)} (una por cada estado de validacion), documentos legales en sus 5 estados.")
         return empresas

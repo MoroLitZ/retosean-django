@@ -61,6 +61,10 @@ def _modelo_para(ruta, parametro):
         return Postulacion
     if parametro == "codigo":
         return Certificado
+    if ruta.startswith("empresas/admin/tipos-documento/"):
+        from apps.empresas.models import TipoDocumentoLegal
+
+        return TipoDocumentoLegal
     reglas = [
         (r"^retos/(admin/)?(empresa/)?(integraciones?|vinculaciones|integracion)/", IntegracionAcademica),
         (r"^retos/equipo/", EquipoRetoAcademico),

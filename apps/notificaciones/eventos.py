@@ -26,6 +26,7 @@ EVENTOS = _registrar(
     Evento("DOCUMENTO_CARGADO_ADMIN", "INFO", "Documento legal cargado por empresa"),
     Evento("EMPRESA_LISTAS_RESTRICTIVAS", "ERROR", "Verificacion en listas restrictivas"),
     Evento("CONVENIO_ACTUALIZADO", "INFO", "Avance en el tramite de tu convenio"),
+    Evento("EMPRESA_PARTICIPACION", "INFO", "Estado de participacion de tu empresa"),
     # --- Ciclo de vida del reto (HU02, HU04) ---
     Evento("RETO_ESTADO_CAMBIADO", "INFO", "Cambio de estado de tu reto"),
     Evento("RETO_ENVIADO_REVISION", "INFO", "Reto enviado a revision"),
