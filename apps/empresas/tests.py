@@ -280,6 +280,37 @@ class SeguimientoAvanceEmpresaTests(TestCase):
         response = self.client.get(reverse("empresas:seguimiento_avance"))
         self.assertNotEqual(response.status_code, 200)
 
+    def _entregable(self, reto):
+        from apps.evaluacion.models import Entregable
+
+        estudiante = Usuario.objects.create_user(username=f"est-com-{reto.pk}", password="x", rol="ESTUDIANTE")
+        return Entregable.objects.create(
+            reto=reto, estudiante=estudiante, titulo="Prototipo",
+            archivo=SimpleUploadedFile("p.pdf", b"x"),
+        )
+
+    def test_empresa_comenta_entregable_y_avisa_al_equipo_y_profesor(self):
+        from apps.evaluacion.models import ComentarioEntregable
+        from apps.seguimiento.models import IntegracionAcademica
+
+        profesor = Usuario.objects.create_user(username="profe-com", password="x", rol="PROFESOR")
+        IntegracionAcademica.objects.create(reto=self.reto, profesor=profesor, estado="publicada")
+        entregable = self._entregable(self.reto)
+        self.client.force_login(self.empresa)
+        response = self.client.post(reverse("evaluacion:comentario", args=[entregable.pk]),
+                                    {"comentario": "Muy buen avance"})
+        self.assertRedirects(response, reverse("empresas:seguimiento_reto", args=[self.reto.pk]))
+        self.assertTrue(ComentarioEntregable.objects.filter(entregable=entregable, autor=self.empresa).exists())
+        for destino in (entregable.estudiante, profesor):
+            self.assertTrue(Notificacion.objects.filter(usuario=destino, evento="COMENTARIO_EMPRESA").exists())
+        self.assertContains(self.client.get(reverse("empresas:seguimiento_reto", args=[self.reto.pk])), "Muy buen avance")
+
+    def test_empresa_no_comenta_entregables_de_otra(self):
+        entregable = self._entregable(self.ajeno)
+        self.client.force_login(self.empresa)
+        response = self.client.post(reverse("evaluacion:comentario", args=[entregable.pk]), {"comentario": "Hola"})
+        self.assertEqual(response.status_code, 403)
+
 
 class CatalogoDocumentosTests(TestCase):
     """Catalogo configurable, permiso especial, formato y bloqueo (HU00)."""

@@ -179,15 +179,18 @@ def crear_rubrica(request, reto_id):
     return render(request, "evaluacion/rubrica_form.html", {"form": form})
 
 
-@rol_requerido("PROFESOR", "ESTUDIANTE", raise_exception=True)
+@rol_requerido("PROFESOR", "ESTUDIANTE", "EMPRESA", raise_exception=True)
 def comentario(request, pk):
-    entregable = get_object_or_404(Entregable, pk=pk)
+    entregable = get_object_or_404(Entregable.objects.select_related("reto"), pk=pk)
+    rol = request.user.rol
     autorizado = (
-        (request.user.rol == "ESTUDIANTE" and entregable.estudiante_id == request.user.pk)
+        (rol == "ESTUDIANTE" and entregable.estudiante_id == request.user.pk)
         or (
-            request.user.rol == "PROFESOR"
+            rol == "PROFESOR"
             and IntegracionAcademica.objects.filter(reto_id=entregable.reto_id, profesor=request.user).exists()
         )
+        # HU14: la empresa comenta los entregables de sus propios retos.
+        or (rol == "EMPRESA" and entregable.reto.empresa_id == request.user.pk)
     )
     if not autorizado:
         raise PermissionDenied("No tienes acceso a este entregable.")
@@ -198,9 +201,31 @@ def comentario(request, pk):
             registro.entregable = entregable
             registro.autor = request.user
             registro.save()
+            if rol == "EMPRESA":
+                _notificar_comentario_empresa(entregable, registro)
             messages.success(request, "Comentario agregado al historial.")
         else:
             messages.error(request, "No se pudo agregar el comentario. Revisa el texto ingresado.")
-    destino = "evaluacion:panel_profesor" if request.user.rol == "PROFESOR" else "participaciones:mis_entregables_reto"
-    kwargs = {} if request.user.rol == "PROFESOR" else {"reto_id": entregable.reto_id}
-    return redirect(destino, **kwargs)
+    if rol == "PROFESOR":
+        return redirect("evaluacion:panel_profesor")
+    if rol == "EMPRESA":
+        return redirect("empresas:seguimiento_reto", reto_id=entregable.reto_id)
+    return redirect("participaciones:mis_entregables_reto", reto_id=entregable.reto_id)
+
+
+def _notificar_comentario_empresa(entregable, registro):
+    """El comentario de la empresa llega al equipo (estudiante) y a los profesores del reto."""
+    from apps.notificaciones.services import notificar_muchos
+    from apps.usuarios.models import Usuario
+
+    profesores = Usuario.objects.filter(integraciones__reto=entregable.reto).distinct()
+    destinatarios = [entregable.estudiante, *profesores]
+    notificar_muchos(
+        destinatarios, "COMENTARIO_EMPRESA",
+        mensaje=(
+            f'La empresa comentó el entregable "{entregable.titulo}" del reto "{entregable.reto.titulo}": '
+            f"{registro.comentario}"
+        ),
+        link=reverse("participaciones:mis_entregables_reto", kwargs={"reto_id": entregable.reto_id}),
+        clave_dedupe=f"comentario-empresa:{registro.pk}",
+    )
