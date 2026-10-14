@@ -42,6 +42,7 @@ EVENTOS = _registrar(
     # --- Evaluacion y seguimiento (HU12, HU14) ---
     Evento("ENTREGABLE_RECIBIDO", "INFO", "Nuevo entregable recibido"),
     Evento("ENTREGABLE_CALIFICADO", "EXITO", "Tu entregable fue calificado"),
+    Evento("COMENTARIO_EMPRESA", "INFO", "Comentario de la empresa a un entregable"),
     # --- Cierre (HU08) y certificacion (HU16) ---
     Evento("RETO_FINALIZADO", "EXITO", "Reto finalizado"),
     Evento("CERTIFICADO_DISPONIBLE", "EXITO", "Tu certificado esta disponible"),

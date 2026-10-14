@@ -287,7 +287,11 @@ def seguimiento_avance(request, reto_id=None):
         )
         ultimo = seguimientos.first()
         porcentaje = ultimo.porcentaje_avance if ultimo else 0
-        entregables = reto.entregables.select_related('estudiante', 'equipo').order_by('-fecha_entrega')
+        entregables = (
+            reto.entregables.select_related('estudiante', 'equipo')
+            .prefetch_related('historial_comentarios__autor')
+            .order_by('-fecha_entrega')
+        )
     return render(request, 'empresas/seguimiento_avance.html', {
         'retos': retos,
         'reto': reto,
