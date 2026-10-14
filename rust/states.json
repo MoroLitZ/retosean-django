@@ -1,0 +1,130 @@
+{
+  "MAQUINA_DOCUMENTO": {
+    "PENDIENTE": [
+      "CARGADO",
+      "RECHAZADO"
+    ],
+    "CARGADO": [
+      "CARGADO",
+      "RECHAZADO",
+      "VENCIDO",
+      "VERIFICADO"
+    ],
+    "VERIFICADO": [
+      "CARGADO",
+      "VENCIDO"
+    ],
+    "RECHAZADO": [
+      "CARGADO"
+    ],
+    "VENCIDO": [
+      "CARGADO",
+      "RECHAZADO"
+    ]
+  },
+  "MAQUINA_CONVENIO": {
+    "NO_RADICADO": [
+      "FIRMADO",
+      "RADICADO"
+    ],
+    "RADICADO": [
+      "EN_JURIDICA"
+    ],
+    "EN_JURIDICA": [
+      "FIRMADO",
+      "RADICADO"
+    ],
+    "FIRMADO": [
+      "RADICADO"
+    ]
+  },
+  "MAQUINA_RETO": {
+    "borrador": [
+      "cancelado",
+      "en_revision"
+    ],
+    "en_revision": [
+      "aprobado",
+      "cancelado",
+      "rechazado"
+    ],
+    "rechazado": [
+      "borrador",
+      "cancelado"
+    ],
+    "aprobado": [
+      "abierto",
+      "cancelado"
+    ],
+    "abierto": [
+      "cancelado",
+      "en_curso"
+    ],
+    "en_curso": [
+      "cancelado",
+      "finalizado",
+      "pausado"
+    ],
+    "pausado": [
+      "cancelado",
+      "en_curso"
+    ],
+    "finalizado": [],
+    "cancelado": []
+  },
+  "MAQUINA_ENTREGABLE": {
+    "ENVIADO": [
+      "CALIFICADO",
+      "ENVIADO",
+      "EN_REVISION"
+    ],
+    "EN_REVISION": [
+      "CALIFICADO",
+      "ENVIADO"
+    ],
+    "CALIFICADO": [
+      "CALIFICADO",
+      "ENVIADO"
+    ]
+  },
+  "MAQUINA_INTEGRACION": {
+    "borrador": [
+      "en_revision"
+    ],
+    "en_revision": [
+      "aprobada",
+      "rechazada"
+    ],
+    "rechazada": [
+      "borrador"
+    ],
+    "aprobada": [
+      "publicada"
+    ],
+    "publicada": []
+  },
+  "MAQUINA_INSCRIPCION": {
+    "PENDIENTE": [
+      "ACEPTADA",
+      "RECHAZADA"
+    ],
+    "ACEPTADA": [
+      "RECHAZADA"
+    ],
+    "RECHAZADA": [
+      "ACEPTADA"
+    ]
+  },
+  "MAQUINA_POSTULACION": {
+    "PENDIENTE": [
+      "ACEPTADA",
+      "RECHAZADA",
+      "RETIRADA"
+    ],
+    "RETIRADA": [
+      "PENDIENTE"
+    ],
+    "ACEPTADA": [],
+    "RECHAZADA": []
+  }
+}

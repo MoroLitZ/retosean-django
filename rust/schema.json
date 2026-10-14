@@ -1,0 +1,4162 @@
+[
+  {
+    "name": "Facultad",
+    "app": "academico",
+    "table": "facultades",
+    "verbose_name": "Facultad",
+    "verbose_name_plural": "Facultades",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "nombre",
+        "verbose_name": "nombre",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 150,
+        "choices": []
+      },
+      {
+        "name": "codigo",
+        "verbose_name": "codigo",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "Programa",
+    "app": "academico",
+    "table": "programas",
+    "verbose_name": "Programa",
+    "verbose_name_plural": "Programas",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "nombre",
+        "verbose_name": "nombre",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 150,
+        "choices": []
+      },
+      {
+        "name": "facultad_id",
+        "verbose_name": "facultad",
+        "type": "ForeignKey",
+        "related_table": "facultades",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "nivel",
+        "verbose_name": "nivel",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 50,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "Ecosistema",
+    "app": "academico",
+    "table": "ecosistemas",
+    "verbose_name": "Ecosistema",
+    "verbose_name_plural": "Ecosistemas",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "nombre",
+        "verbose_name": "nombre",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 150,
+        "choices": []
+      },
+      {
+        "name": "descripcion",
+        "verbose_name": "descripcion",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "Profesor",
+    "app": "academico",
+    "table": "profesores",
+    "verbose_name": "Profesor",
+    "verbose_name_plural": "Profesores",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "usuario_id",
+        "verbose_name": "usuario",
+        "type": "OneToOneField",
+        "related_table": "usuarios",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "facultad_id",
+        "verbose_name": "facultad",
+        "type": "ForeignKey",
+        "related_table": "facultades",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "especialidad",
+        "verbose_name": "especialidad",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 100,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "Estudiante",
+    "app": "academico",
+    "table": "estudiantes",
+    "verbose_name": "Estudiante",
+    "verbose_name_plural": "Estudiantes",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "usuario_id",
+        "verbose_name": "usuario",
+        "type": "OneToOneField",
+        "related_table": "usuarios",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "programa_id",
+        "verbose_name": "programa",
+        "type": "ForeignKey",
+        "related_table": "programas",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "semestre",
+        "verbose_name": "semestre",
+        "type": "IntegerField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "Certificado",
+    "app": "academico",
+    "table": "certificados",
+    "verbose_name": "Certificado",
+    "verbose_name_plural": "Certificados",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "reto_id",
+        "verbose_name": "reto",
+        "type": "ForeignKey",
+        "related_table": "retos",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "usuario_id",
+        "verbose_name": "usuario",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "rol_participacion",
+        "verbose_name": "rol participacion",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": [
+          [
+            "ESTUDIANTE",
+            "Estudiante"
+          ],
+          [
+            "PROFESOR",
+            "Docente"
+          ],
+          [
+            "EMPRESA",
+            "Empresa"
+          ],
+          [
+            "JURADO",
+            "Jurado"
+          ]
+        ]
+      },
+      {
+        "name": "codigo_verificacion",
+        "verbose_name": "codigo verificacion",
+        "type": "UUIDField",
+        "related_table": null,
+        "null": false,
+        "max_length": 32,
+        "choices": []
+      },
+      {
+        "name": "horas",
+        "verbose_name": "horas",
+        "type": "PositiveIntegerField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "emitido_en",
+        "verbose_name": "emitido en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "emitido_por_id",
+        "verbose_name": "emitido por",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "archivo",
+        "verbose_name": "archivo",
+        "type": "FileField",
+        "related_table": null,
+        "null": true,
+        "max_length": 100,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "AgendaCierre",
+    "app": "cierre",
+    "table": "cierre_agendacierre",
+    "verbose_name": "Agenda de cierre",
+    "verbose_name_plural": "Agendas de cierre",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "reto_id",
+        "verbose_name": "reto",
+        "type": "OneToOneField",
+        "related_table": "retos",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "fecha_hora",
+        "verbose_name": "fecha hora",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "espacio",
+        "verbose_name": "espacio",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 200,
+        "choices": []
+      },
+      {
+        "name": "recursos",
+        "verbose_name": "recursos",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "invitados",
+        "verbose_name": "invitados",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "agenda",
+        "verbose_name": "agenda",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "actualizado_en",
+        "verbose_name": "actualizado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "CierreReto",
+    "app": "cierre",
+    "table": "cierres_reto",
+    "verbose_name": "Cierre de Reto",
+    "verbose_name_plural": "Cierres de Reto",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "reto_id",
+        "verbose_name": "reto",
+        "type": "OneToOneField",
+        "related_table": "retos",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "acta_url",
+        "verbose_name": "acta url",
+        "type": "FileField",
+        "related_table": null,
+        "null": true,
+        "max_length": 100,
+        "choices": []
+      },
+      {
+        "name": "notas",
+        "verbose_name": "notas",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "encuesta_enviada",
+        "verbose_name": "encuesta enviada",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "cerrado_por_id",
+        "verbose_name": "cerrado por",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "cerrado_en",
+        "verbose_name": "cerrado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "actualizado_en",
+        "verbose_name": "actualizado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "Reconocimiento",
+    "app": "cierre",
+    "table": "reconocimientos",
+    "verbose_name": "Reconocimiento",
+    "verbose_name_plural": "Reconocimientos",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "cierre_id",
+        "verbose_name": "cierre",
+        "type": "ForeignKey",
+        "related_table": "cierres_reto",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "usuario_id",
+        "verbose_name": "usuario",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "nombre_destinatario",
+        "verbose_name": "nombre destinatario",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 150,
+        "choices": []
+      },
+      {
+        "name": "descripcion",
+        "verbose_name": "descripcion",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "creado_en",
+        "verbose_name": "creado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "EntregableFinal",
+    "app": "cierre",
+    "table": "cierre_entregablefinal",
+    "verbose_name": "entregable final",
+    "verbose_name_plural": "entregable finals",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "cierre_id",
+        "verbose_name": "cierre",
+        "type": "ForeignKey",
+        "related_table": "cierres_reto",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "nombre",
+        "verbose_name": "nombre",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 180,
+        "choices": []
+      },
+      {
+        "name": "archivo",
+        "verbose_name": "archivo",
+        "type": "FileField",
+        "related_table": null,
+        "null": false,
+        "max_length": 100,
+        "choices": []
+      },
+      {
+        "name": "cargado_por_id",
+        "verbose_name": "cargado por",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "creado_en",
+        "verbose_name": "creado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "EncuestaSatisfaccion",
+    "app": "cierre",
+    "table": "cierre_encuestasatisfaccion",
+    "verbose_name": "encuesta satisfaccion",
+    "verbose_name_plural": "encuesta satisfaccions",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "cierre_id",
+        "verbose_name": "cierre",
+        "type": "ForeignKey",
+        "related_table": "cierres_reto",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "participante_id",
+        "verbose_name": "participante",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "calificacion",
+        "verbose_name": "calificacion",
+        "type": "PositiveSmallIntegerField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "comentario",
+        "verbose_name": "comentario",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "respondida_en",
+        "verbose_name": "respondida en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "creada_en",
+        "verbose_name": "creada en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "Empresa",
+    "app": "empresas",
+    "table": "empresas",
+    "verbose_name": "Empresa",
+    "verbose_name_plural": "Empresas",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "nit",
+        "verbose_name": "nit",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": []
+      },
+      {
+        "name": "razon_social",
+        "verbose_name": "razon social",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 150,
+        "choices": []
+      },
+      {
+        "name": "sector_industrial",
+        "verbose_name": "sector industrial",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 100,
+        "choices": []
+      },
+      {
+        "name": "fecha_creacion",
+        "verbose_name": "fecha creacion",
+        "type": "DateField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "estado_validacion",
+        "verbose_name": "estado validacion",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": [
+          [
+            "PENDIENTE",
+            "Pendiente"
+          ],
+          [
+            "EN_REVISION",
+            "En Revisión"
+          ],
+          [
+            "VERIFICADA",
+            "Verificada"
+          ],
+          [
+            "RECHAZADA",
+            "Rechazada"
+          ]
+        ]
+      },
+      {
+        "name": "estado_listas_restrictivas",
+        "verbose_name": "estado listas restrictivas",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": [
+          [
+            "PENDIENTE",
+            "Pendiente de revisión"
+          ],
+          [
+            "APROBADO",
+            "No aparece en listas"
+          ],
+          [
+            "RECHAZADO",
+            "Aparece en listas restrictivas"
+          ]
+        ]
+      },
+      {
+        "name": "evidencia_listas",
+        "verbose_name": "evidencia listas",
+        "type": "FileField",
+        "related_table": null,
+        "null": true,
+        "max_length": 100,
+        "choices": []
+      },
+      {
+        "name": "fecha_ultima_actualizacion",
+        "verbose_name": "fecha ultima actualizacion",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "observaciones_admin",
+        "verbose_name": "observaciones admin",
+        "type": "TextField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "renuncio_a_convenio",
+        "verbose_name": "renuncio a convenio",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "estado_convenio",
+        "verbose_name": "estado convenio",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": [
+          [
+            "NO_RADICADO",
+            "No radicado"
+          ],
+          [
+            "RADICADO",
+            "Radicado"
+          ],
+          [
+            "EN_JURIDICA",
+            "En proceso en Jurídica"
+          ],
+          [
+            "FIRMADO",
+            "Firmado por las partes"
+          ]
+        ]
+      },
+      {
+        "name": "fecha_vencimiento_convenio",
+        "verbose_name": "fecha vencimiento convenio",
+        "type": "DateField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "usuario_id",
+        "verbose_name": "usuario",
+        "type": "OneToOneField",
+        "related_table": "usuarios",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "ContactoEmpresa",
+    "app": "empresas",
+    "table": "contactos_empresa",
+    "verbose_name": "Contacto de Empresa",
+    "verbose_name_plural": "Contactos de Empresa",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "empresa_id",
+        "verbose_name": "empresa",
+        "type": "ForeignKey",
+        "related_table": "empresas",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "nombre",
+        "verbose_name": "nombre",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 100,
+        "choices": []
+      },
+      {
+        "name": "cargo",
+        "verbose_name": "cargo",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 100,
+        "choices": []
+      },
+      {
+        "name": "email",
+        "verbose_name": "email",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 254,
+        "choices": []
+      },
+      {
+        "name": "telefono",
+        "verbose_name": "telefono",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": []
+      },
+      {
+        "name": "es_principal",
+        "verbose_name": "es principal",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "DocumentoEmpresa",
+    "app": "empresas",
+    "table": "documentos_empresas",
+    "verbose_name": "Documento de Empresa",
+    "verbose_name_plural": "Documentos de Empresa",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "empresa_id",
+        "verbose_name": "empresa",
+        "type": "ForeignKey",
+        "related_table": "empresas",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "tipo_documento",
+        "verbose_name": "tipo documento",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 50,
+        "choices": [
+          [
+            "CAMARA_COMERCIO",
+            "Camara de Comercio"
+          ],
+          [
+            "RUT",
+            "Registro Unico Tributario (RUT)"
+          ],
+          [
+            "CEDULA_REPRESENTANTE",
+            "Cedula del Representante Legal"
+          ],
+          [
+            "CONVENIO",
+            "Convenio Institucional"
+          ]
+        ]
+      },
+      {
+        "name": "archivo",
+        "verbose_name": "archivo",
+        "type": "FileField",
+        "related_table": null,
+        "null": true,
+        "max_length": 100,
+        "choices": []
+      },
+      {
+        "name": "estado",
+        "verbose_name": "estado",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 15,
+        "choices": [
+          [
+            "PENDIENTE",
+            "Pendiente"
+          ],
+          [
+            "CARGADO",
+            "En Revision"
+          ],
+          [
+            "VERIFICADO",
+            "Aprobado"
+          ],
+          [
+            "RECHAZADO",
+            "Rechazado"
+          ],
+          [
+            "VENCIDO",
+            "Vencido"
+          ]
+        ]
+      },
+      {
+        "name": "fecha_expedicion",
+        "verbose_name": "fecha expedicion",
+        "type": "DateField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "fecha_vencimiento",
+        "verbose_name": "fecha vencimiento",
+        "type": "DateField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "fecha_carga",
+        "verbose_name": "fecha carga",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "motivo_rechazo",
+        "verbose_name": "motivo rechazo",
+        "type": "TextField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "Entregable",
+    "app": "evaluacion",
+    "table": "entregables",
+    "verbose_name": "Entregable",
+    "verbose_name_plural": "Entregables",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "reto_id",
+        "verbose_name": "reto",
+        "type": "ForeignKey",
+        "related_table": "retos",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "equipo_id",
+        "verbose_name": "equipo",
+        "type": "ForeignKey",
+        "related_table": "equipos",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "estudiante_id",
+        "verbose_name": "estudiante",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "titulo",
+        "verbose_name": "titulo",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 180,
+        "choices": []
+      },
+      {
+        "name": "es_final",
+        "verbose_name": "es final",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "puntaje_maximo",
+        "verbose_name": "puntaje maximo",
+        "type": "DecimalField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "archivo",
+        "verbose_name": "archivo",
+        "type": "FileField",
+        "related_table": null,
+        "null": false,
+        "max_length": 100,
+        "choices": []
+      },
+      {
+        "name": "comentario_estudiante",
+        "verbose_name": "comentario estudiante",
+        "type": "TextField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "comentario_profesor",
+        "verbose_name": "comentario profesor",
+        "type": "TextField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "nota",
+        "verbose_name": "nota",
+        "type": "DecimalField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "fecha_entrega",
+        "verbose_name": "fecha entrega",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "actualizado_en",
+        "verbose_name": "actualizado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "estado",
+        "verbose_name": "estado",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": [
+          [
+            "ENVIADO",
+            "Enviado"
+          ],
+          [
+            "EN_REVISION",
+            "En Revision"
+          ],
+          [
+            "CALIFICADO",
+            "Calificado"
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Rubrica",
+    "app": "evaluacion",
+    "table": "evaluacion_rubrica",
+    "verbose_name": "rubrica",
+    "verbose_name_plural": "rubricas",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "reto_id",
+        "verbose_name": "reto",
+        "type": "ForeignKey",
+        "related_table": "retos",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "nombre",
+        "verbose_name": "nombre",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 150,
+        "choices": []
+      },
+      {
+        "name": "descripcion",
+        "verbose_name": "descripcion",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "activa",
+        "verbose_name": "activa",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "creada_por_id",
+        "verbose_name": "creada por",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "creada_en",
+        "verbose_name": "creada en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "CriterioRubrica",
+    "app": "evaluacion",
+    "table": "evaluacion_criteriorubrica",
+    "verbose_name": "criterio rubrica",
+    "verbose_name_plural": "criterio rubricas",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "rubrica_id",
+        "verbose_name": "rubrica",
+        "type": "ForeignKey",
+        "related_table": "evaluacion_rubrica",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "nombre",
+        "verbose_name": "nombre",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 150,
+        "choices": []
+      },
+      {
+        "name": "descripcion",
+        "verbose_name": "descripcion",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "puntaje_maximo",
+        "verbose_name": "puntaje maximo",
+        "type": "DecimalField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "orden",
+        "verbose_name": "orden",
+        "type": "PositiveSmallIntegerField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "Evaluacion",
+    "app": "evaluacion",
+    "table": "evaluaciones",
+    "verbose_name": "Evaluacion",
+    "verbose_name_plural": "Evaluaciones",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "entregable_id",
+        "verbose_name": "entregable",
+        "type": "ForeignKey",
+        "related_table": "entregables",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "profesor_id",
+        "verbose_name": "profesor",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "nota",
+        "verbose_name": "nota",
+        "type": "DecimalField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "comentario",
+        "verbose_name": "comentario",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "rubrica_id",
+        "verbose_name": "rubrica",
+        "type": "ForeignKey",
+        "related_table": "evaluacion_rubrica",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "fecha",
+        "verbose_name": "fecha",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "actualizado_en",
+        "verbose_name": "actualizado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "EvaluacionCriterio",
+    "app": "evaluacion",
+    "table": "evaluacion_evaluacioncriterio",
+    "verbose_name": "evaluacion criterio",
+    "verbose_name_plural": "evaluacion criterios",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "evaluacion_id",
+        "verbose_name": "evaluacion",
+        "type": "ForeignKey",
+        "related_table": "evaluaciones",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "criterio_id",
+        "verbose_name": "criterio",
+        "type": "ForeignKey",
+        "related_table": "evaluacion_criteriorubrica",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "puntaje",
+        "verbose_name": "puntaje",
+        "type": "DecimalField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "ComentarioEntregable",
+    "app": "evaluacion",
+    "table": "evaluacion_comentarioentregable",
+    "verbose_name": "comentario entregable",
+    "verbose_name_plural": "comentario entregables",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "entregable_id",
+        "verbose_name": "entregable",
+        "type": "ForeignKey",
+        "related_table": "entregables",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "autor_id",
+        "verbose_name": "autor",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "comentario",
+        "verbose_name": "comentario",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "creado_en",
+        "verbose_name": "creado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "Hackathon",
+    "app": "hackaton",
+    "table": "hackathons",
+    "verbose_name": "Hackathon",
+    "verbose_name_plural": "Hackathons",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "reto_id",
+        "verbose_name": "reto",
+        "type": "OneToOneField",
+        "related_table": "retos",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "reglas",
+        "verbose_name": "reglas",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "estado",
+        "verbose_name": "estado",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": [
+          [
+            "borrador",
+            "Borrador"
+          ],
+          [
+            "publicado",
+            "Publicado"
+          ],
+          [
+            "en_curso",
+            "En Curso"
+          ],
+          [
+            "finalizado",
+            "Finalizado"
+          ],
+          [
+            "cancelado",
+            "Cancelado"
+          ]
+        ]
+      },
+      {
+        "name": "resultados_publicados",
+        "verbose_name": "resultados publicados",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "creado_en",
+        "verbose_name": "creado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "actualizado_en",
+        "verbose_name": "actualizado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "EtapaHackaton",
+    "app": "hackaton",
+    "table": "etapas_hackaton",
+    "verbose_name": "Etapa de Hackaton",
+    "verbose_name_plural": "Etapas de Hackaton",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "hackathon_id",
+        "verbose_name": "hackathon",
+        "type": "ForeignKey",
+        "related_table": "hackathons",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "tipo",
+        "verbose_name": "tipo",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 30,
+        "choices": [
+          [
+            "inscripcion",
+            "Inscripcion"
+          ],
+          [
+            "desarrollo",
+            "Desarrollo"
+          ],
+          [
+            "presentacion",
+            "Presentacion"
+          ],
+          [
+            "premiacion",
+            "Premiacion"
+          ]
+        ]
+      },
+      {
+        "name": "titulo",
+        "verbose_name": "titulo",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 150,
+        "choices": []
+      },
+      {
+        "name": "inicia_en",
+        "verbose_name": "inicia en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "termina_en",
+        "verbose_name": "termina en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "orden",
+        "verbose_name": "orden",
+        "type": "PositiveSmallIntegerField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "Jurado",
+    "app": "hackaton",
+    "table": "jurados_hackaton",
+    "verbose_name": "Jurado",
+    "verbose_name_plural": "Jurados",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "hackathon_id",
+        "verbose_name": "hackathon",
+        "type": "ForeignKey",
+        "related_table": "hackathons",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "usuario_id",
+        "verbose_name": "usuario",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "nombre",
+        "verbose_name": "nombre",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 150,
+        "choices": []
+      },
+      {
+        "name": "email",
+        "verbose_name": "email",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 254,
+        "choices": []
+      },
+      {
+        "name": "especialidad",
+        "verbose_name": "especialidad",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 150,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "VotacionHackaton",
+    "app": "hackaton",
+    "table": "votaciones_hackaton",
+    "verbose_name": "Votacion Hackaton",
+    "verbose_name_plural": "Votaciones Hackaton",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "hackathon_id",
+        "verbose_name": "hackathon",
+        "type": "ForeignKey",
+        "related_table": "hackathons",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "jurado_id",
+        "verbose_name": "jurado",
+        "type": "ForeignKey",
+        "related_table": "jurados_hackaton",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "equipo_id",
+        "verbose_name": "equipo",
+        "type": "ForeignKey",
+        "related_table": "equipos",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "puntaje",
+        "verbose_name": "puntaje",
+        "type": "DecimalField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "comentario",
+        "verbose_name": "comentario",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "fecha",
+        "verbose_name": "fecha",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "InscripcionHackaton",
+    "app": "hackaton",
+    "table": "inscripciones_hackaton",
+    "verbose_name": "Inscripcion a Hackaton",
+    "verbose_name_plural": "Inscripciones a Hackaton",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "hackathon_id",
+        "verbose_name": "hackathon",
+        "type": "ForeignKey",
+        "related_table": "hackathons",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "equipo_id",
+        "verbose_name": "equipo",
+        "type": "ForeignKey",
+        "related_table": "equipos",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "estado",
+        "verbose_name": "estado",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": [
+          [
+            "PENDIENTE",
+            "Pendiente"
+          ],
+          [
+            "ACEPTADA",
+            "Aceptada"
+          ],
+          [
+            "RECHAZADA",
+            "Rechazada"
+          ]
+        ]
+      },
+      {
+        "name": "inscrito_por_id",
+        "verbose_name": "inscrito por",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "creado_en",
+        "verbose_name": "creado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "Notificacion",
+    "app": "notificaciones",
+    "table": "notificaciones",
+    "verbose_name": "Notificacion",
+    "verbose_name_plural": "Notificaciones",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "usuario_id",
+        "verbose_name": "usuario",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "tipo",
+        "verbose_name": "tipo",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": [
+          [
+            "INFO",
+            "Informacion"
+          ],
+          [
+            "EXITO",
+            "Exito"
+          ],
+          [
+            "ADVERTENCIA",
+            "Advertencia"
+          ],
+          [
+            "ERROR",
+            "Error"
+          ]
+        ]
+      },
+      {
+        "name": "evento",
+        "verbose_name": "evento",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 60,
+        "choices": []
+      },
+      {
+        "name": "titulo",
+        "verbose_name": "titulo",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 200,
+        "choices": []
+      },
+      {
+        "name": "mensaje",
+        "verbose_name": "mensaje",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "leida",
+        "verbose_name": "leida",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "leida_en",
+        "verbose_name": "leida en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "link",
+        "verbose_name": "link",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 300,
+        "choices": []
+      },
+      {
+        "name": "clave_dedupe",
+        "verbose_name": "clave dedupe",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 120,
+        "choices": []
+      },
+      {
+        "name": "enviada_por_correo",
+        "verbose_name": "enviada por correo",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "error_envio",
+        "verbose_name": "error envio",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "creada_en",
+        "verbose_name": "creada en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "PreferenciaNotificacion",
+    "app": "notificaciones",
+    "table": "preferencias_notificacion",
+    "verbose_name": "Preferencia de Notificacion",
+    "verbose_name_plural": "Preferencias de Notificacion",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "usuario_id",
+        "verbose_name": "usuario",
+        "type": "OneToOneField",
+        "related_table": "usuarios",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "recibir_email",
+        "verbose_name": "recibir email",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "recibir_recordatorios",
+        "verbose_name": "recibir recordatorios",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "eventos_silenciados",
+        "verbose_name": "eventos silenciados",
+        "type": "JSONField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "actualizado_en",
+        "verbose_name": "actualizado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "Postulacion",
+    "app": "participaciones",
+    "table": "postulaciones",
+    "verbose_name": "Postulacion",
+    "verbose_name_plural": "Postulaciones",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "reto_id",
+        "verbose_name": "reto",
+        "type": "ForeignKey",
+        "related_table": "retos",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "estudiante_id",
+        "verbose_name": "estudiante",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "fecha_postulacion",
+        "verbose_name": "fecha postulacion",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "estado",
+        "verbose_name": "estado",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": [
+          [
+            "PENDIENTE",
+            "Pendiente de Aprobacion"
+          ],
+          [
+            "ACEPTADA",
+            "Aceptada"
+          ],
+          [
+            "RECHAZADA",
+            "Rechazada"
+          ],
+          [
+            "RETIRADA",
+            "Retirada"
+          ]
+        ]
+      },
+      {
+        "name": "motivacion",
+        "verbose_name": "motivacion",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "habilidades",
+        "verbose_name": "habilidades",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "semestre",
+        "verbose_name": "semestre",
+        "type": "IntegerField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "programa",
+        "verbose_name": "programa",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 150,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "Equipo",
+    "app": "participaciones",
+    "table": "equipos",
+    "verbose_name": "Equipo",
+    "verbose_name_plural": "Equipos",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "reto_id",
+        "verbose_name": "reto",
+        "type": "ForeignKey",
+        "related_table": "retos",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "nombre",
+        "verbose_name": "nombre",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 100,
+        "choices": []
+      },
+      {
+        "name": "creado_en",
+        "verbose_name": "creado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "MiembroEquipo",
+    "app": "participaciones",
+    "table": "miembros_equipo",
+    "verbose_name": "Miembro de Equipo",
+    "verbose_name_plural": "Miembros de Equipo",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "equipo_id",
+        "verbose_name": "equipo",
+        "type": "ForeignKey",
+        "related_table": "equipos",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "estudiante_id",
+        "verbose_name": "estudiante",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "rol",
+        "verbose_name": "rol",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": [
+          [
+            "LIDER",
+            "Lider"
+          ],
+          [
+            "MIEMBRO",
+            "Miembro"
+          ]
+        ]
+      },
+      {
+        "name": "fecha_ingreso",
+        "verbose_name": "fecha ingreso",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "RetoFavorito",
+    "app": "participaciones",
+    "table": "retos_favoritos",
+    "verbose_name": "Reto Favorito",
+    "verbose_name_plural": "Retos Favoritos",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "usuario_id",
+        "verbose_name": "usuario",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "reto_id",
+        "verbose_name": "reto",
+        "type": "ForeignKey",
+        "related_table": "retos",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "fecha",
+        "verbose_name": "fecha",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "Presupuesto",
+    "app": "presupuesto",
+    "table": "presupuestos",
+    "verbose_name": "Presupuesto",
+    "verbose_name_plural": "Presupuestos",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "reto_id",
+        "verbose_name": "reto",
+        "type": "OneToOneField",
+        "related_table": "retos",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "monto_total",
+        "verbose_name": "monto total",
+        "type": "DecimalField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "alerta_80_enviada",
+        "verbose_name": "alerta 80 enviada",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "creado_en",
+        "verbose_name": "creado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "actualizado_en",
+        "verbose_name": "actualizado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "Gasto",
+    "app": "presupuesto",
+    "table": "gastos",
+    "verbose_name": "Gasto",
+    "verbose_name_plural": "Gastos",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "presupuesto_id",
+        "verbose_name": "presupuesto",
+        "type": "ForeignKey",
+        "related_table": "presupuestos",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "categoria",
+        "verbose_name": "categoria",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 30,
+        "choices": [
+          [
+            "REFRIGERIOS",
+            "Refrigerios"
+          ],
+          [
+            "MATERIALES",
+            "Materiales"
+          ],
+          [
+            "IMPRESIONES",
+            "Impresiones"
+          ],
+          [
+            "ESPACIOS",
+            "Espacios"
+          ],
+          [
+            "OTROS",
+            "Otros"
+          ]
+        ]
+      },
+      {
+        "name": "monto",
+        "verbose_name": "monto",
+        "type": "DecimalField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "descripcion",
+        "verbose_name": "descripcion",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "comprobante",
+        "verbose_name": "comprobante",
+        "type": "FileField",
+        "related_table": null,
+        "null": true,
+        "max_length": 100,
+        "choices": []
+      },
+      {
+        "name": "registrado_por_id",
+        "verbose_name": "registrado por",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "creado_en",
+        "verbose_name": "creado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "ReporteGenerado",
+    "app": "reportes",
+    "table": "reportes_generados",
+    "verbose_name": "Reporte Generado",
+    "verbose_name_plural": "Reportes Generados",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "usuario_id",
+        "verbose_name": "usuario",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "formato",
+        "verbose_name": "formato",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 10,
+        "choices": [
+          [
+            "PDF",
+            "PDF"
+          ],
+          [
+            "EXCEL",
+            "Excel"
+          ]
+        ]
+      },
+      {
+        "name": "filtros",
+        "verbose_name": "filtros",
+        "type": "JSONField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "archivo",
+        "verbose_name": "archivo",
+        "type": "FileField",
+        "related_table": null,
+        "null": true,
+        "max_length": 100,
+        "choices": []
+      },
+      {
+        "name": "enviado_por_email",
+        "verbose_name": "enviado por email",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "creado_en",
+        "verbose_name": "creado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "Reto",
+    "app": "retos",
+    "table": "retos",
+    "verbose_name": "Reto",
+    "verbose_name_plural": "Retos",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "empresa_id",
+        "verbose_name": "empresa",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "tipo",
+        "verbose_name": "tipo",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": [
+          [
+            "reto",
+            "Reto"
+          ],
+          [
+            "hackathon",
+            "Hackathon"
+          ]
+        ]
+      },
+      {
+        "name": "titulo",
+        "verbose_name": "titulo",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 180,
+        "choices": []
+      },
+      {
+        "name": "descripcion",
+        "verbose_name": "descripcion",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "area",
+        "verbose_name": "area",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 120,
+        "choices": [
+          [
+            "Tecnología",
+            "Tecnología"
+          ],
+          [
+            "Sostenibilidad",
+            "Sostenibilidad"
+          ],
+          [
+            "Emprendimiento",
+            "Emprendimiento"
+          ],
+          [
+            "Salud y Bienestar",
+            "Salud y Bienestar"
+          ],
+          [
+            "Finanzas",
+            "Finanzas"
+          ],
+          [
+            "Mercadeo",
+            "Mercadeo"
+          ],
+          [
+            "Derecho",
+            "Derecho"
+          ],
+          [
+            "Educación",
+            "Educación"
+          ],
+          [
+            "Diseño y Creatividad",
+            "Diseño y Creatividad"
+          ],
+          [
+            "Otra",
+            "Otra"
+          ]
+        ]
+      },
+      {
+        "name": "nivel_academico",
+        "verbose_name": "nivel academico",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 120,
+        "choices": [
+          [
+            "Pregrado",
+            "Pregrado"
+          ],
+          [
+            "Posgrado",
+            "Posgrado"
+          ],
+          [
+            "Especialización",
+            "Especialización"
+          ],
+          [
+            "Maestría",
+            "Maestría"
+          ],
+          [
+            "Doctorado",
+            "Doctorado"
+          ],
+          [
+            "Educación Continua",
+            "Educación Continua"
+          ]
+        ]
+      },
+      {
+        "name": "facultad_id",
+        "verbose_name": "facultad",
+        "type": "ForeignKey",
+        "related_table": "facultades",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "programa_id",
+        "verbose_name": "programa",
+        "type": "ForeignKey",
+        "related_table": "programas",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "ecosistema_id",
+        "verbose_name": "ecosistema",
+        "type": "ForeignKey",
+        "related_table": "ecosistemas",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "fecha_inicio_tentativa",
+        "verbose_name": "fecha inicio tentativa",
+        "type": "DateField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "fecha_fin_tentativa",
+        "verbose_name": "fecha fin tentativa",
+        "type": "DateField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "fecha_limite_postulacion",
+        "verbose_name": "fecha limite postulacion",
+        "type": "DateField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "premios",
+        "verbose_name": "premios",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "documento_soporte",
+        "verbose_name": "documento soporte",
+        "type": "FileField",
+        "related_table": null,
+        "null": true,
+        "max_length": 100,
+        "choices": []
+      },
+      {
+        "name": "criterios_evaluacion",
+        "verbose_name": "criterios evaluacion",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "estado",
+        "verbose_name": "estado",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": [
+          [
+            "borrador",
+            "Borrador"
+          ],
+          [
+            "en_revision",
+            "En Revision"
+          ],
+          [
+            "aprobado",
+            "Aprobado"
+          ],
+          [
+            "abierto",
+            "Abierto"
+          ],
+          [
+            "rechazado",
+            "Rechazado"
+          ],
+          [
+            "en_curso",
+            "En Curso"
+          ],
+          [
+            "pausado",
+            "Pausado"
+          ],
+          [
+            "finalizado",
+            "Finalizado"
+          ],
+          [
+            "cancelado",
+            "Cancelado"
+          ]
+        ]
+      },
+      {
+        "name": "consecutivo",
+        "verbose_name": "consecutivo",
+        "type": "PositiveIntegerField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "anio_consecutivo",
+        "verbose_name": "anio consecutivo",
+        "type": "PositiveSmallIntegerField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "comentarios_revision",
+        "verbose_name": "comentarios revision",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "fecha_envio_revision",
+        "verbose_name": "fecha envio revision",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "fecha_aprobacion",
+        "verbose_name": "fecha aprobacion",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "creado_en",
+        "verbose_name": "creado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "actualizado_en",
+        "verbose_name": "actualizado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "tiene_convenio_institucional",
+        "verbose_name": "tiene convenio institucional",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "eliminado_en",
+        "verbose_name": "eliminado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "HistorialEstadoReto",
+    "app": "retos",
+    "table": "historial_estados_reto",
+    "verbose_name": "Historial de Estado de Reto",
+    "verbose_name_plural": "Historial de Estados de Reto",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "reto_id",
+        "verbose_name": "reto",
+        "type": "ForeignKey",
+        "related_table": "retos",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "estado_anterior",
+        "verbose_name": "estado anterior",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": []
+      },
+      {
+        "name": "estado_nuevo",
+        "verbose_name": "estado nuevo",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": [
+          [
+            "borrador",
+            "Borrador"
+          ],
+          [
+            "en_revision",
+            "En Revision"
+          ],
+          [
+            "aprobado",
+            "Aprobado"
+          ],
+          [
+            "abierto",
+            "Abierto"
+          ],
+          [
+            "rechazado",
+            "Rechazado"
+          ],
+          [
+            "en_curso",
+            "En Curso"
+          ],
+          [
+            "pausado",
+            "Pausado"
+          ],
+          [
+            "finalizado",
+            "Finalizado"
+          ],
+          [
+            "cancelado",
+            "Cancelado"
+          ]
+        ]
+      },
+      {
+        "name": "comentario",
+        "verbose_name": "comentario",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "realizado_por_id",
+        "verbose_name": "realizado por",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "fecha",
+        "verbose_name": "fecha",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "RetoArchivo",
+    "app": "retos",
+    "table": "retos_retoarchivo",
+    "verbose_name": "Archivo de reto",
+    "verbose_name_plural": "Archivos de reto",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "reto_id",
+        "verbose_name": "reto",
+        "type": "ForeignKey",
+        "related_table": "retos",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "archivo",
+        "verbose_name": "archivo",
+        "type": "FileField",
+        "related_table": null,
+        "null": false,
+        "max_length": 100,
+        "choices": []
+      },
+      {
+        "name": "nombre_original",
+        "verbose_name": "nombre original",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 255,
+        "choices": []
+      },
+      {
+        "name": "tamano",
+        "verbose_name": "tamano",
+        "type": "PositiveBigIntegerField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "creado_en",
+        "verbose_name": "creado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "EquipoRetoAcademico",
+    "app": "retos",
+    "table": "equipos_reto_academico",
+    "verbose_name": "Equipo de Reto Académico",
+    "verbose_name_plural": "Equipos de Reto Académico",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "reto_id",
+        "verbose_name": "reto",
+        "type": "ForeignKey",
+        "related_table": "retos",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "nombre_equipo",
+        "verbose_name": "nombre equipo",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 100,
+        "choices": []
+      },
+      {
+        "name": "equipo_espejo_id",
+        "verbose_name": "equipo espejo",
+        "type": "OneToOneField",
+        "related_table": "equipos",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "SesionRetoAcademico",
+    "app": "retos",
+    "table": "sesiones_reto_academico",
+    "verbose_name": "Sesión Académica de Reto",
+    "verbose_name_plural": "Sesiones Académicas de Reto",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "reto_id",
+        "verbose_name": "reto",
+        "type": "ForeignKey",
+        "related_table": "retos",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "tipo",
+        "verbose_name": "tipo",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": [
+          [
+            "inicio",
+            "Inicio"
+          ],
+          [
+            "seguimiento",
+            "Seguimiento"
+          ],
+          [
+            "preseleccion",
+            "Preselección"
+          ],
+          [
+            "evaluacion",
+            "Evaluación"
+          ]
+        ]
+      },
+      {
+        "name": "fecha_hora",
+        "verbose_name": "fecha hora",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "enlace_reunion",
+        "verbose_name": "enlace reunion",
+        "type": "CharField",
+        "related_table": null,
+        "null": true,
+        "max_length": 200,
+        "choices": []
+      },
+      {
+        "name": "observaciones",
+        "verbose_name": "observaciones",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "IntegracionAcademica",
+    "app": "seguimiento",
+    "table": "integraciones_academicas",
+    "verbose_name": "Integracion Academica",
+    "verbose_name_plural": "Integraciones Academicas",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "reto_id",
+        "verbose_name": "reto",
+        "type": "ForeignKey",
+        "related_table": "retos",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "profesor_id",
+        "verbose_name": "profesor",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "facultad",
+        "verbose_name": "facultad",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 140,
+        "choices": []
+      },
+      {
+        "name": "nivel_formacion",
+        "verbose_name": "nivel formacion",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 120,
+        "choices": []
+      },
+      {
+        "name": "programa_academico",
+        "verbose_name": "programa academico",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 160,
+        "choices": []
+      },
+      {
+        "name": "ecosistema",
+        "verbose_name": "ecosistema",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 140,
+        "choices": []
+      },
+      {
+        "name": "descripcion",
+        "verbose_name": "descripcion",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "alcance",
+        "verbose_name": "alcance",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "entregable_esperado",
+        "verbose_name": "entregable esperado",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 180,
+        "choices": []
+      },
+      {
+        "name": "cronograma_sesiones",
+        "verbose_name": "cronograma sesiones",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "equipo_profesores",
+        "verbose_name": "equipo profesores",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "equipo_estudiantes",
+        "verbose_name": "equipo estudiantes",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "expertos_invitados",
+        "verbose_name": "expertos invitados",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "requerimientos_empresa",
+        "verbose_name": "requerimientos empresa",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "requerimientos_internos",
+        "verbose_name": "requerimientos internos",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "espacio_fisico",
+        "verbose_name": "espacio fisico",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 180,
+        "choices": []
+      },
+      {
+        "name": "estado",
+        "verbose_name": "estado",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": [
+          [
+            "borrador",
+            "Borrador"
+          ],
+          [
+            "en_revision",
+            "En Revision"
+          ],
+          [
+            "aprobada",
+            "Aprobada"
+          ],
+          [
+            "rechazada",
+            "Rechazada"
+          ],
+          [
+            "publicada",
+            "Publicada"
+          ]
+        ]
+      },
+      {
+        "name": "comentarios_revision",
+        "verbose_name": "comentarios revision",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "fecha_envio_revision",
+        "verbose_name": "fecha envio revision",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "fecha_aprobacion",
+        "verbose_name": "fecha aprobacion",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "creado_en",
+        "verbose_name": "creado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "actualizado_en",
+        "verbose_name": "actualizado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "SeguimientoReto",
+    "app": "seguimiento",
+    "table": "seguimientos_reto",
+    "verbose_name": "Seguimiento de Reto",
+    "verbose_name_plural": "Seguimientos de Reto",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "reto_id",
+        "verbose_name": "reto",
+        "type": "ForeignKey",
+        "related_table": "retos",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "tipo_sesion",
+        "verbose_name": "tipo sesion",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 30,
+        "choices": [
+          [
+            "inicio",
+            "Inicio"
+          ],
+          [
+            "seguimiento",
+            "Seguimiento"
+          ],
+          [
+            "preseleccion",
+            "Preseleccion"
+          ],
+          [
+            "evaluacion",
+            "Evaluacion / reconocimiento"
+          ],
+          [
+            "otro",
+            "Otro"
+          ]
+        ]
+      },
+      {
+        "name": "fecha_sesion",
+        "verbose_name": "fecha sesion",
+        "type": "DateField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "porcentaje_avance",
+        "verbose_name": "porcentaje avance",
+        "type": "PositiveSmallIntegerField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "avances",
+        "verbose_name": "avances",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "observaciones",
+        "verbose_name": "observaciones",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "acuerdos",
+        "verbose_name": "acuerdos",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "creado_por_id",
+        "verbose_name": "creado por",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "creado_en",
+        "verbose_name": "creado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "SeguimientoArchivo",
+    "app": "seguimiento",
+    "table": "seguimiento_seguimientoarchivo",
+    "verbose_name": "Archivo de seguimiento",
+    "verbose_name_plural": "Archivos de seguimiento",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "seguimiento_id",
+        "verbose_name": "seguimiento",
+        "type": "ForeignKey",
+        "related_table": "seguimientos_reto",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "archivo",
+        "verbose_name": "archivo",
+        "type": "FileField",
+        "related_table": null,
+        "null": false,
+        "max_length": 100,
+        "choices": []
+      },
+      {
+        "name": "nombre_original",
+        "verbose_name": "nombre original",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 255,
+        "choices": []
+      },
+      {
+        "name": "tamano",
+        "verbose_name": "tamano",
+        "type": "PositiveBigIntegerField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "creado_en",
+        "verbose_name": "creado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "HistorialEstado",
+    "app": "seguimiento",
+    "table": "historial_estados",
+    "verbose_name": "Historial de estado",
+    "verbose_name_plural": "Historial de estados",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "content_type_id",
+        "verbose_name": "content type",
+        "type": "ForeignKey",
+        "related_table": "django_content_type",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "object_id",
+        "verbose_name": "object id",
+        "type": "PositiveBigIntegerField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "campo",
+        "verbose_name": "campo",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 50,
+        "choices": []
+      },
+      {
+        "name": "estado_anterior",
+        "verbose_name": "estado anterior",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 30,
+        "choices": []
+      },
+      {
+        "name": "estado_nuevo",
+        "verbose_name": "estado nuevo",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 30,
+        "choices": []
+      },
+      {
+        "name": "comentario",
+        "verbose_name": "comentario",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "realizado_por_id",
+        "verbose_name": "realizado por",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "fecha",
+        "verbose_name": "fecha",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "UnidadEstudio",
+    "app": "unidades_estudio",
+    "table": "unidades_estudio",
+    "verbose_name": "Unidad de Estudio",
+    "verbose_name_plural": "Unidades de Estudio",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "codigo",
+        "verbose_name": "Código",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": []
+      },
+      {
+        "name": "nombre",
+        "verbose_name": "Nombre de la unidad",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 200,
+        "choices": []
+      },
+      {
+        "name": "programa_id",
+        "verbose_name": "Programa académico",
+        "type": "ForeignKey",
+        "related_table": "programas",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "periodo",
+        "verbose_name": "Periodo (ej: 2026-2)",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": []
+      },
+      {
+        "name": "ciclo",
+        "verbose_name": "Ciclo / Semestre",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 50,
+        "choices": []
+      },
+      {
+        "name": "archivo",
+        "verbose_name": "Archivo (PDF con info completa)",
+        "type": "FileField",
+        "related_table": null,
+        "null": true,
+        "max_length": 100,
+        "choices": []
+      },
+      {
+        "name": "activo",
+        "verbose_name": "Activo",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "creado_en",
+        "verbose_name": "creado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "actualizado_en",
+        "verbose_name": "actualizado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "Usuario",
+    "app": "usuarios",
+    "table": "usuarios",
+    "verbose_name": "Usuario",
+    "verbose_name_plural": "Usuarios",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "password",
+        "verbose_name": "contraseña",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 128,
+        "choices": []
+      },
+      {
+        "name": "last_login",
+        "verbose_name": "último inicio de sesión",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "is_superuser",
+        "verbose_name": "es superusuario",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "username",
+        "verbose_name": "nombre de usuario",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 150,
+        "choices": []
+      },
+      {
+        "name": "first_name",
+        "verbose_name": "nombre",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 150,
+        "choices": []
+      },
+      {
+        "name": "last_name",
+        "verbose_name": "apellidos",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 150,
+        "choices": []
+      },
+      {
+        "name": "email",
+        "verbose_name": "dirección de correo electrónico",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 254,
+        "choices": []
+      },
+      {
+        "name": "is_staff",
+        "verbose_name": "es staff",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "is_active",
+        "verbose_name": "activo",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "date_joined",
+        "verbose_name": "fecha de alta",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "rol",
+        "verbose_name": "rol",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": [
+          [
+            "ADMIN",
+            "Administrador"
+          ],
+          [
+            "EMPRESA",
+            "Empresa"
+          ],
+          [
+            "PROFESOR",
+            "Profesor"
+          ],
+          [
+            "ESTUDIANTE",
+            "Estudiante"
+          ],
+          [
+            "EXPERTO",
+            "Experto"
+          ]
+        ]
+      },
+      {
+        "name": "telefono",
+        "verbose_name": "telefono",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": []
+      },
+      {
+        "name": "activo",
+        "verbose_name": "activo",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "fecha_creacion",
+        "verbose_name": "fecha creacion",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "LogActividad",
+    "app": "usuarios",
+    "table": "log_actividad",
+    "verbose_name": "Registro de actividad",
+    "verbose_name_plural": "Registros de actividad",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "usuario_id",
+        "verbose_name": "usuario",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "identificador",
+        "verbose_name": "identificador",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 150,
+        "choices": []
+      },
+      {
+        "name": "accion",
+        "verbose_name": "accion",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": [
+          [
+            "LOGIN",
+            "Inicio de sesion"
+          ],
+          [
+            "LOGIN_FALLIDO",
+            "Intento fallido de inicio de sesion"
+          ],
+          [
+            "LOGOUT",
+            "Cierre de sesion"
+          ],
+          [
+            "CREACION",
+            "Creacion de usuario"
+          ],
+          [
+            "CAMBIO_ROL",
+            "Cambio de rol"
+          ],
+          [
+            "CAMBIO_ESTADO",
+            "Activacion o desactivacion"
+          ],
+          [
+            "IMPORTACION",
+            "Importacion masiva"
+          ]
+        ]
+      },
+      {
+        "name": "detalle",
+        "verbose_name": "detalle",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "realizado_por_id",
+        "verbose_name": "realizado por",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "ip",
+        "verbose_name": "ip",
+        "type": "GenericIPAddressField",
+        "related_table": null,
+        "null": true,
+        "max_length": 39,
+        "choices": []
+      },
+      {
+        "name": "creado_en",
+        "verbose_name": "creado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  }
+]

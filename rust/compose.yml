@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: retosean_rust
+      POSTGRES_USER: retosean
+      POSTGRES_PASSWORD: ${RUST_POSTGRES_PASSWORD:-rust-local-dev}
+    volumes:
+      - rust_pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U retosean -d retosean_rust"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  web:
+    build: .
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: retosean
+      DB_PASSWORD: ${RUST_POSTGRES_PASSWORD:-rust-local-dev}
+      RUST_DB_NAME: retosean_rust
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - rust_media:/data
+    depends_on:
+      db:
+        condition: service_healthy
+volumes:
+  rust_pgdata:
+  rust_media:
