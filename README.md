@@ -65,6 +65,9 @@ En desarrollo los correos se imprimen en la consola: no hace falta configurar SM
 
 ## Arquitectura
 
+Las decisiones tomadas sobre puntos ambiguos del brief (ciclos de vida, documentos
+de empresa, permisos, stack) están en [`docs/decisions.md`](docs/decisions.md).
+
 ```
 apps/
   usuarios/        roles.py, decorators.py, context_processors.py, importacion.py, signals.py
