@@ -230,3 +230,37 @@ class ExportacionPresupuestoTests(TestCase):
     def test_formato_desconocido_es_404(self):
         self.client.force_login(self.admin)
         self.assertEqual(self.client.get(reverse("presupuesto:exportar", args=[self.reto.pk, "doc"])).status_code, 404)
+
+
+class ExportacionConTextoHostilTests(TestCase):
+    """Un texto libre con simbolos (descripciones, titulos) no debe tumbar ni alterar la descarga."""
+
+    def setUp(self):
+        self.admin = Usuario.objects.create_user(username="admin-hostil", password="x", rol="ADMIN")
+        empresa = Usuario.objects.create_user(username="empresa-hostil", password="x", rol="EMPRESA")
+        self.reto = Reto.objects.create(empresa=empresa, titulo="Reto <b> & cia", estado="en_curso")
+        self.presupuesto = Presupuesto.objects.create(reto=self.reto, monto_total=Decimal("1000.00"))
+        for descripcion in ("Tinta <b", "Pago <proveedor> & cia", "=1+1", "con\x01control"):
+            Gasto.objects.create(presupuesto=self.presupuesto, categoria="OTROS",
+                                 monto=Decimal("10.00"), descripcion=descripcion)
+        self.client.force_login(self.admin)
+
+    def _descargar(self, formato):
+        return self.client.get(reverse("presupuesto:exportar", args=[self.reto.pk, formato]))
+
+    def test_el_pdf_se_genera_con_simbolos_en_el_texto(self):
+        respuesta = self._descargar("pdf")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertTrue(respuesta.content.startswith(b"%PDF"))
+
+    def test_el_excel_no_convierte_texto_en_formula_ni_falla_con_caracteres_de_control(self):
+        import io
+
+        from openpyxl import load_workbook
+
+        respuesta = self._descargar("xlsx")
+        self.assertEqual(respuesta.status_code, 200)
+        celdas = [c for fila in load_workbook(io.BytesIO(respuesta.content)).active.iter_rows() for c in fila]
+        formula = next(c for c in celdas if c.value == "=1+1")
+        self.assertNotEqual(formula.data_type, "f")  # es texto, no una formula que Excel evalue
+        self.assertIn("concontrol", [c.value for c in celdas])  # el caracter de control se limpia

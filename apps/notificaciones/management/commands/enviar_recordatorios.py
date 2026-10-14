@@ -180,7 +180,11 @@ class Command(BaseCommand):
 
         total = 0
         for documento in vencidos:
-            marcar_documento_vencido(documento)
+            try:
+                marcar_documento_vencido(documento)
+            except Exception as error:  # un documento con problemas no debe frenar el barrido diario
+                self.stderr.write(f"No se pudo marcar como vencido {documento}: {error}")
+                continue
             total += 1
         return total
 

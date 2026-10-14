@@ -6,10 +6,12 @@ para Windows, a diferencia de WeasyPrint, que exige GTK/Pango nativos.
 
 import io
 from datetime import date
+from xml.sax.saxutils import escape
 
 from django.core.files.base import ContentFile
 from django.utils import timezone
 from openpyxl import Workbook
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from reportlab.lib import colors
@@ -62,6 +64,18 @@ def _describir_filtros(filtros):
 
 
 # ------------------------------------------------------------------ EXCEL
+def agregar_fila(hoja, valores):
+    """Escribe una fila sin que un texto de la base rompa el archivo ni se vuelva formula.
+
+    openpyxl convierte en formula todo texto que empiece por "=" y lanza error con
+    caracteres de control; los reportes llevan texto libre (descripciones, titulos).
+    """
+    hoja.append([ILLEGAL_CHARACTERS_RE.sub("", v) if isinstance(v, str) else v for v in valores])
+    for celda in hoja[hoja.max_row]:
+        if isinstance(celda.value, str) and celda.value.startswith("="):
+            celda.data_type = "s"
+
+
 def generar_excel(definicion, queryset, columnas, filtros):
     libro = Workbook()
     hoja = libro.active
@@ -77,7 +91,7 @@ def generar_excel(definicion, queryset, columnas, filtros):
     hoja.append([definicion.nombre])
     hoja["A2"].font = Font(bold=True, size=14, color="0A0A0A")
     hoja.append([f"Generado el {timezone.localtime():%d/%m/%Y %H:%M}"])
-    hoja.append([_describir_filtros(filtros)])
+    agregar_fila(hoja, [_describir_filtros(filtros)])
     hoja.append([])
 
     fila_encabezado = hoja.max_row + 1
@@ -90,7 +104,7 @@ def generar_excel(definicion, queryset, columnas, filtros):
 
     total = 0
     for fila in _filas(definicion, queryset, columnas):
-        hoja.append(fila)
+        agregar_fila(hoja, fila)
         total += 1
 
     for indice, columna in enumerate(columnas, start=1):
@@ -171,7 +185,7 @@ def generar_pdf(definicion, queryset, columnas, filtros):
         Paragraph(definicion.nombre, estilo_titulo),
         Paragraph(definicion.descripcion, estilo_meta),
         Paragraph(f"Generado el {timezone.localtime():%d/%m/%Y %H:%M}", estilo_meta),
-        Paragraph(_describir_filtros(filtros), estilo_meta),
+        Paragraph(escape(_describir_filtros(filtros)), estilo_meta),
         Spacer(1, 8),
     ]
 
@@ -180,7 +194,7 @@ def generar_pdf(definicion, queryset, columnas, filtros):
     for fila in _filas(definicion, queryset, columnas):
         if total >= MAX_FILAS_PDF:
             break
-        datos.append([Paragraph(str(valor), estilo_celda) for valor in fila])
+        datos.append([Paragraph(escape(str(valor)), estilo_celda) for valor in fila])
         total += 1
 
     if total == 0:

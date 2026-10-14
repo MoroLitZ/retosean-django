@@ -212,3 +212,17 @@ class NombreEnCertificadoTests(TestCase):
         reto = Reto.objects.create(empresa=cuenta, titulo="Reto certificado", estado="finalizado")
         certificado = Certificado.objects.create(reto=reto, usuario=cuenta, rol_participacion="EMPRESA")
         self.assertEqual(certificado.nombre_participante, "Innovaciones Andinas S.A.S.")
+
+
+class CertificadoConSimbolosTests(TestCase):
+    """El nombre del participante y el titulo del reto son texto libre: no deben romper el PDF."""
+
+    def test_el_certificado_se_genera_con_simbolos_en_nombre_y_titulo(self):
+        from .services import generar_pdf_certificado
+
+        empresa = Usuario.objects.create_user(username="empresa-simb", password="x", rol="EMPRESA", first_name="Acme <b")
+        estudiante = Usuario.objects.create_user(
+            username="est-simb", password="x", rol="ESTUDIANTE", first_name="Ana <i", last_name="O'Brien & Hijos")
+        reto = Reto.objects.create(empresa=empresa, titulo="Reto <b & cia", estado="finalizado")
+        certificado = Certificado.objects.create(reto=reto, usuario=estudiante, rol_participacion="ESTUDIANTE")
+        self.assertTrue(generar_pdf_certificado(certificado).startswith(b"%PDF"))
