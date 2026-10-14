@@ -1,6 +1,7 @@
 from django import forms
 from django.utils import timezone
 from .models import DocumentoEmpresa
+from .services import DIAS_MAXIMOS_CAMARA
 
 class CargarDocumentoForm(forms.ModelForm):
     class Meta:
@@ -23,8 +24,8 @@ class CargarDocumentoForm(forms.ModelForm):
         if tipo == "CAMARA_COMERCIO" and fecha_exp:
             hoy = timezone.now().date()
             dias = (hoy - fecha_exp).days
-            if dias > 30:
-                self.add_error("fecha_expedicion", f"La Camara de Comercio tiene {dias} dias y el maximo es 30.")
+            if dias > DIAS_MAXIMOS_CAMARA:
+                self.add_error("fecha_expedicion", f"La Camara de Comercio tiene {dias} dias y el maximo es {DIAS_MAXIMOS_CAMARA}.")
             elif dias < 0:
                 self.add_error("fecha_expedicion", "La fecha no puede ser futura.")
         return cleaned_data

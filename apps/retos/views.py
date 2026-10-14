@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from apps.empresas.decorators import solo_empresa_con_documentos
+from apps.empresas.services import historial_documental, verificar_participacion
 from apps.usuarios.roles import es_admin
 from apps.usuarios.decorators import (
     profesor_o_admin,
@@ -251,6 +252,7 @@ def revisar_reto(request, pk):
         comentario = form.cleaned_data['comentario']
         try:
             if accion == 'aprobar':
+                verificar_participacion(getattr(reto.empresa, 'empresa_perfil', None))
                 cambiar_estado_reto(reto, 'aprobado', request.user, comentario)
                 messages.success(request, f'Reto aprobado con el numero {reto.codigo}.')
             else:
@@ -259,7 +261,9 @@ def revisar_reto(request, pk):
         except TransicionInvalida as error:
             messages.error(request, str(error))
         return redirect('retos:admin_panel')
-    return render(request, 'retos/admin_revisar_reto.html', {'reto': reto, 'form': form})
+    empresa = getattr(reto.empresa, 'empresa_perfil', None)
+    historial = historial_documental(empresa) if empresa else []
+    return render(request, 'retos/admin_revisar_reto.html', {'reto': reto, 'form': form, 'historial': historial})
 
 
 @solo_administrador

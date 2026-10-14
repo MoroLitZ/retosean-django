@@ -21,9 +21,12 @@ from .services import (
     MAQUINA_CONVENIO,
     cambiar_estado_convenio,
     cargar_documento,
+    documentos_faltantes,
+    historial_documental,
     puede_la_empresa_operar,
     rechazar_documentos_por_listas,
     revisar_documento,
+    verificar_participacion,
 )
 
 
@@ -103,6 +106,8 @@ def panel_documentos_empresa(request):
             for doc in documentos
         ],
         'tiene_documentos': documentos.exists(),
+        'faltantes': documentos_faltantes(empresa) if empresa else [],
+        'historial': historial_documental(empresa) if empresa else [],
         'perfil': empresa
     }
     
@@ -159,6 +164,8 @@ def gestionar_postulacion(request, postulacion_id):
     if accion in {'aceptar', 'rechazar'}:
         aceptada = accion == 'aceptar'
         try:
+            if aceptada:
+                verificar_participacion(request.user.empresa_perfil)
             cambiar_estado(
                 postulacion, MAQUINA_POSTULACION, 'ACEPTADA' if aceptada else 'RECHAZADA',
                 request.user, 'Postulacion gestionada por la empresa.',
@@ -315,6 +322,8 @@ def admin_revisar_documentacion(request, empresa_id):
     return render(request, 'empresas/admin/revisar_documentos.html', {
         'empresa': empresa,
         'pendientes': pendientes,
+        'faltantes': documentos_faltantes(empresa),
+        'historial': historial_documental(empresa),
         'convenio_form': ConvenioForm(opciones=_opciones_convenio(empresa)),
         'historial_convenio': historial_de(empresa, campo='estado_convenio')[:10],
     })
