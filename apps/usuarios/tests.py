@@ -184,3 +184,67 @@ class LogActividadTests(TestCase):
         self.client.post(reverse("usuarios:alternar_estado", args=[admin.pk]))
         admin.refresh_from_db()
         self.assertTrue(admin.is_active)
+
+
+class PermisosYBienvenidaTests(TestCase):
+    """HU13: permisos especiales por modulo, correo de bienvenida y filtros de la bitacora."""
+
+    def setUp(self):
+        self.admin = Usuario.objects.create_user(username="admin-perm", password="x", rol="ADMIN", email="a@ean.edu.co")
+        self.lider = Usuario.objects.create_user(username="lider-perm", password="x", rol="ADMIN", email="l@ean.edu.co")
+
+    def test_admin_otorga_y_retira_el_permiso_de_listas_informa(self):
+        from .models import LogActividad
+
+        url = reverse("usuarios:permisos_usuario", args=[self.lider.pk])
+        self.client.force_login(self.admin)
+        self.assertEqual(self.client.get(url).status_code, 200)
+
+        self.client.post(url, {"permisos": ["empresas.cargar_listas_informa"]})
+        self.lider = Usuario.objects.get(pk=self.lider.pk)
+        self.assertTrue(self.lider.has_perm("empresas.cargar_listas_informa"))
+
+        self.client.post(url, {})
+        self.lider = Usuario.objects.get(pk=self.lider.pk)
+        self.assertFalse(self.lider.has_perm("empresas.cargar_listas_informa"))
+        self.assertEqual(LogActividad.objects.filter(usuario=self.lider, accion="CAMBIO_PERMISOS").count(), 2)
+
+    def test_permisos_desconocidos_se_ignoran(self):
+        self.client.force_login(self.admin)
+        self.client.post(reverse("usuarios:permisos_usuario", args=[self.lider.pk]), {"permisos": ["auth.delete_user"]})
+        self.assertFalse(Usuario.objects.get(pk=self.lider.pk).has_perm("auth.delete_user"))
+
+    def test_solo_el_admin_gestiona_permisos(self):
+        estudiante = Usuario.objects.create_user(username="est-perm", password="x", rol="ESTUDIANTE")
+        self.client.force_login(estudiante)
+        response = self.client.post(reverse("usuarios:permisos_usuario", args=[self.lider.pk]),
+                                    {"permisos": ["empresas.cargar_listas_informa"]})
+        self.assertNotEqual(response.status_code, 200)
+        self.assertFalse(Usuario.objects.get(pk=self.lider.pk).has_perm("empresas.cargar_listas_informa"))
+
+    def test_correo_de_bienvenida_con_enlace_para_definir_contrasena(self):
+        from django.core import mail
+
+        from .services import enviar_bienvenida
+
+        nuevo = Usuario.objects.create_user(username="nuevo-import", email="nuevo@ean.edu.co", rol="ESTUDIANTE")
+        nuevo.set_unusable_password()
+        nuevo.save()
+        with self.captureOnCommitCallbacks(execute=True):
+            enviar_bienvenida(nuevo)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("Bienvenido a RetosEAN", mail.outbox[0].subject)
+        self.assertIn("/usuarios/recuperar-contrasena/", mail.outbox[0].body)
+        self.assertEqual(mail.outbox[0].to, ["nuevo@ean.edu.co"])
+
+    def test_bitacora_filtra_por_usuario_y_fecha(self):
+        from .models import LogActividad
+
+        LogActividad.objects.create(identificador="buscado", accion="LOGIN")
+        LogActividad.objects.create(identificador="otro", accion="LOGIN")
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("usuarios:log_actividad"), {"usuario": "buscado"})
+        identificadores = {r.identificador for r in response.context["registros"]}
+        self.assertEqual(identificadores, {"buscado"})
+        response = self.client.get(reverse("usuarios:log_actividad"), {"desde": "2000-01-01", "hasta": "2000-01-02"})
+        self.assertEqual(len(response.context["registros"]), 0)
