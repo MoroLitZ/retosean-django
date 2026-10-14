@@ -14,6 +14,15 @@ class Empresa(models.Model):
     nit = models.CharField(max_length=20, unique=True)
     razon_social = models.CharField(max_length=150)
     sector_industrial = models.CharField(max_length=100)
+    # HU01: datos del registro de la organizacion.
+    TIPOS_CONVOCATORIA = [
+        ("RETO", "Reto"),
+        ("HACKATHON", "Hackathon"),
+        ("AMBOS", "Reto y hackathon"),
+    ]
+    tipo_convocatoria = models.CharField(max_length=20, choices=TIPOS_CONVOCATORIA, default="RETO")
+    area_responsable = models.CharField(max_length=150, blank=True)
+    sitio_web = models.URLField(blank=True)
     fecha_creacion = models.DateField(auto_now_add=True)
     ESTADO_VALIDACION = [
     ('PENDIENTE', 'Pendiente'),

@@ -120,6 +120,17 @@ class RegistroEmpresaForm(UserCreationForm):
     nit = forms.CharField(max_length=20, label="NIT de la Empresa", widget=forms.TextInput(attrs={"class": "form-control"}))
     razon_social = forms.CharField(max_length=150, label="Razon Social", widget=forms.TextInput(attrs={"class": "form-control"}))
     sector_industrial = forms.CharField(max_length=100, label="Sector Industrial", widget=forms.TextInput(attrs={"class": "form-control"}))
+    tipo_convocatoria = forms.ChoiceField(
+        choices=Empresa.TIPOS_CONVOCATORIA, label="Tipo de convocatoria", initial="RETO",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    area_responsable = forms.CharField(
+        max_length=150, label="Área responsable", widget=forms.TextInput(attrs={"class": "form-control"}),
+    )
+    sitio_web = forms.URLField(
+        required=False, label="Sitio web",
+        widget=forms.URLInput(attrs={"class": "form-control", "placeholder": "https://"}),
+    )
 
     class Meta(UserCreationForm.Meta):
         model = Usuario
@@ -136,6 +147,9 @@ class RegistroEmpresaForm(UserCreationForm):
                 nit=self.cleaned_data.get("nit"),
                 razon_social=self.cleaned_data.get("razon_social"),
                 sector_industrial=self.cleaned_data.get("sector_industrial"),
+                tipo_convocatoria=self.cleaned_data.get("tipo_convocatoria") or "RETO",
+                area_responsable=self.cleaned_data.get("area_responsable", ""),
+                sitio_web=self.cleaned_data.get("sitio_web", ""),
             )
         return user
 
@@ -211,6 +225,16 @@ class EditarPerfilForm(forms.ModelForm):
         label="Sector Industrial",
         widget=forms.TextInput(attrs={"class": "form-control"}),
     )
+    tipo_convocatoria = forms.ChoiceField(
+        choices=Empresa.TIPOS_CONVOCATORIA, required=False, label="Tipo de convocatoria",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    area_responsable = forms.CharField(
+        required=False, label="Área responsable", widget=forms.TextInput(attrs={"class": "form-control"}),
+    )
+    sitio_web = forms.URLField(
+        required=False, label="Sitio web", widget=forms.URLInput(attrs={"class": "form-control"}),
+    )
 
     class Meta:
         model = Usuario
@@ -247,6 +271,9 @@ class EditarPerfilForm(forms.ModelForm):
             if empresa:
                 self.fields["razon_social"].initial = empresa.razon_social
                 self.fields["sector_industrial"].initial = empresa.sector_industrial
+                self.fields["tipo_convocatoria"].initial = empresa.tipo_convocatoria
+                self.fields["area_responsable"].initial = empresa.area_responsable
+                self.fields["sitio_web"].initial = empresa.sitio_web
 
     def clean_email(self):
         email = self.cleaned_data.get("email")
@@ -287,5 +314,8 @@ class EditarPerfilForm(forms.ModelForm):
                 if empresa:
                     empresa.razon_social = self.cleaned_data.get("razon_social") or empresa.razon_social
                     empresa.sector_industrial = self.cleaned_data.get("sector_industrial") or empresa.sector_industrial
+                    empresa.tipo_convocatoria = self.cleaned_data.get("tipo_convocatoria") or empresa.tipo_convocatoria
+                    empresa.area_responsable = self.cleaned_data.get("area_responsable", "")
+                    empresa.sitio_web = self.cleaned_data.get("sitio_web", "")
                     empresa.save()
         return user

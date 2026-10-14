@@ -60,6 +60,7 @@ class RetoForm(BootstrapModelForm):
         fields = [
             'tipo',
             'titulo',
+            'nombre_corto',
             'descripcion',
             'area',
             'nivel_academico',
@@ -71,6 +72,9 @@ class RetoForm(BootstrapModelForm):
             'fecha_limite_postulacion',
             'premios',
             'criterios_evaluacion',
+            'uso_esperado_resultados',
+            'insumos_inicio',
+            'insumos_cierre',
             'tiene_convenio_institucional',
             'archivos',
         ]
@@ -81,6 +85,9 @@ class RetoForm(BootstrapModelForm):
             'descripcion': forms.Textarea(attrs={'rows': 4}),
             'premios': forms.Textarea(attrs={'rows': 3}),
             'criterios_evaluacion': forms.Textarea(attrs={'rows': 4}),
+            'uso_esperado_resultados': forms.Textarea(attrs={'rows': 3}),
+            'insumos_inicio': forms.Textarea(attrs={'rows': 3}),
+            'insumos_cierre': forms.Textarea(attrs={'rows': 3}),
             'tiene_convenio_institucional': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
