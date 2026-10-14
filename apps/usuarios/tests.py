@@ -248,3 +248,46 @@ class PermisosYBienvenidaTests(TestCase):
         self.assertEqual(identificadores, {"buscado"})
         response = self.client.get(reverse("usuarios:log_actividad"), {"desde": "2000-01-01", "hasta": "2000-01-02"})
         self.assertEqual(len(response.context["registros"]), 0)
+
+
+class RegistroEmpresaHU01Tests(TestCase):
+    """HU01: el registro de la empresa captura convocatoria, area responsable y sitio web."""
+
+    def _datos(self, **extra):
+        datos = {
+            "nit": "901222333", "razon_social": "Soluciones Andinas", "sector_industrial": "Tecnologia",
+            "tipo_convocatoria": "AMBOS", "area_responsable": "Innovacion", "sitio_web": "https://andinas.co",
+            "username": "andinas", "email": "contacto@andinas.co",
+            "password1": "Clave-Segura-2026", "password2": "Clave-Segura-2026",
+        }
+        datos.update(extra)
+        return datos
+
+    def test_registro_guarda_los_datos_de_la_organizacion(self):
+        from apps.empresas.models import Empresa
+
+        response = self.client.post(reverse("usuarios:registro") + "?tipo=empresa", self._datos())
+        self.assertEqual(response.status_code, 302)
+        empresa = Empresa.objects.get(nit="901222333")
+        self.assertEqual(empresa.tipo_convocatoria, "AMBOS")
+        self.assertEqual(empresa.area_responsable, "Innovacion")
+        self.assertEqual(empresa.sitio_web, "https://andinas.co")
+
+    def test_sitio_web_invalido_se_rechaza(self):
+        from apps.empresas.models import Empresa
+
+        self.client.post(reverse("usuarios:registro") + "?tipo=empresa", self._datos(sitio_web="no es una url"))
+        self.assertFalse(Empresa.objects.filter(nit="901222333").exists())
+
+    def test_la_empresa_edita_sus_datos_despues(self):
+        from apps.empresas.models import Empresa
+
+        self.client.post(reverse("usuarios:registro") + "?tipo=empresa", self._datos())
+        self.client.post(reverse("usuarios:editar_perfil"), {
+            "first_name": "Soluciones Andinas", "last_name": "", "email": "contacto@andinas.co", "telefono": "",
+            "razon_social": "Soluciones Andinas", "sector_industrial": "Tecnologia",
+            "tipo_convocatoria": "RETO", "area_responsable": "Transformacion digital", "sitio_web": "",
+        })
+        empresa = Empresa.objects.get(nit="901222333")
+        self.assertEqual(empresa.area_responsable, "Transformacion digital")
+        self.assertEqual(empresa.tipo_convocatoria, "RETO")
