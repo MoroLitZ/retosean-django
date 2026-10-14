@@ -82,7 +82,7 @@ class Command(BaseCommand):
             # Estudiantes interesados: lo tienen en favoritos o ya se postularon.
             interesados = Usuario.objects.filter(
                 Q(favoritos__reto=reto)
-                | Q(postulaciones__reto=reto, postulaciones__estado="PENDIENTE"),
+                | Q(postulaciones__reto=reto, postulaciones__estado__in=["PENDIENTE", "EN_REVISION"]),
                 rol="ESTUDIANTE", is_active=True,
             ).distinct()
             total += self._emitir(

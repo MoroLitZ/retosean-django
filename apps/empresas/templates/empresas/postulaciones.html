@@ -75,7 +75,7 @@
                 </td>
                 <td class="text-muted small">{{ p.fecha_postulacion|date:"d/m/Y H:i" }}</td>
                 <td>
-                  <span class="badge {% if p.estado == 'PENDIENTE' %}bg-warning text-dark{% elif p.estado == 'ACEPTADA' %}bg-success{% elif p.estado == 'RETIRADA' %}bg-secondary{% else %}bg-danger{% endif %}">
+                  <span class="badge {% if p.estado == 'PENDIENTE' %}bg-warning text-dark{% elif p.estado == 'EN_REVISION' %}bg-info text-dark{% elif p.estado == 'ACEPTADA' %}bg-success{% elif p.estado == 'RETIRADA' %}bg-secondary{% else %}bg-danger{% endif %}">
                     {{ p.get_estado_display }}
                   </span>
                 </td>
@@ -91,7 +91,7 @@
                     >
                       <i class="bi bi-eye"></i> Ver solicitud
                     </button>
-                  {% if p.estado == 'PENDIENTE' %}
+                  {% if p.sin_resolver %}
                     <form method="post" action="{% url 'empresas:gestionar_postulacion' postulacion_id=p.pk %}">
                       {% csrf_token %}
                       <button name="accion" value="aceptar" type="submit"
@@ -129,6 +129,10 @@
                     <div class="col-12">
                       <div class="small text-muted">Motivación del estudiante</div>
                       <div>{{ p.motivacion|default:"Sin información"|linebreaksbr }}</div>
+                    </div>
+                    <div class="col-12">
+                      <div class="small text-muted">Hoja de vida / portafolio</div>
+                      <div>{% if p.hoja_de_vida %}<a href="{{ p.hoja_de_vida.url }}" target="_blank"><i class="bi bi-file-pdf"></i> Ver archivo</a>{% else %}No adjuntó{% endif %}</div>
                     </div>
                   </div>
                 </td>

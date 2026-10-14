@@ -53,7 +53,7 @@
                                     Enviado el {{ entregable.fecha_entrega|date:"d/m/Y H:i" }}
                                 </p>
 
-                                {% if entregable.nota is not None %}
+                                {% if entregable.nota is not None and entregable.calificacion_publicada %}
                                     <div class="p-3 bg-white rounded border-start border-success border-3 mb-2">
                                         <span class="text-muted text-uppercase small fw-bold">Calificación</span>
                                         <h3 class="fw-bold text-success mb-0">
@@ -62,11 +62,11 @@
                                     </div>
                                 {% else %}
                                     <div class="alert alert-light border small mb-2 py-2">
-                                        <i class="bi bi-hourglass-split"></i> Aún sin calificar.
+                                        <i class="bi bi-hourglass-split"></i> {% if entregable.estado == 'CALIFICADO' %}Calificado; el docente aún no publica la nota.{% else %}Aún sin calificar.{% endif %}
                                     </div>
                                 {% endif %}
 
-                                {% if entregable.comentario_profesor %}
+                                {% if entregable.comentario_profesor and entregable.calificacion_publicada %}
                                     <div class="mb-2">
                                         <span class="text-muted text-uppercase small fw-bold">Retroalimentación del docente</span>
                                         <p class="mb-0 small">{{ entregable.comentario_profesor|linebreaksbr }}</p>

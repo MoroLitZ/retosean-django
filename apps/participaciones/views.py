@@ -57,7 +57,7 @@ def postular_a_reto(request, reto_id):
         if perfil.programa:
             inicial['programa'] = perfil.programa.nombre
 
-    form = PostulacionForm(request.POST or None, instance=postulacion, initial=inicial)
+    form = PostulacionForm(request.POST or None, request.FILES or None, instance=postulacion, initial=inicial)
     if request.method == 'POST' and form.is_valid():
         postulacion = form.save()
         if creada:
@@ -67,6 +67,7 @@ def postular_a_reto(request, reto_id):
                 postulacion, MAQUINA_POSTULACION, 'PENDIENTE', request.user, 'Postulacion reenviada.'
             )
         _notificar_nueva_postulacion(reto, request.user)
+        _confirmar_postulacion_al_estudiante(postulacion)
         messages.success(
             request,
             '\u00a1Tu postulaci\u00f3n al reto "' + reto.titulo + '" fue enviada! '
@@ -78,8 +79,25 @@ def postular_a_reto(request, reto_id):
         'form': form,
         'reto': reto,
         'titulo': 'Postularse a: ' + reto.titulo,
-        'ya_postulado': (not creada) and postulacion.estado == 'PENDIENTE',
+        'ya_postulado': (not creada) and postulacion.sin_resolver,
     })
+
+
+def _confirmar_postulacion_al_estudiante(postulacion):
+    """Confirmacion al estudiante (HU11): campana y correo."""
+    from django.urls import reverse
+
+    from apps.notificaciones.services import notificar
+
+    notificar(
+        postulacion.estudiante, 'POSTULACION_RECIBIDA',
+        mensaje=(
+            f'Recibimos tu postulacion al reto "{postulacion.reto.titulo}". '
+            'Te avisaremos cuando la empresa la revise.'
+        ),
+        link=reverse('academico:mis_postulaciones'),
+        clave_dedupe=f'postulacion-recibida:{postulacion.pk}:{postulacion.estado}',
+    )
 
 
 def _notificar_nueva_postulacion(reto, estudiante):
@@ -154,7 +172,7 @@ def retirar_postulacion(request, reto_id):
     postulacion = get_object_or_404(
         PostulacionReto, reto_id=reto_id, estudiante=request.user
     )
-    if postulacion.estado != 'PENDIENTE':
+    if not postulacion.sin_resolver:
         messages.error(
             request,
             'Solo puedes retirar una postulacion que siga pendiente de respuesta.'
