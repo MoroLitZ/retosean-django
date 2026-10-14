@@ -110,20 +110,21 @@ class RevisionRetoForm(forms.Form):
 
 
 class EstadoRetoForm(forms.Form):
+    """Cambio manual de estado. Las opciones son las transiciones validas
+    desde el estado actual (ver `retos.services.estados_manuales_disponibles`)."""
+
     estado = forms.ChoiceField(
-        choices=[
-            ('aprobado', 'Aprobado'),
-            ('en_curso', 'En curso'),
-            ('pausado', 'Pausado'),
-            ('finalizado', 'Finalizado'),
-            ('cancelado', 'Cancelado'),
-        ],
+        choices=[],
         widget=forms.Select(attrs={'class': 'form-select'}),
     )
     comentario = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
     )
+
+    def __init__(self, *args, opciones=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['estado'].choices = list(opciones)
 
 
 class SeguimientoRetoForm(BootstrapModelForm):
@@ -212,7 +213,7 @@ class IntegracionAcademicaForm(BootstrapModelForm):
         from apps.academico.models import Ecosistema, Facultad
 
         self.fields['reto'].queryset = Reto.objects.filter(
-            estado__in=['aprobado', 'en_curso', 'pausado']
+            estado__in=Reto.ESTADOS_INTEGRABLES
         ).order_by('titulo')
 
         facultades = list(Facultad.objects.order_by('nombre').values_list('nombre', flat=True))

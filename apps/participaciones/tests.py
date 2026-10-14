@@ -3,6 +3,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from apps.academico.models import Facultad, Programa
+from apps.empresas.models import Empresa
 from apps.evaluacion.models import Entregable
 from apps.notificaciones.models import Notificacion
 from apps.retos.models import EquipoRetoAcademico, Reto
@@ -17,7 +18,7 @@ class AccesoAEntregablesTests(TestCase):
 
     def setUp(self):
         self.empresa = Usuario.objects.create_user(username="empresa-part", password="x", rol="EMPRESA")
-        self.reto = Reto.objects.create(empresa=self.empresa, titulo="Reto abierto", estado="aprobado")
+        self.reto = Reto.objects.create(empresa=self.empresa, titulo="Reto abierto", estado="en_curso")
         self.aceptado = Usuario.objects.create_user(username="est-ok", password="x", rol="ESTUDIANTE")
         self.intruso = Usuario.objects.create_user(username="est-intruso", password="x", rol="ESTUDIANTE")
         Postulacion.objects.create(reto=self.reto, estudiante=self.aceptado, estado="ACEPTADA")
@@ -96,7 +97,7 @@ class PostulacionProgramaDropdownTests(TestCase):
             facultad=self.facultad,
         )
         self.empresa = Usuario.objects.create_user(username="empresa-pf", password="x", rol="EMPRESA")
-        self.reto = Reto.objects.create(empresa=self.empresa, titulo="Reto formulario", estado="aprobado")
+        self.reto = Reto.objects.create(empresa=self.empresa, titulo="Reto formulario", estado="abierto")
         self.estudiante = Usuario.objects.create_user(username="est-pf", password="x", rol="ESTUDIANTE")
 
     def test_formulario_programa_se_renderiza_como_select(self):
@@ -148,10 +149,12 @@ class FlujoNotificacionesYRevisionPostulacionTests(TestCase):
         self.estudiante = Usuario.objects.create_user(
             username="est-revision", password="x", rol="ESTUDIANTE", email="est@ean.edu.co"
         )
+        # La vista de postulaciones de la empresa exige un perfil de empresa.
+        Empresa.objects.create(usuario=self.empresa, nit="900555111", razon_social="Empresa Revision SAS")
         self.reto = Reto.objects.create(
             empresa=self.empresa,
             titulo="Reto para revisar postulaciones",
-            estado="aprobado",
+            estado="abierto",
         )
 
     def _postular(self):
@@ -194,3 +197,25 @@ class FlujoNotificacionesYRevisionPostulacionTests(TestCase):
         self.assertContains(response, "Motivación del estudiante")
         self.assertContains(response, "Python, analitica y trabajo en equipo")
         self.assertContains(response, "Ingenieria de Sistemas")
+
+
+class ListaMisEntregablesTests(TestCase):
+    """La lista de retos del estudiante en "Mis entregables" enlaza a cada reto.
+
+    El template recorria los retos como si fueran postulaciones
+    (`postulacion.reto.id`), asi que el enlace salia vacio y la pagina fallaba
+    en cuanto el estudiante participaba en algun reto.
+    """
+
+    def test_lista_de_retos_del_estudiante_se_muestra(self):
+        empresa = Usuario.objects.create_user(username="empresa-lista", password="x", rol="EMPRESA")
+        estudiante = Usuario.objects.create_user(username="est-lista", password="x", rol="ESTUDIANTE")
+        reto = Reto.objects.create(empresa=empresa, titulo="Reto con entregables", estado="en_curso")
+        Postulacion.objects.create(reto=reto, estudiante=estudiante, estado="ACEPTADA")
+
+        self.client.force_login(estudiante)
+        response = self.client.get(reverse("participaciones:mis_entregables"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Reto con entregables")
+        self.assertContains(response, reverse("participaciones:mis_entregables_reto", args=[reto.pk]))

@@ -2,7 +2,7 @@
 
 A diferencia de `sembrar_catalogo --demo` (que crea un usuario por rol y un
 solo reto aprobado), este comando crea, para cada modelo con `choices` de
-estado, al menos una fila en cada valor posible: retos en sus 8 estados,
+estado, al menos una fila en cada valor posible: retos en sus 9 estados,
 hackathones en sus 5, postulaciones en sus 4, entregables en sus 3, empresas
 cruzando validacion x listas restrictivas, documentos legales en sus 5
 estados, integraciones academicas en sus 5, etc. Asi cualquier vista de
@@ -71,7 +71,7 @@ class Command(BaseCommand):
         # EvaluacionCriterio.criterio usa on_delete=PROTECT hacia CriterioRubrica,
         # asi que la cascada Reto -> Rubrica -> CriterioRubrica se bloquea si no
         # se limpian antes las evaluaciones que puntuan esos criterios.
-        retos_demo = Reto.objects.filter(titulo__startswith="DEMO ·")
+        retos_demo = Reto.todos.filter(titulo__startswith="DEMO ·")
         EvaluacionCriterio.objects.filter(evaluacion__entregable__reto__in=retos_demo).delete()
         borrados, _ = retos_demo.delete()
 
@@ -254,10 +254,11 @@ class Command(BaseCommand):
             "borrador": [],
             "en_revision": ["en_revision"],
             "aprobado": ["en_revision", "aprobado"],
+            "abierto": ["en_revision", "aprobado", "abierto"],
             "rechazado": ["en_revision", "rechazado"],
-            "en_curso": ["en_revision", "aprobado", "en_curso"],
-            "pausado": ["en_revision", "aprobado", "en_curso", "pausado"],
-            "finalizado": ["en_revision", "aprobado", "en_curso", "finalizado"],
+            "en_curso": ["en_revision", "aprobado", "abierto", "en_curso"],
+            "pausado": ["en_revision", "aprobado", "abierto", "en_curso", "pausado"],
+            "finalizado": ["en_revision", "aprobado", "abierto", "en_curso", "finalizado"],
             "cancelado": ["en_revision", "aprobado", "cancelado"],
         }[estado_objetivo]
         for paso in secuencia:
@@ -268,7 +269,7 @@ class Command(BaseCommand):
         return reto
 
     def _sembrar_retos_en_todos_los_estados(self, u):
-        estados = ["borrador", "en_revision", "aprobado", "rechazado", "en_curso", "pausado", "finalizado", "cancelado"]
+        estados = ["borrador", "en_revision", "aprobado", "abierto", "rechazado", "en_curso", "pausado", "finalizado", "cancelado"]
         empresas_ciclo = itertools.cycle(["verificada", "pendiente", "revision", "rechazada"])
         for estado in estados:
             self._reto_base(

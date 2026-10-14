@@ -12,16 +12,19 @@ from apps.participaciones.forms import PostulacionForm
 from apps.evaluacion.models import Entregable
 from apps.usuarios.forms import EntregableForm
 from apps.usuarios.decorators import solo_estudiante
+from apps.evaluacion.services import registrar_entrega
+from apps.participaciones.services import MAQUINA_POSTULACION
+from apps.seguimiento.services import cambiar_estado, registrar_cambio_estado
 
 
 @solo_estudiante
 def postular_a_reto(request, reto_id):
     """Formulario de postulacion del estudiante a un reto.
 
-    Se aceptan tambien los retos 'en_curso': son los que el explorador lista
-    junto a los aprobados, y exigir solo 'aprobado' daba un 404 desde ahi.
+    Solo se aceptan postulaciones a retos en estado Abierto, que son los que
+    lista el explorador (HU10/HU11).
     """
-    reto = get_object_or_404(Reto, pk=reto_id, estado__in=['aprobado', 'en_curso'])
+    reto = get_object_or_404(Reto, pk=reto_id, estado__in=Reto.ESTADOS_ABIERTOS)
 
     if reto.fecha_limite_postulacion and reto.fecha_limite_postulacion < timezone.localdate():
         messages.error(
@@ -56,9 +59,13 @@ def postular_a_reto(request, reto_id):
 
     form = PostulacionForm(request.POST or None, instance=postulacion, initial=inicial)
     if request.method == 'POST' and form.is_valid():
-        postulacion = form.save(commit=False)
-        postulacion.estado = 'PENDIENTE'
-        postulacion.save()
+        postulacion = form.save()
+        if creada:
+            registrar_cambio_estado(postulacion, '', 'PENDIENTE', request.user, 'Postulacion enviada.')
+        elif postulacion.estado == 'RETIRADA':
+            cambiar_estado(
+                postulacion, MAQUINA_POSTULACION, 'PENDIENTE', request.user, 'Postulacion reenviada.'
+            )
         _notificar_nueva_postulacion(reto, request.user)
         messages.success(
             request,
@@ -154,8 +161,9 @@ def retirar_postulacion(request, reto_id):
         )
         return redirect('academico:mis_postulaciones')
 
-    postulacion.estado = 'RETIRADA'
-    postulacion.save(update_fields=['estado'])
+    cambiar_estado(
+        postulacion, MAQUINA_POSTULACION, 'RETIRADA', request.user, 'Postulacion retirada por el estudiante.'
+    )
     _notificar_postulacion_retirada(postulacion)
     messages.success(
         request,
@@ -245,7 +253,7 @@ def mis_entregables(request, reto_id=None):
         return redirect('participaciones:mis_entregables')
 
     if reto_id:
-        reto = get_object_or_404(Reto, pk=reto_id, estado__in=['aprobado', 'en_curso', 'finalizado'])
+        reto = get_object_or_404(Reto, pk=reto_id, estado__in=Reto.ESTADOS_VISIBLES_ESTUDIANTE)
         if not _estudiante_participa_en(request.user, reto):
             messages.error(
                 request,
@@ -276,8 +284,8 @@ def mis_entregables(request, reto_id=None):
                     entregable.archivo = form.cleaned_data['archivo']
                     entregable.es_final = form.cleaned_data.get('es_final', False)
                     entregable.comentario_estudiante = form.cleaned_data.get('comentario_estudiante', '')
-                    entregable.estado = 'ENVIADO'
                     entregable.save()
+                registrar_entrega(entregable, request.user, created)
                 _notificar_entregable_recibido(reto, request.user, entregable)
                 messages.success(request, 'Entregable guardado con exito!')
                 return redirect('participaciones:mis_entregables_reto', reto_id=reto.id)

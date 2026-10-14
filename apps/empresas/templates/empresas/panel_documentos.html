@@ -23,6 +23,18 @@
     </p>
   </div>
 
+  {% if perfil %}
+  <div class="alert {% if perfil.tiene_convenio_vigente %}alert-success{% else %}alert-light border{% endif %} small mb-4">
+    <i class="bi bi-file-earmark-text me-2"></i><strong>Convenio institucional:</strong>
+    {{ perfil.get_estado_convenio_display }}
+    {% if perfil.tiene_convenio_vigente %}
+      &middot; vigente hasta el {{ perfil.fecha_vencimiento_convenio|date:'d/m/Y' }}
+    {% elif perfil.estado_convenio == 'FIRMADO' %}
+      &middot; vencido el {{ perfil.fecha_vencimiento_convenio|date:'d/m/Y' }}
+    {% endif %}
+  </div>
+  {% endif %}
+
   <!-- ⚠️ Bloque de Mensajes / Notificaciones del Sistema (Lógica de HEAD) -->
   {% if messages %}
     <div class="row mb-4">

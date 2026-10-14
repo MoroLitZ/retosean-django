@@ -11,6 +11,9 @@ from apps.seguimiento.models import IntegracionAcademica
 
 from .forms import ComentarioEntregableForm, RubricaForm
 from apps.notificaciones.services import notificar
+from apps.seguimiento.services import cambiar_estado
+
+from .services import MAQUINA_ENTREGABLE, marcar_en_revision
 
 from .models import CriterioRubrica, Entregable, Evaluacion, EvaluacionCriterio, Rubrica
 
@@ -24,9 +27,9 @@ def panel_profesor(request):
     # Al abrir el panel, el profesor "abre" sus entregables para revisarlos:
     # los que siguen ENVIADO pasan a EN_REVISION. Es el único punto donde ese
     # estado se alcanza; los KPIs y las plantillas ya lo contaban.
-    Entregable.objects.filter(
-        reto_id__in=_retos_profesor(request.user), estado="ENVIADO"
-    ).update(estado="EN_REVISION")
+    marcar_en_revision(
+        Entregable.objects.filter(reto_id__in=_retos_profesor(request.user)), request.user
+    )
 
     entregables = Entregable.objects.filter(reto_id__in=_retos_profesor(request.user)).select_related(
         "reto", "estudiante", "equipo"
@@ -82,8 +85,11 @@ def calificar(request, pk):
         EvaluacionCriterio.objects.create(evaluacion=evaluacion, criterio=criterio, puntaje=valor)
     entregable.nota = nota
     entregable.comentario_profesor = comentario
-    entregable.estado = "CALIFICADO"
-    entregable.save(update_fields=["nota", "comentario_profesor", "estado", "actualizado_en"])
+    cambiar_estado(
+        entregable, MAQUINA_ENTREGABLE, "CALIFICADO", request.user,
+        f"Calificado con {nota} de {entregable.puntaje_maximo}.",
+        update_fields=["nota", "comentario_profesor"],
+    )
     if comentario:
         entregable.historial_comentarios.create(autor=request.user, comentario=comentario)
 

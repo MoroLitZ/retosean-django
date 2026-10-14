@@ -33,7 +33,23 @@ python manage.py createsuperuser
 python manage.py runserver
 ```
 
-Requiere PostgreSQL. Todas las credenciales salen de `.env`; nunca se comitean.
+Requiere PostgreSQL (es la única base de datos soportada; no hay configuración SQLite).
+Todas las credenciales salen de `.env`; nunca se comitean.
+
+Crear el rol y la base de datos una sola vez, como superusuario `postgres`:
+
+```sql
+CREATE ROLE retosean LOGIN CREATEDB PASSWORD 'tu-contraseña';
+CREATE DATABASE retosean_django OWNER retosean ENCODING 'UTF8' TEMPLATE template0;
+```
+
+`CREATEDB` es necesario para `python manage.py test`, que crea y destruye la base
+temporal `test_retosean_django`. Para tener datos de prueba después de migrar:
+
+```bash
+python manage.py sembrar_catalogo --demo
+python manage.py sembrar_demo_completa
+```
 
 ### Variables de entorno
 

@@ -88,8 +88,11 @@ class NotificacionesDeDominioTests(TestCase):
         self.assertEqual(notificacion.tipo, "ERROR")
         self.assertIn("Falta el alcance.", notificacion.mensaje)
 
-    def test_estado_sin_cambio_no_notifica(self):
-        cambiar_estado_reto(self.reto, "en_revision", self.admin)
+    def test_estado_sin_cambio_se_rechaza_y_no_notifica(self):
+        from apps.seguimiento.services import TransicionInvalida
+
+        with self.assertRaises(TransicionInvalida):
+            cambiar_estado_reto(self.reto, "en_revision", self.admin)
         self.assertEqual(Notificacion.objects.filter(usuario=self.empresa).count(), 0)
 
 
