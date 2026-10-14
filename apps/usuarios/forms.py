@@ -9,8 +9,8 @@ from apps.evaluacion.models import Entregable
 
 
 class LoginForm(AuthenticationForm):
-    username = forms.CharField(label="Usuario o correo", widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "usuario"}))
-    password = forms.CharField(label="Contrasena", widget=forms.PasswordInput(attrs={"class": "form-control"}))
+    username = forms.CharField(label="Usuario o correo", widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "usuario", "autocomplete": "username"}))
+    password = forms.CharField(label="Contrasena", widget=forms.PasswordInput(attrs={"class": "form-control", "autocomplete": "current-password"}))
 
     def clean_username(self):
         username = self.cleaned_data.get("username")
