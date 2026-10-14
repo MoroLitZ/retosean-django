@@ -2,8 +2,15 @@ import os
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import IntegrityError, models, transaction
 from django.utils import timezone
+
+
+class RetoManager(models.Manager):
+    """Manager por defecto: excluye los retos eliminados logicamente."""
+
+    def get_queryset(self):
+        return super().get_queryset().filter(eliminado_en__isnull=True)
 
 class Reto(models.Model):
     TIPO_CHOICES = [
@@ -34,12 +41,32 @@ class Reto(models.Model):
         ("borrador", "Borrador"),
         ("en_revision", "En Revision"),
         ("aprobado", "Aprobado"),
+        ("abierto", "Abierto"),
         ("rechazado", "Rechazado"),
         ("en_curso", "En Curso"),
         ("pausado", "Pausado"),
         ("finalizado", "Finalizado"),
         ("cancelado", "Cancelado"),
     ]
+
+    # Grupos de estados que usan vistas, tableros y recordatorios. Las
+    # transiciones validas entre estados viven en `retos.services.MAQUINA_RETO`.
+    ESTADOS_EDITABLES_EMPRESA = ("borrador", "rechazado")
+    # Aprobado o mas alla, sin contar cancelado: el reto ya paso la revision.
+    ESTADOS_VIGENTES = ("aprobado", "abierto", "en_curso", "pausado", "finalizado")
+    # Retos vivos para los indicadores de "retos activos".
+    ESTADOS_ACTIVOS = ("aprobado", "abierto", "en_curso", "pausado")
+    # Visibles para estudiantes y abiertos a postulacion (HU10/HU11).
+    ESTADOS_ABIERTOS = ("abierto",)
+    # El estudiante puede consultar el detalle desde que el reto se abre.
+    ESTADOS_VISIBLES_ESTUDIANTE = ("abierto", "en_curso", "pausado", "finalizado")
+    # Integrables por un profesor (HU03) y con cierre gestionable (HU08).
+    ESTADOS_INTEGRABLES = ("aprobado", "abierto", "en_curso", "pausado")
+
+    PREFIJOS_CONSECUTIVO = {"reto": "RETO", "hackathon": "HACK"}
+
+    objects = RetoManager()
+    todos = models.Manager()
 
     empresa = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -79,22 +106,41 @@ class Reto(models.Model):
     documento_soporte = models.FileField(upload_to="retos/soportes/", blank=True, null=True)
     criterios_evaluacion = models.TextField(blank=True)
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default="borrador")
-    consecutivo = models.PositiveIntegerField(unique=True, null=True, blank=True)
+    # Consecutivo por tipo y por anio de aprobacion: RETO-2026-001, HACK-2026-001.
+    consecutivo = models.PositiveIntegerField(null=True, blank=True)
+    anio_consecutivo = models.PositiveSmallIntegerField(null=True, blank=True)
     comentarios_revision = models.TextField(blank=True)
     fecha_envio_revision = models.DateTimeField(null=True, blank=True)
     fecha_aprobacion = models.DateTimeField(null=True, blank=True)
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
     tiene_convenio_institucional = models.BooleanField(default=False)
+    # Borrado logico: la empresa solo puede eliminar borradores y el registro se
+    # conserva para auditoria. `Reto.objects` los oculta; `Reto.todos` no.
+    eliminado_en = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "retos"
         ordering = ["-actualizado_en"]
         verbose_name = "Reto"
         verbose_name_plural = "Retos"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tipo", "anio_consecutivo", "consecutivo"],
+                name="reto_consecutivo_unico_por_tipo_y_anio",
+            ),
+        ]
 
     def __str__(self):
         return self.titulo or f"Reto #{self.pk or 'nuevo'}"
+
+    @property
+    def codigo(self):
+        """Numero visible del reto, p. ej. RETO-2026-001. Vacio hasta su aprobacion."""
+        if not self.consecutivo or not self.anio_consecutivo:
+            return ""
+        prefijo = self.PREFIJOS_CONSECUTIVO.get(self.tipo, "RETO")
+        return f"{prefijo}-{self.anio_consecutivo}-{self.consecutivo:03d}"
 
     def campos_faltantes_para_revision(self):
         """
@@ -111,18 +157,44 @@ class Reto(models.Model):
 
     @property
     def puede_editar_empresa(self):
-        return self.estado in {"borrador", "rechazado"}
+        return self.estado in self.ESTADOS_EDITABLES_EMPRESA
+
+    @property
+    def puede_eliminar_empresa(self):
+        return self.estado == "borrador"
 
     @property
     def esta_aprobado_o_activo(self):
-        return self.estado in {"aprobado", "en_curso", "pausado", "finalizado"}
+        return self.estado in self.ESTADOS_VIGENTES
+
+    @property
+    def esta_abierto(self):
+        return self.estado in self.ESTADOS_ABIERTOS
 
     def asignar_consecutivo_si_falta(self):
+        """Asigna el siguiente consecutivo del tipo del reto para el anio en curso.
+
+        La restriccion unica (tipo, anio, consecutivo) protege contra dos
+        aprobaciones simultaneas: si otra transaccion toma el mismo numero, se
+        reintenta con el siguiente.
+        """
         if self.consecutivo:
             return
-        ultimo = Reto.objects.exclude(consecutivo__isnull=True).order_by("-consecutivo").first()
-        self.consecutivo = (ultimo.consecutivo if ultimo else 0) + 1
-        self.save()
+        anio = timezone.localdate().year
+        for _ in range(5):
+            ultimo = (
+                Reto.todos.filter(tipo=self.tipo, anio_consecutivo=anio)
+                .aggregate(maximo=models.Max("consecutivo"))["maximo"]
+            )
+            self.anio_consecutivo = anio
+            self.consecutivo = (ultimo or 0) + 1
+            try:
+                with transaction.atomic():
+                    self.save(update_fields=["consecutivo", "anio_consecutivo"])
+                return
+            except IntegrityError:
+                continue
+        raise IntegrityError("No se pudo asignar un consecutivo unico al reto.")
 
 
 class HistorialEstadoReto(models.Model):

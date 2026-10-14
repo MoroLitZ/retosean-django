@@ -181,12 +181,23 @@
                             <div class="small">Los certificados han sido emitidos y están disponibles para descarga de todos los participantes. Encuestas generadas: {{ cierre.encuestas.count }}.</div>
                         </div>
                     </div>
+                    {% if puede_finalizar %}
                     <form method="post" action="{% url 'cierre:finalizar' reto.pk %}">
                         {% csrf_token %}
                         <button class="btn btn-outline-primary w-100" type="submit">
                             <i class="bi bi-arrow-repeat me-1"></i> Regenerar / Actualizar Certificados
                         </button>
                     </form>
+                    {% endif %}
+                {% elif not puede_finalizar %}
+                    <p class="small text-muted mb-0">
+                        El administrador o el profesor del reto realizarán el cierre formal y la emisión de certificados.
+                    </p>
+                {% elif reto.estado != 'en_curso' %}
+                    <p class="small text-muted mb-0">
+                        El reto está en estado <strong>{{ reto.get_estado_display }}</strong>.
+                        Solo se puede finalizar un reto en curso.
+                    </p>
                 {% else %}
                     <p class="small text-muted mb-3">
                         Al **Finalizar el reto**, se cambiará su estado a <strong>FINALIZADO</strong>, se auto-vincularán los entregables de los estudiantes y se <strong>emitirán automáticamente los certificados PDF</strong> para los estudiantes y participantes.

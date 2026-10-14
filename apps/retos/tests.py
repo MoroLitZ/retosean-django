@@ -10,6 +10,8 @@ from django.utils import timezone
 from apps.empresas.models import Empresa
 from apps.notificaciones.models import Notificacion
 from .forms import IntegracionAcademicaForm, MAX_UPLOAD_SIZE, RetoForm, SeguimientoRetoForm
+from apps.seguimiento.models import IntegracionAcademica
+
 from .models import Reto
 
 Usuario = get_user_model()
@@ -161,7 +163,7 @@ class FlujoIntegracionAcademicaTests(TestCase):
     """
 
     def setUp(self):
-        from apps.academico.models import Facultad, Programa
+        from apps.academico.models import Ecosistema, Facultad, Programa
         from apps.unidades_estudio.models import UnidadEstudio
 
         self.empresa = Usuario.objects.create_user(
@@ -180,6 +182,8 @@ class FlujoIntegracionAcademicaTests(TestCase):
         self.programa = Programa.objects.create(
             nombre="Ingenieria de Sistemas", facultad=self.facultad
         )
+        # El formulario solo acepta ecosistemas del catalogo administrado.
+        Ecosistema.objects.create(nombre="Ecosistema de innovacion")
         self.unidad = UnidadEstudio.objects.create(
             codigo="ISIS-101",
             nombre="Arquitectura de Software",
@@ -453,3 +457,142 @@ class NotificacionPostulacionDocenteTests(TestCase):
                 evento="INTEGRACION_ENVIADA_REVISION",
             ).exists()
         )
+
+
+class CicloDeVidaRetoTests(TestCase):
+    """Ciclo unificado del brief: transiciones validas, Abierto, consecutivos
+    por tipo y anio, y borrado logico solo en borrador."""
+
+    def setUp(self):
+        from apps.empresas.models import Empresa
+
+        self.admin = Usuario.objects.create_user(username="admin-ciclo", password="x", rol="ADMIN")
+        self.empresa = Usuario.objects.create_user(username="empresa-ciclo", password="x", rol="EMPRESA")
+        Empresa.objects.create(usuario=self.empresa, nit="900100200", razon_social="Ciclo SAS", renuncio_a_convenio=True)
+        self.profesor = Usuario.objects.create_user(username="profe-ciclo", password="x", rol="PROFESOR")
+        self.estudiante = Usuario.objects.create_user(username="est-ciclo", password="x", rol="ESTUDIANTE")
+
+    def _reto(self, estado="borrador", tipo="reto", titulo="Reto ciclo"):
+        return Reto.objects.create(empresa=self.empresa, titulo=titulo, tipo=tipo, estado=estado)
+
+    def _aprobar(self, reto):
+        from .services import cambiar_estado_reto
+
+        cambiar_estado_reto(reto, "aprobado", self.admin, "Ok")
+        reto.refresh_from_db()
+        return reto
+
+    # --- transiciones -------------------------------------------------------
+    def test_transicion_invalida_se_rechaza_sin_cambiar_estado(self):
+        from apps.seguimiento.services import TransicionInvalida
+
+        from .services import cambiar_estado_reto
+
+        reto = self._reto("borrador")
+        with self.assertRaises(TransicionInvalida):
+            cambiar_estado_reto(reto, "aprobado", self.admin)
+        reto.refresh_from_db()
+        self.assertEqual(reto.estado, "borrador")
+        self.assertFalse(reto.historial_estados.exists())
+
+    def test_estados_finales_no_admiten_cambios(self):
+        from .services import MAQUINA_RETO
+
+        for final in ("finalizado", "cancelado"):
+            self.assertTrue(MAQUINA_RETO.es_final(final))
+
+    def test_cualquier_estado_no_final_puede_cancelarse(self):
+        from .services import MAQUINA_RETO
+
+        for estado in ("borrador", "en_revision", "aprobado", "abierto", "rechazado", "en_curso", "pausado"):
+            self.assertTrue(MAQUINA_RETO.puede(estado, "cancelado"), estado)
+
+    def test_cambio_manual_solo_ofrece_transiciones_validas(self):
+        reto = self._reto("en_curso")
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("retos:admin_cambiar_estado", args=[reto.pk]))
+        opciones = [valor for valor, _ in response.context["opciones"]]
+        self.assertEqual(sorted(opciones), ["cancelado", "pausado"])
+
+        # "finalizado" se hace por el cierre formal, no desde el cambio manual.
+        self.client.post(reverse("retos:admin_cambiar_estado", args=[reto.pk]), {"estado": "finalizado"})
+        reto.refresh_from_db()
+        self.assertEqual(reto.estado, "en_curso")
+
+    def test_reto_rechazado_no_se_reenvia_sin_editar(self):
+        reto = self._reto("rechazado")
+        self.client.force_login(self.empresa)
+        self.client.get(reverse("retos:enviar_revision", args=[reto.pk]))
+        reto.refresh_from_db()
+        self.assertEqual(reto.estado, "rechazado")
+
+    # --- Abierto -------------------------------------------------------------
+    def test_publicar_integracion_abre_el_reto_a_estudiantes(self):
+        reto = self._reto("aprobado")
+        integracion = IntegracionAcademica.objects.create(reto=reto, profesor=self.profesor, estado="aprobada")
+        self.client.force_login(self.profesor)
+        self.client.post(reverse("retos:publicar_integracion", args=[integracion.pk]))
+
+        reto.refresh_from_db()
+        integracion.refresh_from_db()
+        self.assertEqual(integracion.estado, "publicada")
+        self.assertEqual(reto.estado, "abierto")
+        self.assertTrue(reto.historial_estados.filter(estado_anterior="aprobado", estado_nuevo="abierto").exists())
+
+    def test_explorador_solo_lista_retos_abiertos(self):
+        aprobado = self._reto("aprobado", titulo="Solo aprobado")
+        abierto = self._reto("abierto", titulo="Ya abierto")
+        self.client.force_login(self.estudiante)
+        response = self.client.get(reverse("academico:explorar_retos"))
+        listados = {reto.pk for reto in response.context["retos"]}
+        self.assertIn(abierto.pk, listados)
+        self.assertNotIn(aprobado.pk, listados)
+
+    def test_no_se_puede_postular_a_un_reto_que_no_esta_abierto(self):
+        reto = self._reto("aprobado")
+        self.client.force_login(self.estudiante)
+        response = self.client.get(reverse("participaciones:postular_a_reto", args=[reto.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    # --- consecutivos --------------------------------------------------------
+    def test_consecutivos_separados_por_tipo_y_anio(self):
+        anio = timezone.localdate().year
+        reto1 = self._aprobar(self._reto("en_revision", titulo="Reto 1"))
+        hack1 = self._aprobar(self._reto("en_revision", tipo="hackathon", titulo="Hack 1"))
+        reto2 = self._aprobar(self._reto("en_revision", titulo="Reto 2"))
+
+        self.assertEqual(reto1.codigo, f"RETO-{anio}-001")
+        self.assertEqual(hack1.codigo, f"HACK-{anio}-001")
+        self.assertEqual(reto2.codigo, f"RETO-{anio}-002")
+
+    def test_consecutivo_no_cambia_si_el_reto_vuelve_a_aprobarse(self):
+        reto = self._aprobar(self._reto("en_revision"))
+        codigo = reto.codigo
+        reto.asignar_consecutivo_si_falta()
+        self.assertEqual(reto.codigo, codigo)
+
+    # --- borrado logico ------------------------------------------------------
+    def test_eliminar_borrador_es_logico_y_queda_en_el_historial(self):
+        reto = self._reto("borrador")
+        self.client.force_login(self.empresa)
+        self.client.post(reverse("retos:eliminar", args=[reto.pk]))
+
+        self.assertFalse(Reto.objects.filter(pk=reto.pk).exists())
+        conservado = Reto.todos.get(pk=reto.pk)
+        self.assertIsNotNone(conservado.eliminado_en)
+        self.assertTrue(conservado.historial_estados.filter(comentario__icontains="eliminado").exists())
+
+    def test_solo_se_eliminan_borradores(self):
+        for estado in ("en_revision", "rechazado", "cancelado"):
+            reto = self._reto(estado, titulo=f"No borrable {estado}")
+            self.client.force_login(self.empresa)
+            self.client.post(reverse("retos:eliminar", args=[reto.pk]))
+            self.assertTrue(Reto.objects.filter(pk=reto.pk).exists(), estado)
+
+    def test_reto_eliminado_responde_404(self):
+        reto = self._reto("borrador")
+        reto.eliminado_en = timezone.now()
+        reto.save()
+        self.client.force_login(self.empresa)
+        response = self.client.get(reverse("retos:detalle", args=[reto.pk]))
+        self.assertEqual(response.status_code, 404)

@@ -126,7 +126,7 @@
               </td>
               <td>
                 <span class="badge
-                  {% if reto.estado == 'aprobado' or reto.estado == 'en_curso' %}bg-success
+                  {% if reto.estado == 'aprobado' or reto.estado == 'abierto' or reto.estado == 'en_curso' %}bg-success
                   {% elif reto.estado == 'en_revision' %}bg-warning text-dark
                   {% elif reto.estado == 'rechazado' %}bg-danger
                   {% elif reto.estado == 'finalizado' %}bg-secondary

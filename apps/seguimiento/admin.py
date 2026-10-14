@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import IntegracionAcademica, SeguimientoArchivo, SeguimientoReto
+from .models import HistorialEstado, IntegracionAcademica, SeguimientoArchivo, SeguimientoReto
 
 
 class SeguimientoArchivoInline(admin.TabularInline):
@@ -21,3 +21,18 @@ class IntegracionAcademicaAdmin(admin.ModelAdmin):
     list_filter = ("estado",)
     search_fields = ("reto__titulo", "profesor__username", "programa_academico")
     date_hierarchy = "creado_en"
+
+
+@admin.register(HistorialEstado)
+class HistorialEstadoAdmin(admin.ModelAdmin):
+    list_display = ("fecha", "content_type", "object_id", "campo", "estado_anterior", "estado_nuevo", "realizado_por")
+    list_filter = ("content_type", "campo", "estado_nuevo")
+    search_fields = ("comentario", "realizado_por__username", "estado_nuevo", "estado_anterior")
+    date_hierarchy = "fecha"
+    readonly_fields = [f.name for f in HistorialEstado._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
