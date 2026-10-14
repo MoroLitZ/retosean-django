@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Retosean — Universidad EAN</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a0a0a'/%3E%3Ccircle cx='8' cy='8' r='3.2' fill='%233bac52'/%3E%3Ccircle cx='16' cy='8' r='3.2' fill='%233bac52'/%3E%3Ccircle cx='24' cy='8' r='3.2' fill='%233bac52'/%3E%3Ccircle cx='8' cy='16' r='3.2' fill='%233bac52'/%3E%3Ccircle cx='16' cy='16' r='3.2' fill='%23ffffff33'/%3E%3Ccircle cx='24' cy='16' r='3.2' fill='%233bac52'/%3E%3Ccircle cx='8' cy='24' r='3.2' fill='%233bac52'/%3E%3Ccircle cx='16' cy='24' r='3.2' fill='%233bac52'/%3E%3Ccircle cx='24' cy='24' r='3.2' fill='%233bac52'/%3E%3C/svg%3E"
+    />
+    <!-- Same fonts, Bootstrap and icons as the Django templates/base.html -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@700;800;900&family=Open+Sans:ital,wght@0,300;0,400;0,600;0,700;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/style.css" />
+    <script defer src="/chart.js"></script>
+    <script defer src="/app.js"></script>
+  </head>
+  <body class="auth">
+    <!-- ══ LOGIN (usuarios/login.html) ══ -->
+    <main id="login-view" class="auth-card">
+      <div class="row g-0">
+        <div class="col-md-5 auth-panel-left">
+          <div>
+            <div class="brand-logo-auth mb-1">
+              <div class="brand-dots-auth">
+                <span></span><span></span><span></span><span></span
+                ><span></span><span></span><span></span><span></span
+                ><span></span>
+              </div>
+              <div class="brand-wordmark-auth">
+                <span class="brand-retos">retos</span
+                ><span class="brand-ean">ean</span>
+              </div>
+            </div>
+            <div class="brand-sub-auth mb-4">
+              Universidad EAN · Plataforma Académica
+            </div>
+            <p class="auth-intro">
+              Conectamos empresas, profesores y estudiantes a través de retos y
+              hackathons del mundo real.
+            </p>
+            <div class="auth-divider"></div>
+          </div>
+          <div>
+            <div class="auth-feature-item">
+              <div class="auth-feature-icon icon-green">
+                <i class="bi bi-building"></i>
+              </div>
+              <div>
+                <div class="auth-feature-title">Empresas</div>
+                <div class="auth-feature-sub">
+                  Publica retos reales de negocio
+                </div>
+              </div>
+            </div>
+            <div class="auth-feature-item">
+              <div class="auth-feature-icon icon-blue">
+                <i class="bi bi-journal-text"></i>
+              </div>
+              <div>
+                <div class="auth-feature-title">Profesores</div>
+                <div class="auth-feature-sub">
+                  Vincula tus cursos con la industria
+                </div>
+              </div>
+            </div>
+            <div class="auth-feature-item">
+              <div class="auth-feature-icon icon-green-soft">
+                <i class="bi bi-mortarboard"></i>
+              </div>
+              <div>
+                <div class="auth-feature-title">Estudiantes</div>
+                <div class="auth-feature-sub">
+                  Resuelve retos y gana experiencia
+                </div>
+              </div>
+            </div>
+            <div class="auth-university-badge mt-3">
+              <span class="dot"></span> © 2026 Universidad EAN · Bogotá,
+              Colombia
+            </div>
+          </div>
+        </div>
+        <div class="col-md-7 auth-panel-right">
+          <h2>Bienvenido de vuelta</h2>
+          <p class="auth-subtitle">
+            Ingresa tus credenciales para acceder al sistema
+          </p>
+          <div
+            id="login-error"
+            class="alert alert-danger align-items-center gap-2 py-2 mb-3"
+            role="alert"
+            hidden
+          ></div>
+          <form id="login-form" novalidate>
+            <div class="mb-3">
+              <label for="username" class="form-label">Usuario o correo</label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-person"></i></span
+                ><input
+                  id="username"
+                  name="username"
+                  class="form-control"
+                  placeholder="usuario"
+                  autocomplete="username"
+                  required
+                  maxlength="150"
+                />
+              </div>
+            </div>
+            <div class="mb-4">
+              <label for="password" class="form-label">Contrasena</label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-lock"></i></span
+                ><input
+                  id="password"
+                  name="password"
+                  type="password"
+                  class="form-control"
+                  autocomplete="current-password"
+                  required
+                  maxlength="1024"
+                /><button
+                  class="btn input-group-text toggle-password"
+                  type="button"
+                  id="toggle-password"
+                  title="Mostrar/ocultar"
+                  aria-label="Mostrar u ocultar la contraseña"
+                >
+                  <i class="bi bi-eye"></i>
+                </button>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-auth w-100">
+              <i class="bi bi-box-arrow-in-right me-2"></i>Ingresar al Sistema
+            </button>
+          </form>
+          <hr class="auth-hr" />
+          <p class="text-center mb-0 auth-note">
+            ¿No tienes una cuenta? Solicita tu acceso al administrador de la
+            plataforma.
+          </p>
+        </div>
+      </div>
+    </main>
+
+    <!-- ══ APP (templates/base.html) ══ -->
+    <div id="app-view" hidden>
+      <div class="sidebar-overlay" id="sidebar-overlay"></div>
+      <nav id="sidebar">
+        <div class="sidebar-brand">
+          <div class="brand-logo">
+            <div class="brand-dots">
+              <span></span><span></span><span></span><span></span
+              ><span></span><span></span><span></span><span></span
+              ><span></span>
+            </div>
+            <div class="brand-wordmark">
+              <span class="brand-retos">retos</span
+              ><span class="brand-ean">ean</span>
+            </div>
+          </div>
+          <div class="brand-sub">Plataforma Académica</div>
+        </div>
+        <ul id="navigation" class="nav flex-column py-2"></ul>
+        <div class="sidebar-user">
+          <div class="d-flex align-items-center gap-2">
+            <div class="user-avatar" id="user-avatar"></div>
+            <div class="min-w-0">
+              <div class="user-name text-truncate" id="user-name"></div>
+              <div class="user-role" id="user-role"></div>
+            </div>
+          </div>
+        </div>
+      </nav>
+      <header id="topbar">
+        <button class="btn-sidebar-toggle" id="sidebar-toggle" aria-label="Menú">
+          <i class="bi bi-list"></i>
+        </button>
+        <h1 class="page-heading" id="page-heading">Dashboard</h1>
+        <div class="position-relative">
+          <button
+            id="bell"
+            class="btn btn-sm btn-link position-relative text-decoration-none p-1 bell"
+            type="button"
+            aria-label="Notificaciones"
+            aria-expanded="false"
+          >
+            <i class="bi bi-bell"></i
+            ><span
+              id="bell-count"
+              class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
+              hidden
+            ></span>
+          </button>
+          <div id="bell-menu" class="dropdown-menu dropdown-menu-end shadow bell-menu" hidden>
+            <h6 class="dropdown-header">Notificaciones</h6>
+            <div id="bell-items" class="bell-items"></div>
+            <div class="dropdown-divider"></div>
+            <a class="dropdown-item text-center small fw-semibold" href="#notificaciones">Ver todas</a>
+          </div>
+        </div>
+        <span class="topbar-email d-none d-lg-inline" id="topbar-email"></span>
+        <button
+          id="logout"
+          type="button"
+          class="btn btn-sm btn-outline-danger d-none d-md-flex align-items-center gap-1"
+        >
+          <i class="bi bi-box-arrow-right"></i> Salir
+        </button>
+      </header>
+      <main id="main-content">
+        <div class="content-wrapper">
+          <div id="app-error" class="alert alert-danger" role="alert" hidden></div>
+
+          <!-- Dashboard de Indicadores (apps/dashboard/templates) -->
+          <section id="dashboard-panel">
+            <div class="card-panel mb-4">
+              <div class="p-3">
+                <form id="periodo-form" class="row g-2 align-items-end">
+                  <div class="col-sm-6 col-md-3">
+                    <label for="periodo" class="form-label small fw-semibold text-secondary mb-1">Periodo</label>
+                    <select name="periodo" id="periodo" class="form-select form-select-sm"></select>
+                  </div>
+                  <div class="col-sm-6 col-md-2 custom-range" hidden>
+                    <label for="desde" class="form-label small fw-semibold text-secondary mb-1">Desde</label>
+                    <input type="date" name="desde" id="desde" class="form-control form-control-sm" />
+                  </div>
+                  <div class="col-sm-6 col-md-2 custom-range" hidden>
+                    <label for="hasta" class="form-label small fw-semibold text-secondary mb-1">Hasta</label>
+                    <input type="date" name="hasta" id="hasta" class="form-control form-control-sm" />
+                  </div>
+                  <div class="col-sm-6 col-md-3 admin-filter" hidden>
+                    <label for="facultad" class="form-label small fw-semibold text-secondary mb-1">Facultad</label>
+                    <select name="facultad" id="facultad" class="form-select form-select-sm"></select>
+                  </div>
+                  <div class="col-sm-6 col-md-2 admin-filter" hidden>
+                    <label for="programa" class="form-label small fw-semibold text-secondary mb-1">Programa</label>
+                    <select name="programa" id="programa" class="form-select form-select-sm"></select>
+                  </div>
+                  <div class="col-sm-6 col-md-2">
+                    <button type="submit" class="btn btn-sm btn-primary w-100">
+                      <i class="bi bi-funnel"></i> Aplicar
+                    </button>
+                  </div>
+                </form>
+                <p class="text-muted small mb-0 mt-2">
+                  <i class="bi bi-calendar3"></i> Mostrando:
+                  <strong id="etiqueta-periodo"></strong>
+                </p>
+              </div>
+            </div>
+            <div id="sin-rol" class="alert alert-warning mb-4" hidden>
+              <i class="bi bi-exclamation-triangle"></i>
+              Tu usuario no tiene un rol asignado, por lo que no hay indicadores
+              que mostrar. Contacta con el administrador para que te asigne uno.
+            </div>
+            <div id="kpis" class="row g-3 mb-4"></div>
+            <div id="graficas" class="row g-3 mb-4"></div>
+            <div id="accesos" class="d-flex flex-wrap gap-2"></div>
+          </section>
+
+          <!-- Listados -->
+          <section id="records-panel" hidden>
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-4">
+              <div>
+                <h2 class="page-title" id="page-title"></h2>
+                <p class="page-subtitle mb-0" id="record-count"></p>
+              </div>
+              <button id="new-challenge" type="button" class="btn btn-ean" hidden>
+                <i class="bi bi-plus-lg"></i> <span id="new-label">Nuevo</span>
+              </button>
+            </div>
+            <div class="card-panel">
+              <div class="card-panel-header">
+                <form id="search-form" class="d-flex flex-wrap gap-2 w-100" role="search">
+                  <label class="visually-hidden" for="search">Buscar registros</label>
+                  <input
+                    id="search"
+                    type="search"
+                    class="form-control form-control-sm search-input"
+                    placeholder="Buscar…"
+                    maxlength="200"
+                  />
+                  <button class="btn btn-sm btn-outline-secondary" type="submit">
+                    <i class="bi bi-search"></i> Buscar
+                  </button>
+                  <span id="exports" class="ms-auto d-flex gap-2">
+                    <a id="export-link" class="btn btn-sm btn-outline-secondary"><i class="bi bi-filetype-csv"></i> CSV</a>
+                    <a id="export-pdf" class="btn btn-sm btn-outline-danger"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+                    <a id="export-xlsx" class="btn btn-sm btn-outline-success"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+                  </span>
+                </form>
+              </div>
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                  <thead class="table-light" id="table-head"></thead>
+                  <tbody id="table-body"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="d-flex justify-content-center align-items-center gap-3 mt-3">
+              <button id="previous" type="button" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-chevron-left"></i> Anterior
+              </button>
+              <span id="page-number" class="small text-muted"></span>
+              <button id="next" type="button" class="btn btn-sm btn-outline-secondary">
+                Siguiente <i class="bi bi-chevron-right"></i>
+              </button>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+    <dialog id="detail-dialog">
+      <div class="dialog-top">
+        <h2 id="dialog-title">Detalle</h2>
+        <button id="close-dialog" type="button" class="btn-close" aria-label="Cerrar"></button>
+      </div>
+      <div id="dialog-content"></div>
+    </dialog>
+    <div id="toast" role="status" hidden></div>
+  </body>
+</html>

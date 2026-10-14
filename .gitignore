@@ -17,3 +17,16 @@ test_out.txt
 # El proyecto solo usa PostgreSQL: ningun archivo SQLite debe entrar al repo
 *.sqlite3
 *.sqlite3-journal
+
+# Local AI agent tools and browser artifacts
+.agents/
+.claude/
+.playwright-cli/
+AGENTS.md
+CLAUDE.md
+**/output/playwright/
+
+# Rust build outputs and local configuration
+target/
+rust/.env
+.rust-media/

@@ -1,5 +1,10 @@
 # RetosEAN — Sistema de Control de Retos Universidad–Empresa
 
+**Rust-attempt:** the native Rust implementation is in [`rust/`](rust/README.md).
+Start it with `.\rust\Start-Retos.ps1` and open http://127.0.0.1:8080.
+Its README documents native coverage, remaining parity work and its separate database.
+The instructions below describe the original Django application.
+
 Plataforma Django + PostgreSQL que conecta empresas, docentes y estudiantes de la
 Universidad EAN alrededor de retos empresariales: la empresa publica el reto, el
 administrador lo aprueba, un docente lo integra a su curso, los estudiantes se
