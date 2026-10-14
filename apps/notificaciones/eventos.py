@@ -36,6 +36,7 @@ EVENTOS = _registrar(
     Evento("EQUIPO_ASIGNADO", "EXITO", "Fuiste asignado a un equipo"),
     # --- Participacion estudiantil (HU10, HU11) ---
     Evento("POSTULACION_NUEVA", "INFO", "Nueva postulacion"),
+    Evento("POSTULACION_RECIBIDA", "EXITO", "Recibimos tu postulacion"),
     Evento("POSTULACION_GESTIONADA", "INFO", "Respuesta a tu postulacion"),
     # --- Evaluacion y seguimiento (HU12, HU14) ---
     Evento("ENTREGABLE_RECIBIDO", "INFO", "Nuevo entregable recibido"),

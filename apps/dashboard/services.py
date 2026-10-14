@@ -133,7 +133,7 @@ def kpis_empresa(usuario, desde, hasta):
         # Antes este KPI contaba integraciones academicas y se rotulaba
         # "postulaciones"; ahora cuenta lo que dice.
         "postulaciones_total": postulaciones.count(),
-        "postulaciones_pendientes": postulaciones.filter(estado="PENDIENTE").count(),
+        "postulaciones_pendientes": postulaciones.filter(estado__in=Postulacion.ESTADOS_SIN_RESOLVER).count(),
         "postulaciones_aceptadas": postulaciones.filter(estado="ACEPTADA").count(),
         "integraciones_total": IntegracionAcademica.objects.filter(reto__in=retos).count(),
         "entregables_total": Entregable.objects.filter(reto__in=retos).count(),
@@ -231,7 +231,7 @@ def kpis_estudiante(usuario, desde, hasta):
         "retos_disponibles": Reto.objects.filter(estado__in=Reto.ESTADOS_ABIERTOS).count(),
         "favoritos_total": RetoFavorito.objects.filter(usuario=usuario).count(),
         "postulaciones_total": postulaciones.count(),
-        "postulaciones_pendientes": postulaciones.filter(estado="PENDIENTE").count(),
+        "postulaciones_pendientes": postulaciones.filter(estado__in=Postulacion.ESTADOS_SIN_RESOLVER).count(),
         "postulaciones_aceptadas": postulaciones.filter(estado="ACEPTADA").count(),
         "entregables_total": entregables.count(),
         "entregables_pendientes": entregables.filter(

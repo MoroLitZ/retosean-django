@@ -17,7 +17,7 @@ from apps.usuarios.decorators import solo_admin, solo_empresa
 from apps.usuarios.roles import es_admin, url_dashboard_para
 from apps.usuarios.services import cambiar_estado_cuenta
 from apps.seguimiento.services import TransicionInvalida, cambiar_estado, historial_de
-from apps.participaciones.services import MAQUINA_POSTULACION
+from apps.participaciones.services import MAQUINA_POSTULACION, marcar_postulaciones_en_revision
 from .forms import BloqueoParticipacionForm, ConvenioForm, TipoDocumentoLegalForm
 from .services import (
     MAQUINA_CONVENIO,
@@ -138,7 +138,12 @@ def postulaciones_empresa(request):
     empresa = request.user.empresa_perfil
     retos_empresa = Reto.objects.filter(empresa=request.user)
     estado_filtro = request.GET.get('estado', '')
-    estados_validos = {'PENDIENTE', 'ACEPTADA', 'RECHAZADA', 'RETIRADA'}
+    estados_validos = set(dict(PostulacionReto.ESTADOS))
+
+    # Al abrir la lista, la empresa empieza a revisar lo que estaba pendiente (HU11).
+    marcar_postulaciones_en_revision(
+        PostulacionReto.objects.filter(reto__in=retos_empresa), request.user
+    )
 
     postulaciones = PostulacionReto.objects.filter(
         reto__in=retos_empresa
@@ -306,7 +311,9 @@ def indicadores_empresa(request):
         'retos_finalizados': retos.filter(estado='finalizado').count(),
         'retos_en_revision': retos.filter(estado='en_revision').count(),
         'total_postulaciones': PostulacionReto.objects.filter(reto__in=retos).count(),
-        'postulaciones_pendientes': PostulacionReto.objects.filter(reto__in=retos, estado='PENDIENTE').count(),
+        'postulaciones_pendientes': PostulacionReto.objects.filter(
+            reto__in=retos, estado__in=PostulacionReto.ESTADOS_SIN_RESOLVER
+        ).count(),
         'postulaciones_aceptadas': PostulacionReto.objects.filter(reto__in=retos, estado='ACEPTADA').count(),
         'total_entregables': Entregable.objects.filter(reto__in=retos).count(),
         'entregables_pendientes': Entregable.objects.filter(reto__in=retos, estado='ENVIADO').count(),

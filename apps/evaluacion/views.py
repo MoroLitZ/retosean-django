@@ -3,8 +3,10 @@ from decimal import Decimal, InvalidOperation
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.db.models import Count
 from django.urls import reverse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 
 from apps.usuarios.decorators import rol_requerido
 from apps.seguimiento.models import IntegracionAcademica
@@ -35,7 +37,17 @@ def panel_profesor(request):
         "reto", "estudiante", "equipo"
     ).prefetch_related("historial_comentarios__autor").order_by("estado", "-fecha_entrega")
     rubricas = Rubrica.objects.filter(reto_id__in=_retos_profesor(request.user), activa=True).prefetch_related("criterios")
-    return render(request, "evaluacion/panel_profesor.html", {"entregables": entregables, "rubricas": rubricas})
+    por_publicar = (
+        Entregable.objects.filter(
+            reto_id__in=_retos_profesor(request.user), estado="CALIFICADO", calificacion_publicada=False
+        )
+        .values("reto_id", "reto__titulo")
+        .annotate(total=Count("id"))
+        .order_by("reto__titulo")
+    )
+    return render(request, "evaluacion/panel_profesor.html", {
+        "entregables": entregables, "rubricas": rubricas, "por_publicar": por_publicar,
+    })
 
 
 @rol_requerido("PROFESOR", raise_exception=True)
@@ -44,9 +56,17 @@ def calificar(request, pk):
     if request.method != "POST":
         raise PermissionDenied("La calificacion solo se registra mediante POST.")
     entregable = get_object_or_404(Entregable, pk=pk, reto_id__in=_retos_profesor(request.user))
+    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("evaluacion:panel_profesor")
+    # HU12: volver a calificar exige confirmacion explicita.
+    if entregable.estado == "CALIFICADO" and request.POST.get("confirmar_recalificacion") != "1":
+        messages.error(
+            request,
+            f'"{entregable.titulo}" ya tiene nota ({entregable.nota}). '
+            "Marca la confirmacion para volver a calificarlo.",
+        )
+        return redirect(next_url)
     rubrica = None
     rubrica_id = request.POST.get("rubrica")
-    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("evaluacion:panel_profesor")
     try:
         if rubrica_id:
             rubrica = Rubrica.objects.prefetch_related("criterios").get(
@@ -83,30 +103,60 @@ def calificar(request, pk):
     evaluacion.puntajes_criterio.all().delete()
     for criterio, valor in puntajes:
         EvaluacionCriterio.objects.create(evaluacion=evaluacion, criterio=criterio, puntaje=valor)
+    recalificacion = entregable.estado == "CALIFICADO"
     entregable.nota = nota
     entregable.comentario_profesor = comentario
+    # Una nota nueva (o corregida) queda sin publicar hasta que el profesor la publique.
+    entregable.calificacion_publicada = False
+    entregable.calificacion_publicada_en = None
     cambiar_estado(
         entregable, MAQUINA_ENTREGABLE, "CALIFICADO", request.user,
-        f"Calificado con {nota} de {entregable.puntaje_maximo}.",
-        update_fields=["nota", "comentario_profesor"],
+        f'{"Recalificado" if recalificacion else "Calificado"} con {nota} de {entregable.puntaje_maximo}.',
+        update_fields=["nota", "comentario_profesor", "calificacion_publicada", "calificacion_publicada_en"],
     )
-    if comentario:
-        entregable.historial_comentarios.create(autor=request.user, comentario=comentario)
-
-    mensaje = (
-        f'Tu entregable "{entregable.titulo}" del reto "{entregable.reto.titulo}" '
-        f'fue calificado con {nota} de {entregable.puntaje_maximo}.'
+    messages.success(
+        request,
+        "Evaluacion registrada. Publica las calificaciones del reto para que el estudiante la vea.",
     )
-    if comentario:
-        mensaje += chr(10) + f'Retroalimentacion: {comentario}'
-    notificar(
-        entregable.estudiante, 'ENTREGABLE_CALIFICADO',
-        mensaje=mensaje,
-        link=reverse('participaciones:mis_entregables_reto', kwargs={'reto_id': entregable.reto_id}),
-        clave_dedupe=f'entregable:{entregable.pk}:calificado:{evaluacion.pk}:{nota}',
-    )
-    messages.success(request, "Evaluacion formal registrada y visible para el estudiante.")
     return redirect(next_url)
+
+
+@rol_requerido("PROFESOR", raise_exception=True)
+@transaction.atomic
+def publicar_calificaciones(request, reto_id):
+    """Publica a los estudiantes las notas aun no publicadas de un reto (HU12)."""
+    if request.method != "POST":
+        raise PermissionDenied("Las calificaciones se publican mediante POST.")
+    if reto_id not in set(_retos_profesor(request.user)):
+        raise PermissionDenied("No integraste este reto.")
+    pendientes = list(
+        Entregable.objects.filter(reto_id=reto_id, estado="CALIFICADO", calificacion_publicada=False)
+        .select_related("reto", "estudiante")
+    )
+    ahora = timezone.now()
+    for entregable in pendientes:
+        entregable.calificacion_publicada = True
+        entregable.calificacion_publicada_en = ahora
+        entregable.save(update_fields=["calificacion_publicada", "calificacion_publicada_en", "actualizado_en"])
+        if entregable.comentario_profesor:
+            entregable.historial_comentarios.create(autor=request.user, comentario=entregable.comentario_profesor)
+        mensaje = (
+            f'Tu entregable "{entregable.titulo}" del reto "{entregable.reto.titulo}" '
+            f'fue calificado con {entregable.nota} de {entregable.puntaje_maximo}.'
+        )
+        if entregable.comentario_profesor:
+            mensaje += chr(10) + f'Retroalimentacion: {entregable.comentario_profesor}'
+        notificar(
+            entregable.estudiante, 'ENTREGABLE_CALIFICADO',
+            mensaje=mensaje,
+            link=reverse('participaciones:mis_entregables_reto', kwargs={'reto_id': entregable.reto_id}),
+            clave_dedupe=f'entregable:{entregable.pk}:publicado:{ahora:%Y%m%d%H%M%S}',
+        )
+    if pendientes:
+        messages.success(request, f"{len(pendientes)} calificacion(es) publicadas y estudiantes notificados.")
+    else:
+        messages.info(request, "No hay calificaciones pendientes de publicar en este reto.")
+    return redirect(request.POST.get("next") or reverse("evaluacion:panel_profesor"))
 
 
 @rol_requerido("PROFESOR", raise_exception=True)
