@@ -30,6 +30,7 @@ EVENTOS = _registrar(
     # --- Ciclo de vida del reto (HU02, HU04) ---
     Evento("RETO_ESTADO_CAMBIADO", "INFO", "Cambio de estado de tu reto"),
     Evento("RETO_ENVIADO_REVISION", "INFO", "Reto enviado a revision"),
+    Evento("RETO_SIN_ACTUALIZAR", "ADVERTENCIA", "Reto vencido sin actualizaciones"),
     # --- Integracion academica (HU03) ---
     Evento("INTEGRACION_ENVIADA_REVISION", "INFO", "Nueva postulacion docente a reto"),
     Evento("INTEGRACION_REVISADA", "INFO", "Integracion academica revisada"),
