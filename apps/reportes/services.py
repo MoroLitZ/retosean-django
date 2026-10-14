@@ -28,8 +28,12 @@ from reportlab.platypus import (
 
 from .models import ReporteGenerado
 
-AZUL_EAN = colors.HexColor("#111827")
-AZUL_ACENTO = colors.HexColor("#2563eb")
+# Misma paleta de marca que templates/base.html (variables --ean-*), para que
+# el PDF exportado se vea como una extension de la plataforma, no un genero.
+VERDE_EAN = colors.HexColor("#3bac52")
+AZUL_EAN = colors.HexColor("#005e85")
+NEGRO_EAN = colors.HexColor("#0a0a0a")
+GRIS_TEXTO = colors.HexColor("#6b7280")
 GRIS_SUAVE = colors.HexColor("#f3f4f6")
 
 MAX_FILAS_PDF = 2000
@@ -63,11 +67,15 @@ def generar_excel(definicion, queryset, columnas, filtros):
     hoja = libro.active
     hoja.title = definicion.nombre[:31]
 
-    encabezado_fondo = PatternFill("solid", fgColor="111827")
+    # Misma paleta de marca que el PDF y la plataforma (verde EAN), en vez
+    # del gris generico que tenia antes.
+    encabezado_fondo = PatternFill("solid", fgColor="3BAC52")
     encabezado_fuente = Font(color="FFFFFF", bold=True, size=11)
 
+    hoja.append(["retosean · Universidad EAN"])
+    hoja["A1"].font = Font(bold=True, size=11, color="3BAC52")
     hoja.append([definicion.nombre])
-    hoja["A1"].font = Font(bold=True, size=14)
+    hoja["A2"].font = Font(bold=True, size=14, color="0A0A0A")
     hoja.append([f"Generado el {timezone.localtime():%d/%m/%Y %H:%M}"])
     hoja.append([_describir_filtros(filtros)])
     hoja.append([])
@@ -98,11 +106,34 @@ def generar_excel(definicion, queryset, columnas, filtros):
 
 
 # -------------------------------------------------------------------- PDF
-def _pie_de_pagina(canvas, documento):
+def _encabezado_y_pie(canvas, documento):
+    """Misma franja de marca en cada pagina: acento verde arriba, wordmark +
+    Universidad EAN, y pie con paginacion. Reemplaza la marca de agua generica
+    (gris/azul, sin identidad) que tenia el PDF antes."""
     canvas.saveState()
+    ancho, alto = documento.pagesize
+
+    # Franja de acento superior, como el borde del topbar de la plataforma.
+    canvas.setFillColor(VERDE_EAN)
+    canvas.rect(0, alto - 3 * mm, ancho, 3 * mm, stroke=0, fill=1)
+
+    canvas.setFont("Helvetica-Bold", 10)
+    canvas.setFillColor(NEGRO_EAN)
+    canvas.drawString(15 * mm, alto - 10 * mm, "retos")
+    ancho_retos = canvas.stringWidth("retos", "Helvetica-Bold", 10)
+    canvas.setFillColor(VERDE_EAN)
+    canvas.drawString(15 * mm + ancho_retos, alto - 10 * mm, "ean")
+
     canvas.setFont("Helvetica", 7.5)
-    canvas.setFillColor(colors.HexColor("#6b7280"))
-    ancho, _ = documento.pagesize
+    canvas.setFillColor(GRIS_TEXTO)
+    canvas.drawRightString(ancho - 15 * mm, alto - 10 * mm, "Universidad EAN")
+
+    canvas.setStrokeColor(AZUL_EAN)
+    canvas.setLineWidth(0.6)
+    canvas.line(15 * mm, alto - 13 * mm, ancho - 15 * mm, alto - 13 * mm)
+
+    canvas.setFont("Helvetica", 7.5)
+    canvas.setFillColor(GRIS_TEXTO)
     canvas.drawString(15 * mm, 10 * mm, "RetosEAN - Universidad EAN")
     canvas.drawRightString(ancho - 15 * mm, 10 * mm, f"Pagina {canvas.getPageNumber()}")
     canvas.restoreState()
@@ -114,19 +145,19 @@ def generar_pdf(definicion, queryset, columnas, filtros):
         buffer,
         pagesize=landscape(A4),
         leftMargin=15 * mm, rightMargin=15 * mm,
-        topMargin=15 * mm, bottomMargin=18 * mm,
+        topMargin=22 * mm, bottomMargin=18 * mm,
         title=definicion.nombre,
-        author="RetosEAN",
+        author="RetosEAN - Universidad EAN",
     )
 
     estilos = getSampleStyleSheet()
     estilo_titulo = ParagraphStyle(
         "TituloReporte", parent=estilos["Title"],
-        fontSize=16, textColor=AZUL_EAN, spaceAfter=4, alignment=0,
+        fontSize=16, textColor=NEGRO_EAN, spaceAfter=4, alignment=0,
     )
     estilo_meta = ParagraphStyle(
         "MetaReporte", parent=estilos["Normal"],
-        fontSize=8.5, textColor=colors.HexColor("#6b7280"), spaceAfter=2,
+        fontSize=8.5, textColor=GRIS_TEXTO, spaceAfter=2,
     )
     estilo_celda = ParagraphStyle(
         "Celda", parent=estilos["Normal"], fontSize=7.5, leading=9.5,
@@ -137,7 +168,6 @@ def generar_pdf(definicion, queryset, columnas, filtros):
     )
 
     elementos = [
-        Paragraph("retos<font color='#f59e0b'>ean</font>", estilo_meta),
         Paragraph(definicion.nombre, estilo_titulo),
         Paragraph(definicion.descripcion, estilo_meta),
         Paragraph(f"Generado el {timezone.localtime():%d/%m/%Y %H:%M}", estilo_meta),
@@ -163,7 +193,7 @@ def generar_pdf(definicion, queryset, columnas, filtros):
 
         tabla = Table(datos, colWidths=anchos, repeatRows=1)
         tabla.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), AZUL_EAN),
+            ("BACKGROUND", (0, 0), (-1, 0), VERDE_EAN),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#d1d5db")),
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, GRIS_SUAVE]),
@@ -181,7 +211,7 @@ def generar_pdf(definicion, queryset, columnas, filtros):
             ParagraphStyle("Total", parent=estilo_meta, alignment=TA_RIGHT),
         ))
 
-    documento.build(elementos, onFirstPage=_pie_de_pagina, onLaterPages=_pie_de_pagina)
+    documento.build(elementos, onFirstPage=_encabezado_y_pie, onLaterPages=_encabezado_y_pie)
     return buffer.getvalue(), total
 
 
