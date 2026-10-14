@@ -137,3 +137,27 @@ class BandejaTests(TestCase):
         self.client.force_login(self.usuario)
         response = self.client.get(reverse("notificaciones:bandeja"))
         self.assertEqual(response.context["notificaciones_no_leidas"], 1)
+
+
+class RegistroEnviosAdminTests(TestCase):
+    """HU15: el administrador consulta el estado de las notificaciones."""
+
+    def setUp(self):
+        self.admin = Usuario.objects.create_user(username="admin-reg", password="x", rol="ADMIN")
+        self.destino = Usuario.objects.create_user(username="destino-reg", password="x", rol="ESTUDIANTE")
+        Notificacion.objects.create(usuario=self.destino, titulo="Enviada", mensaje="m", enviada_por_correo=True)
+        Notificacion.objects.create(usuario=self.destino, titulo="Con fallo", mensaje="m", error_envio="SMTP caido")
+        Notificacion.objects.create(usuario=self.destino, titulo="Leida", mensaje="m", leida=True)
+
+    def test_filtra_por_estado_de_envio(self):
+        self.client.force_login(self.admin)
+        url = reverse("notificaciones:registro_envios")
+        titulos = lambda r: {n.titulo for n in r.context["registros"]}
+        self.assertEqual(titulos(self.client.get(url, {"estado": "fallido"})), {"Con fallo"})
+        self.assertEqual(titulos(self.client.get(url, {"estado": "enviado"})), {"Enviada"})
+        self.assertEqual(titulos(self.client.get(url, {"estado": "leido"})), {"Leida"})
+        self.assertEqual(self.client.get(url).context["resumen"]["fallidas"], 1)
+
+    def test_solo_el_admin_lo_ve(self):
+        self.client.force_login(self.destino)
+        self.assertNotEqual(self.client.get(reverse("notificaciones:registro_envios")).status_code, 200)
