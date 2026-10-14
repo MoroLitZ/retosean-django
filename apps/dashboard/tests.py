@@ -65,6 +65,10 @@ def _modelo_para(ruta, parametro):
         from apps.empresas.models import TipoDocumentoLegal
 
         return TipoDocumentoLegal
+    if ruta.startswith("cierre/admin/logistica/"):
+        from apps.cierre.models import SolicitudLogistica
+
+        return SolicitudLogistica
     reglas = [
         (r"^retos/(admin/)?(empresa/)?(integraciones?|vinculaciones|integracion)/", IntegracionAcademica),
         (r"^retos/equipo/", EquipoRetoAcademico),
