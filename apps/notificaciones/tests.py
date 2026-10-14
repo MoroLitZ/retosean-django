@@ -137,3 +137,71 @@ class BandejaTests(TestCase):
         self.client.force_login(self.usuario)
         response = self.client.get(reverse("notificaciones:bandeja"))
         self.assertEqual(response.context["notificaciones_no_leidas"], 1)
+
+
+class RetoVencidoSinActualizarTests(TestCase):
+    """HU04: alerta al admin cuando un reto pasa su fecha sin seguimientos."""
+
+    def setUp(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        self.hoy = timezone.localdate()
+        self.admin = Usuario.objects.create_user(username="admin-venc", password="x", rol="ADMIN")
+        empresa = Usuario.objects.create_user(username="empresa-venc", password="x", rol="EMPRESA")
+        self.vencido = Reto.objects.create(
+            empresa=empresa, titulo="Reto atrasado", estado="en_curso",
+            fecha_fin_tentativa=self.hoy - timedelta(days=5),
+        )
+        self.al_dia = Reto.objects.create(
+            empresa=empresa, titulo="Reto al dia", estado="en_curso",
+            fecha_fin_tentativa=self.hoy + timedelta(days=30),
+        )
+
+    def _ejecutar(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        call_command("enviar_recordatorios", stdout=StringIO())
+        return Notificacion.objects.filter(usuario=self.admin, evento="RETO_SIN_ACTUALIZAR")
+
+    def test_avisa_al_admin_del_reto_vencido(self):
+        avisos = self._ejecutar()
+        self.assertEqual(avisos.count(), 1)
+        self.assertIn("Reto atrasado", avisos.get().mensaje)
+
+    def test_no_repite_el_aviso_la_misma_semana(self):
+        self._ejecutar()
+        self.assertEqual(self._ejecutar().count(), 1)
+
+    def test_un_seguimiento_posterior_silencia_la_alerta(self):
+        from apps.seguimiento.models import SeguimientoReto
+
+        SeguimientoReto.objects.create(reto=self.vencido, porcentaje_avance=90, avances="Casi listo")
+        self.assertEqual(self._ejecutar().count(), 0)
+
+
+class RegistroEnviosAdminTests(TestCase):
+    """HU15: el administrador consulta el estado de las notificaciones."""
+
+    def setUp(self):
+        self.admin = Usuario.objects.create_user(username="admin-reg", password="x", rol="ADMIN")
+        self.destino = Usuario.objects.create_user(username="destino-reg", password="x", rol="ESTUDIANTE")
+        Notificacion.objects.create(usuario=self.destino, titulo="Enviada", mensaje="m", enviada_por_correo=True)
+        Notificacion.objects.create(usuario=self.destino, titulo="Con fallo", mensaje="m", error_envio="SMTP caido")
+        Notificacion.objects.create(usuario=self.destino, titulo="Leida", mensaje="m", leida=True)
+
+    def test_filtra_por_estado_de_envio(self):
+        self.client.force_login(self.admin)
+        url = reverse("notificaciones:registro_envios")
+        titulos = lambda r: {n.titulo for n in r.context["registros"]}
+        self.assertEqual(titulos(self.client.get(url, {"estado": "fallido"})), {"Con fallo"})
+        self.assertEqual(titulos(self.client.get(url, {"estado": "enviado"})), {"Enviada"})
+        self.assertEqual(titulos(self.client.get(url, {"estado": "leido"})), {"Leida"})
+        self.assertEqual(self.client.get(url).context["resumen"]["fallidas"], 1)
+
+    def test_solo_el_admin_lo_ve(self):
+        self.client.force_login(self.destino)
+        self.assertNotEqual(self.client.get(reverse("notificaciones:registro_envios")).status_code, 200)

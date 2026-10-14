@@ -9,4 +9,5 @@ urlpatterns = [
     path('<int:pk>/leer/', views.marcar_leida, name='marcar_leida'),
     path('leer-todas/', views.marcar_todas_leidas, name='marcar_todas_leidas'),
     path('preferencias/', views.preferencias, name='preferencias'),
+    path('admin/registro/', views.registro_envios, name='registro_envios'),
 ]

@@ -1,10 +1,13 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
+
+from apps.usuarios.decorators import solo_admin
 
 from .models import Notificacion, PreferenciaNotificacion
 from .eventos import EVENTOS
@@ -84,4 +87,60 @@ def preferencias(request):
             {'slug': slug, 'titulo': evento.titulo, 'activo': slug not in silenciados}
             for slug, evento in EVENTOS.items()
         ],
+    })
+
+
+ESTADOS_ENVIO = [
+    ('enviado', 'Enviado por correo'),
+    ('fallido', 'Fallido'),
+    ('leido', 'Leído'),
+    ('no_leido', 'No leído'),
+    ('solo_app', 'Solo en la plataforma'),
+]
+
+
+@solo_admin
+def registro_envios(request):
+    """Registro de notificaciones para el administrador (HU15): estado de cada envio."""
+    registros = Notificacion.objects.select_related('usuario').order_by('-creada_en')
+    estado = request.GET.get('estado', '')
+    evento = request.GET.get('evento', '')
+    usuario_q = request.GET.get('usuario', '').strip()
+    desde = request.GET.get('desde', '')
+    hasta = request.GET.get('hasta', '')
+
+    if estado == 'enviado':
+        registros = registros.filter(enviada_por_correo=True)
+    elif estado == 'fallido':
+        registros = registros.exclude(error_envio='')
+    elif estado == 'leido':
+        registros = registros.filter(leida=True)
+    elif estado == 'no_leido':
+        registros = registros.filter(leida=False)
+    elif estado == 'solo_app':
+        registros = registros.filter(enviada_por_correo=False, error_envio='')
+    if evento:
+        registros = registros.filter(evento=evento)
+    if usuario_q:
+        registros = registros.filter(usuario__username__icontains=usuario_q)
+    if desde:
+        registros = registros.filter(creada_en__date__gte=desde)
+    if hasta:
+        registros = registros.filter(creada_en__date__lte=hasta)
+
+    resumen = Notificacion.objects.aggregate(
+        total=Count('id'),
+        enviadas=Count('id', filter=Q(enviada_por_correo=True)),
+        fallidas=Count('id', filter=~Q(error_envio='')),
+        leidas=Count('id', filter=Q(leida=True)),
+    )
+    filtros = request.GET.copy()
+    filtros.pop('page', None)
+    return render(request, 'notificaciones/registro_envios.html', {
+        'registros': Paginator(registros, 50).get_page(request.GET.get('page')),
+        'resumen': resumen,
+        'estados': ESTADOS_ENVIO,
+        'eventos': sorted((slug, e.titulo) for slug, e in EVENTOS.items()),
+        'filtros': {'estado': estado, 'evento': evento, 'usuario': usuario_q, 'desde': desde, 'hasta': hasta},
+        'querystring': filtros.urlencode(),
     })

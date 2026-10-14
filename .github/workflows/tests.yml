@@ -1,0 +1,57 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: retosean
+          POSTGRES_PASSWORD: retosean-ci
+          POSTGRES_DB: retosean_django
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U retosean"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings.development
+      SECRET_KEY: ci-only-not-a-secret
+      DEBUG: "False"
+      ALLOWED_HOSTS: 127.0.0.1,localhost,testserver
+      DB_NAME: retosean_django
+      DB_USER: retosean
+      DB_PASSWORD: retosean-ci
+      DB_HOST: localhost
+      DB_PORT: "5432"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Chequeos de Django
+        run: |
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+
+      - name: Migraciones
+        run: python manage.py migrate --noinput
+
+      - name: Pruebas
+        run: python manage.py test --noinput

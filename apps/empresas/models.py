@@ -14,6 +14,15 @@ class Empresa(models.Model):
     nit = models.CharField(max_length=20, unique=True)
     razon_social = models.CharField(max_length=150)
     sector_industrial = models.CharField(max_length=100)
+    # HU01: datos del registro de la organizacion.
+    TIPOS_CONVOCATORIA = [
+        ("RETO", "Reto"),
+        ("HACKATHON", "Hackathon"),
+        ("AMBOS", "Reto y hackathon"),
+    ]
+    tipo_convocatoria = models.CharField(max_length=20, choices=TIPOS_CONVOCATORIA, default="RETO")
+    area_responsable = models.CharField(max_length=150, blank=True)
+    sitio_web = models.URLField(blank=True)
     fecha_creacion = models.DateField(auto_now_add=True)
     ESTADO_VALIDACION = [
     ('PENDIENTE', 'Pendiente'),
@@ -41,6 +50,10 @@ class Empresa(models.Model):
     ]
     estado_convenio = models.CharField(max_length=20, choices=ESTADO_CONVENIO, default="NO_RADICADO")
     fecha_vencimiento_convenio = models.DateField(null=True, blank=True)
+    # Bloqueo manual del administrador (HU00): la empresa no puede participar
+    # aunque tenga la documentacion al dia.
+    participacion_bloqueada = models.BooleanField(default=False)
+    motivo_bloqueo = models.TextField(blank=True)
     usuario = models.OneToOneField(
         "usuarios.Usuario",
         on_delete=models.CASCADE,
@@ -84,13 +97,43 @@ class ContactoEmpresa(models.Model):
         return f"{self.nombre} - {self.empresa.razon_social}"
 
 
+class TipoDocumentoLegal(models.Model):
+    """Catalogo administrable de documentos legales que se piden a las empresas (HU00).
+
+    El administrador decide cuales son obligatorios, su vigencia maxima y si
+    solo puede cargarlos un usuario con permiso especial (Listas Informa).
+    """
+
+    codigo = models.CharField(max_length=50, unique=True)
+    nombre = models.CharField(max_length=150)
+    descripcion = models.TextField(blank=True)
+    obligatorio = models.BooleanField(default=True)
+    # Documentos propios del convenio (minuta, convenio firmado): no se exigen
+    # a la empresa que eligio participar sin convenio.
+    aplica_sin_convenio = models.BooleanField(default=True)
+    # Antiguedad maxima de la fecha de expedicion; tambien fija el vencimiento.
+    vigencia_dias = models.PositiveSmallIntegerField(null=True, blank=True)
+    # Solo lo carga un usuario con el permiso `empresas.cargar_listas_informa`.
+    requiere_permiso_especial = models.BooleanField(default=False)
+    activo = models.BooleanField(default=True)
+    orden = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        db_table = "tipos_documento_legal"
+        ordering = ["orden", "nombre"]
+        verbose_name = "Tipo de documento legal"
+        verbose_name_plural = "Tipos de documento legal"
+
+    def __str__(self):
+        return self.nombre
+
+    def es_requerido_para(self, empresa):
+        return self.activo and self.obligatorio and (self.aplica_sin_convenio or not empresa.renuncio_a_convenio)
+
+
 class DocumentoEmpresa(models.Model):
-    TIPO_DOCUMENTO_CHOICES = [
-        ("CAMARA_COMERCIO", "Camara de Comercio"),
-        ("RUT", "Registro Unico Tributario (RUT)"),
-        ("CEDULA_REPRESENTANTE", "Cedula del Representante Legal"),
-        ("CONVENIO", "Convenio Institucional")
-    ]
+    # Formatos aceptados para cualquier documento legal.
+    EXTENSIONES_PERMITIDAS = ("pdf",)
     ESTADOS = [
         ("PENDIENTE", "Pendiente"),
         ("CARGADO", "En Revision"),
@@ -100,7 +143,9 @@ class DocumentoEmpresa(models.Model):
     ]
 
     empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name="documentos")
-    tipo_documento = models.CharField(max_length=50, choices=TIPO_DOCUMENTO_CHOICES)
+    # Codigo de `TipoDocumentoLegal`. Se guarda el codigo (no una FK) para que
+    # el historial y las rutas de archivo no dependan de que el tipo siga activo.
+    tipo_documento = models.CharField(max_length=50)
     archivo = models.FileField(upload_to=ruta_documentos_empresa, null=True, blank=True)
     estado = models.CharField(max_length=15, choices=ESTADOS, default="PENDIENTE")
     fecha_expedicion = models.DateField(null=True, blank=True)
@@ -113,13 +158,33 @@ class DocumentoEmpresa(models.Model):
         verbose_name = "Documento de Empresa"
         verbose_name_plural = "Documentos de Empresa"
         unique_together = ["empresa", "tipo_documento"]
-        
-        
+        permissions = [
+            ("cargar_listas_informa", "Puede cargar documentos de permiso especial (Listas Informa)"),
+        ]
+
+    @property
+    def tipo(self):
+        """`TipoDocumentoLegal` del catalogo, o None si el codigo ya no existe."""
+        if not hasattr(self, "_tipo_cache"):
+            self._tipo_cache = TipoDocumentoLegal.objects.filter(codigo=self.tipo_documento).first()
+        return self._tipo_cache
+
+    def get_tipo_documento_display(self):
+        return self.tipo.nombre if self.tipo else self.tipo_documento
+
+    @property
+    def esta_vigente(self):
+        from django.utils import timezone
+
+        return self.fecha_vencimiento is None or self.fecha_vencimiento >= timezone.localdate()
+
     def clean(self):
         super().clean()
-        
-        if self.tipo_documento == "CAMARA_COMERCIO" and not self.fecha_expedicion:
-            raise ValidationError({"fecha_expedicion": "La Cámara de Comercio requiere fecha de expedición"})
+        tipo = self.tipo
+        if tipo is None:
+            raise ValidationError({"tipo_documento": "Tipo de documento desconocido."})
+        if tipo.vigencia_dias and not self.fecha_expedicion:
+            raise ValidationError({"fecha_expedicion": f"{tipo.nombre} requiere fecha de expedición."})
 
     def save(self, *args, **kwargs):
         self.full_clean()

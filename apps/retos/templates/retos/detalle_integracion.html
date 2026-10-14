@@ -12,7 +12,12 @@
     <div class="d-flex flex-wrap gap-2">
       {% if user.rol == 'PROFESOR' and integracion.puede_editar_profesor %}
       <a href="{% url 'retos:editar_integracion' integracion.pk %}" class="btn btn-outline-primary btn-sm px-3">Editar</a>
-      <a href="{% url 'retos:enviar_integracion_revision' integracion.pk %}" class="btn btn-primary btn-sm px-3">Enviar a aprobacion</a>
+      {% if integracion.estado == 'borrador' %}
+      <form method="post" action="{% url 'retos:enviar_integracion_revision' integracion.pk %}" class="d-inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary btn-sm px-3">Enviar a aprobacion</button>
+      </form>
+      {% endif %}
       {% endif %}
 
       <!-- Botones para profesor cuando está aprobada o publicada -->

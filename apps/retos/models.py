@@ -75,6 +75,8 @@ class Reto(models.Model):
     )
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, default="reto")
     titulo = models.CharField(max_length=180, blank=True)
+    # HU01: nombre corto del reto, ademas de la descripcion en pregunta abierta.
+    nombre_corto = models.CharField(max_length=60, blank=True)
     descripcion = models.TextField(blank=True)
     area = models.CharField(max_length=120, blank=True, choices=AREA_CHOICES)
     nivel_academico = models.CharField(max_length=120, blank=True, choices=NIVEL_ACADEMICO_CHOICES)
@@ -105,6 +107,10 @@ class Reto(models.Model):
     premios = models.TextField(blank=True)
     documento_soporte = models.FileField(upload_to="retos/soportes/", blank=True, null=True)
     criterios_evaluacion = models.TextField(blank=True)
+    # HU01: uso esperado de los resultados e insumos que aporta la empresa.
+    uso_esperado_resultados = models.TextField(blank=True)
+    insumos_inicio = models.TextField(blank=True)
+    insumos_cierre = models.TextField(blank=True)
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default="borrador")
     # Consecutivo por tipo y por anio de aprobacion: RETO-2026-001, HACK-2026-001.
     consecutivo = models.PositiveIntegerField(null=True, blank=True)

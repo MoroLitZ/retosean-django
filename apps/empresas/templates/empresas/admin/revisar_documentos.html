@@ -3,6 +3,88 @@
 {% block page_title %}Revisión de Documentación Legal: {{ empresa.razon_social }}{% endblock %}
 
 {% block content %}
+<!-- LISTA DE CONTROL Y PARTICIPACIÓN (HU00) -->
+<div class="card-panel mb-4">
+    <div class="card-panel-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-list-check me-2 text-muted"></i>Lista de control documental</span>
+        {% if motivos_no_operar %}
+            <span class="badge bg-warning text-dark">No puede participar</span>
+        {% else %}
+            <span class="badge bg-success">Habilitada para participar</span>
+        {% endif %}
+    </div>
+    <div class="p-4">
+        {% if motivos_no_operar %}
+        <ul class="small text-danger mb-3">
+            {% for motivo in motivos_no_operar %}<li>{{ motivo }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+        <div class="table-responsive">
+            <table class="table table-sm align-middle small mb-3">
+                <thead><tr><th>Documento</th><th>Estado</th><th>Expedición</th><th>Vence</th><th>Archivo</th></tr></thead>
+                <tbody>
+                    {% for doc in lista_control %}
+                    <tr>
+                        <td>
+                            {{ doc.tipo }}
+                            {% if doc.requerido %}<span class="badge bg-light text-dark border">Obligatorio</span>{% else %}<span class="badge bg-light text-muted border">Opcional</span>{% endif %}
+                            {% if doc.especial %}<span class="badge bg-light text-muted border">Permiso especial</span>{% endif %}
+                        </td>
+                        <td>
+                            <span class="badge {{ doc.estado_clase }}">{{ doc.estado_texto }}</span>
+                            {% if doc.alerta and not doc.al_dia %}<div class="text-danger">{{ doc.alerta }}</div>{% endif %}
+                        </td>
+                        <td>{{ doc.fecha_expedicion|date:'d/m/Y'|default:'-' }}</td>
+                        <td>{{ doc.fecha_vencimiento|date:'d/m/Y'|default:'-' }}</td>
+                        <td>{% if doc.url_archivo %}<a href="{{ doc.url_archivo }}" target="_blank">Ver</a>{% else %}-{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="d-flex flex-wrap gap-3 align-items-end">
+            {% if empresa.participacion_bloqueada %}
+                <form action="{% url 'empresas:cambiar_bloqueo' empresa.id %}" method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="accion" value="habilitar">
+                    <div class="small text-danger mb-1"><strong>Bloqueada:</strong> {{ empresa.motivo_bloqueo }}</div>
+                    <button class="btn btn-sm btn-outline-success"><i class="bi bi-unlock me-1"></i>Habilitar participación</button>
+                </form>
+            {% else %}
+                <form action="{% url 'empresas:cambiar_bloqueo' empresa.id %}" method="post" class="d-flex gap-2 align-items-end">
+                    {% csrf_token %}
+                    <input type="hidden" name="accion" value="bloquear">
+                    <div>
+                        <label class="form-label small fw-bold text-muted mb-1" for="{{ bloqueo_form.motivo.id_for_label }}">{{ bloqueo_form.motivo.label }}</label>
+                        {{ bloqueo_form.motivo }}
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-lock me-1"></i>Bloquear participación</button>
+                </form>
+            {% endif %}
+
+            {% if puede_cargar_especiales and especial_form %}
+                <form action="{% url 'empresas:cargar_documento_especial' empresa.id %}" method="post" enctype="multipart/form-data" class="d-flex flex-wrap gap-2 align-items-end ms-lg-auto">
+                    {% csrf_token %}
+                    <div>
+                        <label class="form-label small fw-bold text-muted mb-1">Documento de permiso especial</label>
+                        {{ especial_form.tipo_documento }}
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold text-muted mb-1">Archivo PDF</label>
+                        {{ especial_form.archivo }}
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold text-muted mb-1">Expedición</label>
+                        {{ especial_form.fecha_expedicion }}
+                    </div>
+                    <button class="btn btn-sm btn-primary"><i class="bi bi-upload me-1"></i>Cargar</button>
+                </form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
 <!-- SECCIÓN DE LISTAS RESTRICTIVAS (CLINTON / OFAC) -->
 <div class="card-panel mb-4">
     <div class="card-panel-header d-flex justify-content-between align-items-center">
@@ -102,16 +184,6 @@
 </div>
 <!-- FIN SECCIÓN CONVENIO -->
 
-{% if faltantes %}
-<div class="alert alert-warning small mb-4" role="alert">
-    <strong><i class="bi bi-exclamation-triangle-fill me-1"></i>Esta empresa no puede participar todavía.</strong>
-    Documentos incompletos o vencidos:
-    <ul class="mb-0 mt-1">
-        {% for f in faltantes %}<li>{{ f.etiqueta }}: {{ f.motivo }}</li>{% endfor %}
-    </ul>
-</div>
-{% endif %}
-
 <div class="card-panel">
     <div class="card-panel-header d-flex justify-content-between align-items-center">
         <span><i class="bi bi-file-text me-2 text-muted"></i>Documentos pendientes de revisión</span>
@@ -183,5 +255,29 @@
     </div>
     {% endif %}
 </div>
-{% include 'empresas/_historial_documental.html' %}
+
+<div class="card-panel mt-4">
+    <div class="card-panel-header"><i class="bi bi-clock-history me-2 text-muted"></i>Historial de documentos</div>
+    {% if historial_documentos %}
+    <div class="table-responsive">
+        <table class="table table-sm align-middle small mb-0">
+            <thead><tr><th class="ps-4">Fecha</th><th>Documento</th><th>De</th><th>A</th><th>Por</th><th class="pe-4">Comentario</th></tr></thead>
+            <tbody>
+                {% for item in historial_documentos %}
+                <tr>
+                    <td class="ps-4">{{ item.fecha|date:'d/m/Y H:i' }}</td>
+                    <td>{% if item.documento %}{{ item.documento.get_tipo_documento_display }}{% else %}-{% endif %}</td>
+                    <td>{{ item.estado_anterior|default:'-' }}</td>
+                    <td>{{ item.estado_nuevo }}</td>
+                    <td>{{ item.realizado_por|default:'Sistema' }}</td>
+                    <td class="pe-4">{{ item.comentario|default:'-' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-muted small p-4 mb-0">Sin movimientos registrados.</p>
+    {% endif %}
+</div>
 {% endblock %}

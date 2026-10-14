@@ -37,11 +37,11 @@ class ReporteForm(forms.Form):
     )
     desde = forms.DateField(
         label="Desde", required=False,
-        widget=forms.DateInput(attrs={"type": "date", "class": CLASE_INPUT}),
+        widget=forms.DateInput(attrs={"type": "date", "class": CLASE_INPUT}, format="%Y-%m-%d"),
     )
     hasta = forms.DateField(
         label="Hasta", required=False,
-        widget=forms.DateInput(attrs={"type": "date", "class": CLASE_INPUT}),
+        widget=forms.DateInput(attrs={"type": "date", "class": CLASE_INPUT}, format="%Y-%m-%d"),
     )
 
     facultad = forms.ModelChoiceField(
@@ -50,7 +50,7 @@ class ReporteForm(forms.Form):
         widget=forms.Select(attrs={"class": CLASE_CONTROL}),
     )
     programa = forms.ModelChoiceField(
-        label="Programa", queryset=Programa.objects.order_by("nombre"),
+        label="Programa", queryset=Programa.objects.select_related("facultad").order_by("nombre"),
         required=False, empty_label="Todos",
         widget=forms.Select(attrs={"class": CLASE_CONTROL}),
     )

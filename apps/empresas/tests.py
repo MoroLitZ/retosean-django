@@ -70,22 +70,29 @@ class DocumentacionEmpresaTests(TestCase):
         self.assertIn("RUT", notificacion.mensaje)
 
     def test_el_estado_de_validacion_avanza_a_verificada(self):
-        """Antes solo se escribia RECHAZADA y la UI siempre mostraba Pendiente."""
+        """Antes solo se escribia RECHAZADA y la UI siempre mostraba Pendiente.
+
+        Con el catalogo (HU00) la empresa queda verificada solo cuando el
+        ultimo documento obligatorio pendiente se aprueba.
+        """
+        from .testing import habilitar_empresa
+
+        habilitar_empresa(self.empresa)
+        rut = DocumentoEmpresa.objects.get(empresa=self.empresa, tipo_documento="RUT")
+        rut.estado = "CARGADO"
+        rut.save()
         self.client.force_login(self.admin)
-        documentos = [self._documento(t) for t in ("RUT", "CAMARA_COMERCIO", "CEDULA_REPRESENTANTE")]
-        convenio = self._documento("CONVENIO")
 
-        for documento in documentos:
-            self.client.post(reverse("empresas:procesar_aprobacion", args=[documento.pk]),
-                             {"nuevo_estado": "VERIFICADO"})
-        self.empresa.refresh_from_db()
-        self.assertEqual(self.empresa.estado_validacion, "EN_REVISION")
-
-        self.client.post(reverse("empresas:procesar_aprobacion", args=[convenio.pk]),
+        self.client.post(reverse("empresas:procesar_aprobacion", args=[rut.pk]),
                          {"nuevo_estado": "VERIFICADO"})
         self.empresa.refresh_from_db()
         self.assertEqual(self.empresa.estado_validacion, "VERIFICADA")
         self.assertTrue(puede_la_empresa_operar(self.empresa))
+
+    def test_con_solo_rut_y_camara_aun_no_puede_operar(self):
+        self._documento("RUT", estado="VERIFICADO")
+        self._documento("CAMARA_COMERCIO", estado="VERIFICADO")
+        self.assertFalse(puede_la_empresa_operar(self.empresa))
 
     def test_un_documento_rechazado_deja_la_empresa_rechazada(self):
         documento = self._documento("RUT")
@@ -141,10 +148,46 @@ class GateDeDocumentacionTests(TestCase):
             response, reverse("empresas:elegir_convenio"), fetch_redirect_response=False
         )
 
-    def test_renunciando_al_convenio_si_puede_operar(self):
+    def test_elegir_sin_convenio_lleva_a_documentos_y_no_en_bucle(self):
+        self.client.force_login(self.usuario)
+        response = self.client.post(reverse("empresas:elegir_convenio"), {"opcion": "no_convenio"})
+        self.assertRedirects(response, reverse("empresas:documentos"))
+        self.empresa.refresh_from_db()
+        self.assertTrue(self.empresa.renuncio_a_convenio)
+
+    def test_sin_convenio_no_se_salta_la_documentacion(self):
+        """Elegir participar sin convenio ya no habilita a la empresa por si solo."""
         self.empresa.renuncio_a_convenio = True
         self.empresa.save()
+        self.assertFalse(puede_la_empresa_operar(self.empresa))
+
+    def test_sin_convenio_no_se_exigen_los_documentos_del_convenio(self):
+        from .services import tipos_requeridos
+
+        self.empresa.renuncio_a_convenio = True
+        codigos = {tipo.codigo for tipo in tipos_requeridos(self.empresa)}
+        self.assertNotIn("MINUTA_CONVENIO", codigos)
+        self.assertIn("RUT", codigos)
+
+        self.empresa.renuncio_a_convenio = False
+        self.assertIn("MINUTA_CONVENIO", {tipo.codigo for tipo in tipos_requeridos(self.empresa)})
+
+    def test_con_todos_los_obligatorios_verificados_puede_publicar(self):
+        from .testing import habilitar_empresa
+
+        habilitar_empresa(self.empresa)
         self.assertTrue(puede_la_empresa_operar(self.empresa))
+        self.client.force_login(self.usuario)
+        self.assertEqual(self.client.get(reverse("retos:crear")).status_code, 200)
+
+    def test_documento_vencido_deshabilita_a_la_empresa(self):
+        from .testing import habilitar_empresa
+
+        habilitar_empresa(self.empresa)
+        camara = DocumentoEmpresa.objects.get(empresa=self.empresa, tipo_documento="CAMARA_COMERCIO")
+        camara.fecha_vencimiento = date.today() - timedelta(days=1)
+        camara.save()
+        self.assertFalse(puede_la_empresa_operar(self.empresa))
 
 
 class ConvenioEmpresaTests(TestCase):
@@ -244,256 +287,157 @@ class SeguimientoAvanceEmpresaTests(TestCase):
         response = self.client.get(reverse("empresas:seguimiento_avance"))
         self.assertNotEqual(response.status_code, 200)
 
+    def _entregable(self, reto):
+        from apps.evaluacion.models import Entregable
 
-class ParticipacionSegunDocumentosTests(TestCase):
-    """HU00: una empresa solo participa cuando sus documentos requeridos estan verificados."""
+        estudiante = Usuario.objects.create_user(username=f"est-com-{reto.pk}", password="x", rol="ESTUDIANTE")
+        return Entregable.objects.create(
+            reto=reto, estudiante=estudiante, titulo="Prototipo",
+            archivo=SimpleUploadedFile("p.pdf", b"x"),
+        )
+
+    def test_empresa_comenta_entregable_y_avisa_al_equipo_y_profesor(self):
+        from apps.evaluacion.models import ComentarioEntregable
+        from apps.seguimiento.models import IntegracionAcademica
+
+        profesor = Usuario.objects.create_user(username="profe-com", password="x", rol="PROFESOR")
+        IntegracionAcademica.objects.create(reto=self.reto, profesor=profesor, estado="publicada")
+        entregable = self._entregable(self.reto)
+        self.client.force_login(self.empresa)
+        response = self.client.post(reverse("evaluacion:comentario", args=[entregable.pk]),
+                                    {"comentario": "Muy buen avance"})
+        self.assertRedirects(response, reverse("empresas:seguimiento_reto", args=[self.reto.pk]))
+        self.assertTrue(ComentarioEntregable.objects.filter(entregable=entregable, autor=self.empresa).exists())
+        for destino in (entregable.estudiante, profesor):
+            self.assertTrue(Notificacion.objects.filter(usuario=destino, evento="COMENTARIO_EMPRESA").exists())
+        self.assertContains(self.client.get(reverse("empresas:seguimiento_reto", args=[self.reto.pk])), "Muy buen avance")
+
+    def test_empresa_no_comenta_entregables_de_otra(self):
+        entregable = self._entregable(self.ajeno)
+        self.client.force_login(self.empresa)
+        response = self.client.post(reverse("evaluacion:comentario", args=[entregable.pk]), {"comentario": "Hola"})
+        self.assertEqual(response.status_code, 403)
+
+
+class CatalogoDocumentosTests(TestCase):
+    """Catalogo configurable, permiso especial, formato y bloqueo (HU00)."""
 
     def setUp(self):
-        from apps.participaciones.models import Postulacion
-        from apps.retos.models import Reto
-        from apps.seguimiento.services import TransicionInvalida
+        from django.contrib.auth.models import Permission
 
-        self.TransicionInvalida = TransicionInvalida
-        self.Postulacion = Postulacion
-        self.admin = Usuario.objects.create_superuser(
-            username="admin-part-doc", password="x", email="a@ean.edu.co"
-        )
-        self.usuario = Usuario.objects.create_user(
-            username="empresa-part-doc", password="x", rol="EMPRESA"
-        )
-        self.empresa = Empresa.objects.create(
-            usuario=self.usuario, nit="900777777", razon_social="Beta SAS"
-        )
-        self.reto = Reto.objects.create(
-            empresa=self.usuario, titulo="Reto de Beta", estado="en_revision"
-        )
-        self.estudiante = Usuario.objects.create_user(
-            username="est-part-doc", password="x", rol="ESTUDIANTE"
-        )
+        self.admin = Usuario.objects.create_user(username="admin-cat", password="x", rol="ADMIN")
+        self.lider = Usuario.objects.create_user(username="lider-facultad", password="x", rol="ADMIN")
+        self.lider.user_permissions.add(Permission.objects.get(codename="cargar_listas_informa"))
+        self.usuario_empresa = Usuario.objects.create_user(username="empresa-cat", password="x", rol="EMPRESA")
+        self.empresa = Empresa.objects.create(usuario=self.usuario_empresa, nit="900888999", razon_social="Cat SAS")
 
-    def _verificar(self, tipo, expedicion=None):
-        return DocumentoEmpresa.objects.create(
-            empresa=self.empresa, tipo_documento=tipo, estado="VERIFICADO",
-            archivo=SimpleUploadedFile(f"{tipo}.pdf", b"x"),
-            fecha_expedicion=expedicion,
-        )
+    def _pdf(self, nombre="doc.pdf"):
+        return SimpleUploadedFile(nombre, b"%PDF-1.4")
 
-    def _verificar_todo(self):
-        from datetime import date as fecha
-        self._verificar("CAMARA_COMERCIO", expedicion=fecha.today())
-        for tipo in ("RUT", "CEDULA_REPRESENTANTE", "CONVENIO"):
-            self._verificar(tipo)
+    def test_catalogo_trae_los_ocho_documentos_obligatorios_del_brief(self):
+        from .models import TipoDocumentoLegal
 
-    def test_lista_los_documentos_que_faltan(self):
-        from .services import documentos_faltantes
-        self._verificar("RUT")
-        faltantes = {f["tipo"] for f in documentos_faltantes(self.empresa)}
-        self.assertEqual(faltantes, {"CAMARA_COMERCIO", "CEDULA_REPRESENTANTE", "CONVENIO"})
+        obligatorios = set(TipoDocumentoLegal.objects.filter(obligatorio=True, activo=True).values_list("codigo", flat=True))
+        self.assertEqual(obligatorios, {
+            "MINUTA_CONVENIO", "CAMARA_COMERCIO", "RUT", "CEDULA_REPRESENTANTE",
+            "LISTAS_INFORMA", "FORMATO_COMPROMISO", "TERMINOS_REFERENCIA", "FICHA_RETO",
+        })
 
-    def test_con_todo_verificado_no_hay_faltantes(self):
-        from .services import documentos_faltantes, puede_la_empresa_operar
-        self._verificar_todo()
-        self.assertEqual(documentos_faltantes(self.empresa), [])
+    def test_la_empresa_no_puede_cargar_listas_informa(self):
+        from .forms import CargarDocumentoForm
+
+        opciones = dict(CargarDocumentoForm().fields["tipo_documento"].choices)
+        self.assertNotIn("LISTAS_INFORMA", opciones)
+        self.client.force_login(self.usuario_empresa)
+        self.client.post(reverse("empresas:documentos"), {
+            "tipo_documento": "LISTAS_INFORMA", "archivo": self._pdf(),
+            "fecha_expedicion": date.today().isoformat(),
+        })
+        self.assertFalse(DocumentoEmpresa.objects.filter(empresa=self.empresa, tipo_documento="LISTAS_INFORMA").exists())
+
+    def test_solo_quien_tiene_el_permiso_carga_listas_informa(self):
+        url = reverse("empresas:cargar_documento_especial", args=[self.empresa.pk])
+        datos = {"tipo_documento": "LISTAS_INFORMA", "fecha_expedicion": date.today().isoformat()}
+
+        self.client.force_login(self.admin)
+        self.assertEqual(self.client.post(url, {**datos, "archivo": self._pdf()}).status_code, 403)
+
+        self.client.force_login(self.lider)
+        self.client.post(url, {**datos, "archivo": self._pdf()})
+        documento = DocumentoEmpresa.objects.get(empresa=self.empresa, tipo_documento="LISTAS_INFORMA")
+        self.assertEqual(documento.estado, "CARGADO")
+
+    def test_formato_distinto_de_pdf_se_rechaza(self):
+        self.client.force_login(self.usuario_empresa)
+        self.client.post(reverse("empresas:documentos"), {
+            "tipo_documento": "RUT", "archivo": SimpleUploadedFile("rut.docx", b"x"),
+            "fecha_expedicion": date.today().isoformat(),
+        })
+        self.assertFalse(DocumentoEmpresa.objects.filter(empresa=self.empresa, tipo_documento="RUT").exists())
+
+    def test_vigencia_fija_la_fecha_de_vencimiento(self):
+        self.client.force_login(self.usuario_empresa)
+        expedicion = date.today() - timedelta(days=10)
+        self.client.post(reverse("empresas:documentos"), {
+            "tipo_documento": "CAMARA_COMERCIO", "archivo": self._pdf(),
+            "fecha_expedicion": expedicion.isoformat(),
+        })
+        camara = DocumentoEmpresa.objects.get(empresa=self.empresa, tipo_documento="CAMARA_COMERCIO")
+        self.assertEqual(camara.fecha_vencimiento, expedicion + timedelta(days=30))
+
+    def test_bloqueo_del_admin_deshabilita_y_queda_registrado(self):
+        from apps.seguimiento.services import historial_de
+
+        from .testing import habilitar_empresa
+
+        habilitar_empresa(self.empresa)
+        self.assertTrue(puede_la_empresa_operar(self.empresa))
+        self.client.force_login(self.admin)
+        url = reverse("empresas:cambiar_bloqueo", args=[self.empresa.pk])
+
+        self.client.post(url, {"accion": "bloquear", "motivo": ""})
+        self.empresa.refresh_from_db()
+        self.assertFalse(self.empresa.participacion_bloqueada, "bloquear exige motivo")
+
+        self.client.post(url, {"accion": "bloquear", "motivo": "Incumplimiento del convenio"})
+        self.empresa.refresh_from_db()
+        self.assertTrue(self.empresa.participacion_bloqueada)
+        self.assertFalse(puede_la_empresa_operar(self.empresa))
+        self.assertTrue(historial_de(self.empresa, campo="participacion_bloqueada").exists())
+        self.assertTrue(Notificacion.objects.filter(usuario=self.usuario_empresa, evento="EMPRESA_PARTICIPACION").exists())
+
+        self.client.post(url, {"accion": "habilitar"})
+        self.empresa.refresh_from_db()
         self.assertTrue(puede_la_empresa_operar(self.empresa))
 
-    def test_camara_de_mas_de_30_dias_cuenta_como_vencida(self):
-        from datetime import date as fecha, timedelta
-        from .services import documentos_faltantes
-        self._verificar("CAMARA_COMERCIO", expedicion=fecha.today() - timedelta(days=31))
-        for tipo in ("RUT", "CEDULA_REPRESENTANTE", "CONVENIO"):
-            self._verificar(tipo)
-        motivos = {f["tipo"]: f["motivo"] for f in documentos_faltantes(self.empresa)}
-        self.assertIn("CAMARA_COMERCIO", motivos)
-        self.assertIn("30 dias", motivos["CAMARA_COMERCIO"])
-
-    def test_renunciar_al_convenio_no_exige_convenio(self):
-        from .services import documentos_faltantes
-        self.empresa.renuncio_a_convenio = True
-        self.empresa.save()
-        self._verificar("CAMARA_COMERCIO", expedicion=date.today())
-        self._verificar("RUT")
-        self._verificar("CEDULA_REPRESENTANTE")
-        self.assertEqual(documentos_faltantes(self.empresa), [])
-
-    def test_admin_no_aprueba_reto_de_empresa_incompleta(self):
-        self._verificar("RUT")
-        self.client.force_login(self.admin)
-        self.client.post(reverse("retos:admin_revisar", args=[self.reto.pk]),
-                         {"accion": "aprobar", "comentario": "ok"})
-        self.reto.refresh_from_db()
-        self.assertNotEqual(self.reto.estado, "aprobado")
-
-    def test_admin_aprueba_reto_de_empresa_completa(self):
-        self._verificar_todo()
-        self.client.force_login(self.admin)
-        self.client.post(reverse("retos:admin_revisar", args=[self.reto.pk]),
-                         {"accion": "aprobar", "comentario": "ok"})
-        self.reto.refresh_from_db()
-        self.assertEqual(self.reto.estado, "aprobado")
-
-    def test_empresa_incompleta_no_acepta_postulaciones(self):
-        postulacion = self.Postulacion.objects.create(
-            reto=self.reto, estudiante=self.estudiante, estado="PENDIENTE"
-        )
-        self.client.force_login(self.usuario)
-        self.client.post(reverse("empresas:gestionar_postulacion", args=[postulacion.pk]),
-                         {"accion": "aceptar"})
-        postulacion.refresh_from_db()
-        self.assertEqual(postulacion.estado, "PENDIENTE")
-
-
-class VencimientoEHistorialDocumentalTests(TestCase):
-    """HU00: vencimiento automatico (con aviso a la empresa) e historial consultable."""
-
-    def setUp(self):
-        self.admin = Usuario.objects.create_superuser(
-            username="admin-venc", password="x", email="a@ean.edu.co"
-        )
-        self.usuario = Usuario.objects.create_user(
-            username="empresa-venc", password="x", rol="EMPRESA", email="e@example.com"
-        )
-        self.empresa = Empresa.objects.create(
-            usuario=self.usuario, nit="900888888", razon_social="Gamma SAS"
-        )
-
-    def _camara(self, dias_atras, estado="VERIFICADO"):
-        return DocumentoEmpresa.objects.create(
-            empresa=self.empresa, tipo_documento="CAMARA_COMERCIO", estado=estado,
-            archivo=SimpleUploadedFile("c.pdf", b"x"),
-            fecha_expedicion=date.today() - timedelta(days=dias_atras),
-        )
-
-    def _correr_comando(self):
-        from django.core.management import call_command
-        call_command("enviar_recordatorios", "--dias", "1", verbosity=0)
-
-    def test_el_comando_vence_la_camara_de_mas_de_30_dias_y_avisa(self):
-        camara = self._camara(dias_atras=45)
-        self._correr_comando()
-        camara.refresh_from_db()
-        self.assertEqual(camara.estado, "VENCIDO")
-        aviso = Notificacion.objects.get(usuario=self.usuario, evento="DOCUMENTO_REVISADO")
-        self.assertEqual(aviso.tipo, "ADVERTENCIA")
-        self.assertIn("vencido", aviso.mensaje.lower())
-
-    def test_el_comando_no_toca_una_camara_vigente(self):
-        camara = self._camara(dias_atras=10)
-        self._correr_comando()
-        camara.refresh_from_db()
-        self.assertEqual(camara.estado, "VERIFICADO")
-
-    def test_el_comando_es_idempotente(self):
-        camara = self._camara(dias_atras=45)
-        self._correr_comando()
-        self._correr_comando()
-        camara.refresh_from_db()
-        self.assertEqual(camara.estado, "VENCIDO")
-        self.assertEqual(Notificacion.objects.filter(usuario=self.usuario, evento="DOCUMENTO_REVISADO").count(), 1)
-
-    def test_el_vencimiento_queda_en_el_historial(self):
-        from .services import historial_documental
-        self._camara(dias_atras=45)
-        self._correr_comando()
-        nuevos = [h["nuevo"] for h in historial_documental(self.empresa)]
-        self.assertIn("VENCIDO", nuevos)
-
-    def test_historial_incluye_revisiones_del_admin(self):
-        from .services import historial_documental
-        documento = DocumentoEmpresa.objects.create(
-            empresa=self.empresa, tipo_documento="RUT", estado="CARGADO",
-            archivo=SimpleUploadedFile("r.pdf", b"x"),
-        )
-        self.client.force_login(self.admin)
-        self.client.post(reverse("empresas:procesar_aprobacion", args=[documento.pk]),
-                         {"nuevo_estado": "RECHAZADO", "motivo": "Ilegible"})
-        entrada = historial_documental(self.empresa)[0]
-        self.assertEqual(entrada["nuevo"], "RECHAZADO")
-        self.assertEqual(entrada["comentario"], "Ilegible")
-        self.assertEqual(entrada["usuario"], self.admin)
-
-    def test_pantallas_muestran_el_historial(self):
-        self._camara(dias_atras=45)
-        self._correr_comando()
-        self.client.force_login(self.usuario)
-        self.assertContains(self.client.get(reverse("empresas:documentos")), "Historial documental")
-        self.client.force_login(self.admin)
-        self.assertContains(
-            self.client.get(reverse("empresas:admin_revisar_documentacion", args=[self.empresa.pk])),
-            "Historial documental",
-        )
-
-
-class SiembraDemoTests(TestCase):
-    """El seed de demo depende de las reglas de HU00: si estas cambian, que falle aqui."""
-
-    def test_la_siembra_es_idempotente_y_cubre_los_casos_de_hu00(self):
-        import io
-        from django.core.management import call_command
-        from .services import documentos_faltantes, puede_la_empresa_operar
-        from apps.presupuesto.models import Presupuesto
-        from apps.unidades_estudio.models import UnidadEstudio
-
-        for _ in range(2):  # la segunda corrida no debe duplicar ni fallar
-            call_command("sembrar_demo_completa", stdout=io.StringIO(), verbosity=0)
-
-        def empresa(slug):
-            return Empresa.objects.get(usuario__username=f"empresa.{slug}")
-
-        self.assertTrue(puede_la_empresa_operar(empresa("verificada")))
-        self.assertTrue(puede_la_empresa_operar(empresa("sinconvenio")))  # renuncia al convenio
-        for slug in ("pendiente", "revision", "rechazada"):
-            self.assertFalse(puede_la_empresa_operar(empresa(slug)), slug)
-        motivos = {f["motivo"] for f in documentos_faltantes(empresa("rechazada"))}
-        self.assertTrue({"Vencido", "Rechazado"} <= motivos)
-
-        self.assertEqual(UnidadEstudio.objects.filter(codigo__startswith="DEMO-").count(), 12)
-        porcentajes = sorted(round(float(p.porcentaje_ejecutado)) for p in Presupuesto.objects.all())
-        self.assertGreater(porcentajes[-1], 100)  # uno excedido
-        self.assertTrue(any(80 <= p <= 100 for p in porcentajes))  # uno en alerta
-
-
-class ReglasBordeDocumentosTests(TestCase):
-    """Casos limite de HU00 detectados en la revision del codigo."""
-
-    def setUp(self):
+    def test_admin_no_aprueba_reto_de_empresa_sin_documentacion(self):
         from apps.retos.models import Reto
-        self.admin = Usuario.objects.create_superuser(username="admin-borde", password="x", email="a@ean.edu.co")
-        self.usuario = Usuario.objects.create_user(username="empresa-borde", password="x", rol="EMPRESA")
-        self.empresa = Empresa.objects.create(usuario=self.usuario, nit="900999999", razon_social="Delta SAS")
-        self.reto = Reto.objects.create(empresa=self.usuario, titulo="Reto de Delta", estado="en_revision")
 
-    def _doc(self, tipo, estado="VERIFICADO", **extra):
-        return DocumentoEmpresa.objects.create(
-            empresa=self.empresa, tipo_documento=tipo, estado=estado,
-            archivo=SimpleUploadedFile(f"{tipo}.pdf", b"x"), **extra,
-        )
-
-    def test_quien_renuncia_al_convenio_queda_exento_de_los_documentos(self):
-        from .services import documentos_faltantes, puede_la_empresa_operar, verificar_participacion
-        self.empresa.renuncio_a_convenio = True
-        self.empresa.save()
-        self.assertEqual(documentos_faltantes(self.empresa), [])
-        self.assertTrue(puede_la_empresa_operar(self.empresa))
-        verificar_participacion(self.empresa)  # no lanza
+        reto = Reto.objects.create(empresa=self.usuario_empresa, titulo="Reto sin papeles", estado="en_revision")
         self.client.force_login(self.admin)
-        self.client.post(reverse("retos:admin_revisar", args=[self.reto.pk]),
-                         {"accion": "aprobar", "comentario": "ok"})
-        self.reto.refresh_from_db()
-        self.assertEqual(self.reto.estado, "aprobado")
+        self.client.post(reverse("retos:admin_revisar", args=[reto.pk]), {"accion": "aprobar", "comentario": ""})
+        reto.refresh_from_db()
+        self.assertEqual(reto.estado, "en_revision")
 
-    def test_camara_sin_fecha_de_expedicion_no_cuenta_como_vigente(self):
-        from .services import documentos_faltantes
-        camara = self._doc("CAMARA_COMERCIO", fecha_expedicion=date.today())
-        DocumentoEmpresa.objects.filter(pk=camara.pk).update(fecha_expedicion=None)  # dato antiguo
-        motivos = {f["tipo"]: f["motivo"] for f in documentos_faltantes(self.empresa)}
-        self.assertEqual(motivos["CAMARA_COMERCIO"], "Sin fecha de expedicion")
+    def test_admin_configura_el_catalogo(self):
+        from .models import TipoDocumentoLegal
 
-    def test_recargar_un_documento_vencido_limpia_su_vencimiento(self):
-        from .services import cargar_documento, documentos_faltantes, revisar_documento
-        rut = self._doc("RUT", fecha_vencimiento=date.today() - timedelta(days=1))
-        self.assertEqual({f["tipo"]: f["motivo"] for f in documentos_faltantes(self.empresa)}["RUT"], "Vencido")
-        cargar_documento(self.empresa, "RUT", SimpleUploadedFile("nuevo.pdf", b"y"), None, self.usuario)
-        rut.refresh_from_db()
-        self.assertIsNone(rut.fecha_vencimiento)
-        revisar_documento(rut, "VERIFICADO", self.admin)
-        self.assertNotIn("RUT", {f["tipo"] for f in documentos_faltantes(self.empresa)})
+        self.client.force_login(self.admin)
+        self.assertEqual(self.client.get(reverse("empresas:tipos_documento")).status_code, 200)
+        self.client.post(reverse("empresas:crear_tipo_documento"), {
+            "codigo": "poliza", "nombre": "Póliza de responsabilidad", "descripcion": "",
+            "obligatorio": "on", "aplica_sin_convenio": "on", "activo": "on", "orden": 20,
+        })
+        nuevo = TipoDocumentoLegal.objects.get(codigo="POLIZA")
+        self.assertTrue(nuevo.obligatorio)
+
+        ficha = TipoDocumentoLegal.objects.get(codigo="FICHA_RETO")
+        self.client.post(reverse("empresas:editar_tipo_documento", args=[ficha.pk]), {
+            "nombre": ficha.nombre, "descripcion": "", "aplica_sin_convenio": "on", "activo": "on", "orden": ficha.orden,
+        })
+        ficha.refresh_from_db()
+        self.assertFalse(ficha.obligatorio)
+
+    def test_empresa_no_accede_al_catalogo(self):
+        self.client.force_login(self.usuario_empresa)
+        self.assertNotEqual(self.client.get(reverse("empresas:tipos_documento")).status_code, 200)

@@ -51,14 +51,13 @@
 
   <!-- Tarjetas de Resumen de Estado -->
   <div class="row g-3 mb-4">
-    {% with total=documentos|length %}
     <div class="col-sm-6 col-lg-3">
       <div class="card-stat d-flex align-items-center gap-3 p-3" style="background: #fff; border-radius: 12px; border: 1px solid #e5e7eb;">
         <div class="stat-icon-box" style="background: rgba(var(--accent-rgb),.12); width: 48px; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem;">
           <i class="bi bi-file-earmark-text" style="color: var(--accent);"></i>
         </div>
         <div>
-          <div style="font-size: 1.5rem; font-weight: 800; color: #111827; line-height: 1;">{{ total }}</div>
+          <div style="font-size: 1.5rem; font-weight: 800; color: #111827; line-height: 1;">{{ documentos_cargados }}</div>
           <div style="font-size: 0.78rem; color: #6b7280;">Documentos cargados</div>
         </div>
       </div>
@@ -69,13 +68,27 @@
           <i class="bi bi-patch-check" style="color: #16a34a;"></i>
         </div>
         <div>
-          <div style="font-size: 1.5rem; font-weight: 800; color: #111827; line-height: 1;">{{ documentos_requeridos }}</div>
-          <div style="font-size: 0.78rem; color: #6b7280;">Documentos requeridos</div>
+          <div style="font-size: 1.5rem; font-weight: 800; color: #111827; line-height: 1;">{{ requeridos_al_dia }} / {{ documentos_requeridos }}</div>
+          <div style="font-size: 0.78rem; color: #6b7280;">Requeridos verificados y vigentes</div>
         </div>
       </div>
     </div>
-    {% endwith %}
   </div>
+
+  {% if perfil %}
+    {% if motivos_no_operar %}
+    <div class="alert alert-warning small mb-4">
+      <strong><i class="bi bi-exclamation-triangle me-1"></i>Tu empresa aún no puede participar con retos:</strong>
+      <ul class="mb-0 mt-2">
+        {% for motivo in motivos_no_operar %}<li>{{ motivo }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% else %}
+    <div class="alert alert-success small mb-4">
+      <i class="bi bi-check-circle me-1"></i>Tu documentación está completa y vigente: puedes publicar retos.
+    </div>
+    {% endif %}
+  {% endif %}
 
   <div class="row g-4">
 
@@ -114,7 +127,7 @@
                 Fecha de Expedición
               </label>
               {{ form.fecha_expedicion }}
-              <div class="form-text" style="font-size:.75rem; color: #6b7280;">Para Cámara de Comercio, máximo 30 días de antigüedad.</div>
+              <div class="form-text" style="font-size:.75rem; color: #6b7280;">Para Cámara de Comercio, máximo 30 días de antigüedad. Listas Informa la carga la universidad.</div>
               {% if form.fecha_expedicion.errors %}
                 <div class="text-danger small mt-1 font-weight-bold">
                   <i class="bi bi-exclamation-triangle me-1"></i>{{ form.fecha_expedicion.errors.0 }}
@@ -132,15 +145,6 @@
 
     <!-- Columna Derecha: Tabla de Estados -->
     <div class="col-lg-8">
-      {% if faltantes %}
-      <div class="alert alert-warning small mb-3" role="alert">
-        <strong><i class="bi bi-exclamation-triangle-fill me-1"></i>Aún no puedes participar.</strong>
-        Revisa estos documentos:
-        <ul class="mb-0 mt-1">
-          {% for f in faltantes %}<li>{{ f.etiqueta }}: {{ f.motivo }}</li>{% endfor %}
-        </ul>
-      </div>
-      {% endif %}
       <div class="card-panel">
         <div class="card-panel-header d-flex justify-content-between align-items-center">
           <span><i class="bi bi-list-check me-2" style="color: var(--accent);"></i>Estado de Documentación</span>
@@ -152,7 +156,7 @@
               <tr>
                 <th style="padding:.9rem 1.25rem;font-size:.72rem;text-transform:uppercase;letter-spacing:.6px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb;">Documento</th>
                 <th style="padding:.9rem 1.25rem;font-size:.72rem;text-transform:uppercase;letter-spacing:.6px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb;">Estado</th>
-                <th style="padding:.9rem 1.25rem;font-size:.72rem;text-transform:uppercase;letter-spacing:.6px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb;">Expedición</th>
+                <th style="padding:.9rem 1.25rem;font-size:.72rem;text-transform:uppercase;letter-spacing:.6px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb;">Expedición / Vence</th>
                 <th style="padding:.9rem 1.25rem;font-size:.72rem;text-transform:uppercase;letter-spacing:.6px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb;">Archivo</th>
               </tr>
             </thead>
@@ -162,19 +166,21 @@
                 <tr>
                   <td style="padding:.85rem 1.25rem;border-bottom:1px solid #f3f4f6;">
                     <span style="font-weight:600;color:#111827;">{{ doc.tipo }}</span>
+                    {% if doc.requerido %}<span class="badge bg-light text-dark border ms-1" style="font-size:.68rem;">Obligatorio</span>{% else %}<span class="badge bg-light text-muted border ms-1" style="font-size:.68rem;">Opcional</span>{% endif %}
+                    {% if doc.especial %}<div class="small text-muted">Lo carga la universidad</div>{% endif %}
                   </td>
                   <td style="padding:.85rem 1.25rem;border-bottom:1px solid #f3f4f6;">
                     <span class="badge {{ doc.estado_clase }}" style="font-size:.75rem;padding:.35em .65em;border-radius:6px;">
                       {{ doc.estado_texto }}
                     </span>
-                    {% if doc.motivo_rechazo %}
-                      <div class="small text-danger mt-1">
-                        <i class="bi bi-info-circle me-1"></i><strong>Motivo:</strong> {{ doc.motivo_rechazo }}
+                    {% if doc.alerta %}
+                      <div class="small {% if doc.al_dia %}text-muted{% else %}text-danger{% endif %} mt-1">
+                        <i class="bi bi-info-circle me-1"></i>{{ doc.alerta }}
                       </div>
                     {% endif %}
                   </td>
                   <td style="padding:.85rem 1.25rem;border-bottom:1px solid #f3f4f6;color:#6b7280;">
-                    {{ doc.fecha_expedicion }}
+                    {{ doc.fecha_expedicion|default:'-' }}{% if doc.fecha_vencimiento %}<div class="small">Vence: {{ doc.fecha_vencimiento }}</div>{% endif %}
                   </td>
                   <td style="padding:.85rem 1.25rem;border-bottom:1px solid #f3f4f6;">
                     {% if doc.url_archivo %}

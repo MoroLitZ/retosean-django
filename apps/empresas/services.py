@@ -1,7 +1,10 @@
+from datetime import timedelta
+
 from django.db import transaction
 from django.urls import reverse
+from django.utils import timezone
 
-from apps.empresas.models import DocumentoEmpresa, Empresa
+from apps.empresas.models import DocumentoEmpresa, Empresa, TipoDocumentoLegal
 from apps.seguimiento.services import (
     MaquinaEstados,
     TransicionInvalida,
@@ -43,67 +46,106 @@ MAQUINA_CONVENIO = MaquinaEstados(
 )
 
 
-# Documentos que exige la plataforma para participar (HU00).
-DOCUMENTOS_REQUERIDOS = ("CAMARA_COMERCIO", "RUT", "CEDULA_REPRESENTANTE", "CONVENIO")
-DIAS_MAXIMOS_CAMARA = 30
+def tipos_requeridos(empresa):
+    """Tipos de documento obligatorios para esta empresa, segun el catalogo."""
+    return [tipo for tipo in TipoDocumentoLegal.objects.filter(activo=True) if tipo.es_requerido_para(empresa)]
 
 
-def documentos_requeridos(empresa):
-    # Quien elige "publicar de forma directa sin convenio" (empresas.elegir_modo_convenio)
-    # queda fuera del control documental: esa pantalla le promete publicar de inmediato.
-    if getattr(empresa, 'renuncio_a_convenio', False):
-        return ()
-    return DOCUMENTOS_REQUERIDOS
+def estado_documental(empresa):
+    """Lista de control de la empresa: un renglon por tipo activo del catalogo.
 
-
-def documentos_faltantes(empresa):
-    """Documentos requeridos que aun no estan verificados y vigentes, con el motivo.
-
-    Devuelve una lista de dicts `{tipo, etiqueta, motivo}`; vacia si todo esta listo.
+    Cada renglon trae el tipo, su documento (o None), si es requerido, si esta
+    al dia (verificado y vigente) y un texto de alerta cuando falta algo.
     """
-    from django.utils import timezone
+    documentos = {d.tipo_documento: d for d in DocumentoEmpresa.objects.filter(empresa=empresa)}
+    filas = []
+    for tipo in TipoDocumentoLegal.objects.filter(activo=True):
+        documento = documentos.get(tipo.codigo)
+        requerido = tipo.es_requerido_para(empresa)
+        al_dia = bool(documento and documento.estado == "VERIFICADO" and documento.esta_vigente)
+        alerta = ""
+        if documento is None or documento.estado == "PENDIENTE":
+            alerta = "Falta cargarlo." if requerido else ""
+        elif documento.estado == "RECHAZADO":
+            alerta = f"Rechazado: {documento.motivo_rechazo or 'sin motivo'}. Debe cargarse de nuevo."
+        elif documento.estado == "VENCIDO" or not documento.esta_vigente:
+            alerta = "Vencido: debe actualizarse."
+        elif documento.estado == "CARGADO":
+            alerta = "En revisión por el administrador."
+        filas.append({
+            "tipo": tipo,
+            "documento": documento,
+            "requerido": requerido,
+            "al_dia": al_dia,
+            "alerta": alerta,
+        })
+    return filas
 
-    hoy = timezone.localdate()
-    por_tipo = {d.tipo_documento: d for d in DocumentoEmpresa.objects.filter(empresa=empresa)}
-    etiquetas = dict(DocumentoEmpresa.TIPO_DOCUMENTO_CHOICES)
-    faltantes = []
-    for tipo in documentos_requeridos(empresa):
-        doc = por_tipo.get(tipo)
-        if doc is None or (doc.estado == "PENDIENTE" and not doc.archivo):
-            motivo = "Falta cargar"
-        elif doc.estado == "RECHAZADO":
-            motivo = "Rechazado"
-        elif doc.estado == "VENCIDO" or (doc.fecha_vencimiento and doc.fecha_vencimiento < hoy):
-            motivo = "Vencido"
-        elif tipo == "CAMARA_COMERCIO" and doc.fecha_expedicion is None:
-            motivo = "Sin fecha de expedicion"
-        elif tipo == "CAMARA_COMERCIO" and (hoy - doc.fecha_expedicion).days > DIAS_MAXIMOS_CAMARA:
-            motivo = f"Vencido: expedido hace mas de {DIAS_MAXIMOS_CAMARA} dias"
-        elif doc.estado != "VERIFICADO":
-            motivo = "Pendiente de verificacion"
-        else:
-            continue
-        faltantes.append({"tipo": tipo, "etiqueta": etiquetas[tipo], "motivo": motivo})
-    return faltantes
+
+def documentacion_completa(empresa):
+    """Todos los documentos obligatorios estan verificados y vigentes."""
+    return all(fila["al_dia"] for fila in estado_documental(empresa) if fila["requerido"])
+
+
+def motivos_para_no_operar(empresa):
+    """Razones por las que la empresa aun no puede participar (lista vacia = puede)."""
+    motivos = []
+    if empresa.participacion_bloqueada:
+        motivos.append(f"Participación bloqueada por el administrador. {empresa.motivo_bloqueo}".strip())
+    if empresa.estado_listas_restrictivas == "RECHAZADO":
+        motivos.append("La empresa aparece en listas restrictivas.")
+    for fila in estado_documental(empresa):
+        if fila["requerido"] and not fila["al_dia"]:
+            motivos.append(f'{fila["tipo"].nombre}: {fila["alerta"] or "pendiente de verificación."}')
+    return motivos
 
 
 def puede_la_empresa_operar(empresa):
-    """Una empresa opera si no le falta ningun documento requerido (la que renuncio al convenio no requiere ninguno)."""
-    return not documentos_faltantes(empresa)
+    """La empresa participa solo con todos sus documentos obligatorios verificados
+    y vigentes, sin bloqueo del administrador ni hallazgos en listas restrictivas.
 
-
-def verificar_participacion(empresa):
-    """Bloquea la participacion de una empresa con documentacion incompleta (HU00).
-
-    Lanza `TransicionInvalida` con la lista de lo que falta; no hace nada si la
-    empresa puede participar.
+    Elegir participar sin convenio ya no salta la verificacion: solo deja de
+    exigir los documentos propios del convenio (`aplica_sin_convenio=False`).
     """
-    if empresa is None:
-        raise TransicionInvalida("La empresa no tiene perfil registrado: no puede participar.")
-    faltantes = documentos_faltantes(empresa)
-    if faltantes:
-        nombres = ", ".join(f"{f['etiqueta']} ({f['motivo'].lower()})" for f in faltantes)
-        raise TransicionInvalida(f"La empresa aun no puede participar. Faltan: {nombres}.")
+    return not motivos_para_no_operar(empresa)
+
+
+@transaction.atomic
+def cambiar_bloqueo_participacion(empresa, bloquear, usuario, motivo=""):
+    """Bloquea o desbloquea la participacion de la empresa y lo deja en el historial."""
+    from apps.notificaciones.services import notificar
+
+    if empresa.participacion_bloqueada == bloquear:
+        return False
+    if bloquear and not motivo.strip():
+        raise TransicionInvalida("Indica el motivo del bloqueo.")
+    empresa.participacion_bloqueada = bloquear
+    empresa.motivo_bloqueo = motivo.strip() if bloquear else ""
+    empresa.save(update_fields=["participacion_bloqueada", "motivo_bloqueo"])
+    registrar_cambio_estado(
+        empresa,
+        "HABILITADA" if bloquear else "BLOQUEADA",
+        "BLOQUEADA" if bloquear else "HABILITADA",
+        usuario, motivo, campo="participacion_bloqueada",
+    )
+    if empresa.usuario_id:
+        notificar(
+            empresa.usuario, "EMPRESA_PARTICIPACION",
+            mensaje=(
+                f"El administrador bloqueó la participación de tu empresa. Motivo: {motivo}"
+                if bloquear else "El administrador habilitó de nuevo la participación de tu empresa."
+            ),
+            tipo="ERROR" if bloquear else "EXITO",
+            link=reverse("empresas:documentos"),
+            clave_dedupe=f"empresa:{empresa.pk}:bloqueo:{bloquear}:{timezone.now():%Y%m%d%H%M%S}",
+        )
+    return True
+
+
+def fecha_vencimiento_para(tipo, fecha_expedicion):
+    if tipo and tipo.vigencia_dias and fecha_expedicion:
+        return fecha_expedicion + timedelta(days=tipo.vigencia_dias)
+    return None
 
 
 @transaction.atomic
@@ -113,6 +155,8 @@ def cargar_documento(empresa, tipo_documento, archivo, fecha_expedicion, usuario
     Devuelve `(documento, creado)`. Lanza `TransicionInvalida` si el documento
     existente no admite recarga desde su estado actual.
     """
+    tipo = TipoDocumentoLegal.objects.filter(codigo=tipo_documento).first()
+    vencimiento = fecha_vencimiento_para(tipo, fecha_expedicion)
     documento = DocumentoEmpresa.objects.select_for_update().filter(
         empresa=empresa, tipo_documento=tipo_documento
     ).first()
@@ -122,6 +166,7 @@ def cargar_documento(empresa, tipo_documento, archivo, fecha_expedicion, usuario
             tipo_documento=tipo_documento,
             archivo=archivo,
             fecha_expedicion=fecha_expedicion,
+            fecha_vencimiento=vencimiento,
             estado="CARGADO",
         )
         registrar_cambio_estado(documento, "", "CARGADO", usuario, "Documento cargado.")
@@ -129,12 +174,11 @@ def cargar_documento(empresa, tipo_documento, archivo, fecha_expedicion, usuario
 
     documento.archivo = archivo
     documento.fecha_expedicion = fecha_expedicion
+    documento.fecha_vencimiento = vencimiento
     documento.motivo_rechazo = ""
-    # Un archivo nuevo es otro documento: el vencimiento del anterior ya no aplica.
-    documento.fecha_vencimiento = None
     cambiar_estado(
         documento, MAQUINA_DOCUMENTO, "CARGADO", usuario, "Documento recargado.",
-        update_fields=["archivo", "fecha_expedicion", "motivo_rechazo", "fecha_vencimiento"],
+        update_fields=["archivo", "fecha_expedicion", "fecha_vencimiento", "motivo_rechazo"],
     )
     return documento, False
 
@@ -166,61 +210,34 @@ def rechazar_documentos_por_listas(empresa, usuario):
 
 
 def marcar_documento_vencido(documento, usuario=None):
-    if documento.fecha_vencimiento:
-        motivo = f"Documento vencido el {documento.fecha_vencimiento:%d/%m/%Y}."
-    else:
-        motivo = (f"Camara de Comercio con mas de {DIAS_MAXIMOS_CAMARA} dias "
-                  f"(expedida el {documento.fecha_expedicion:%d/%m/%Y}).")
+    motivo = f"Documento vencido el {documento.fecha_vencimiento:%d/%m/%Y}."
     cambiar_estado(documento, MAQUINA_DOCUMENTO, "VENCIDO", usuario, motivo)
 
-    # HU00: la empresa debe saber que un documento vencio y que tiene que actualizarlo.
+    # HU00: la empresa debe enterarse de que un documento vencio y de que tiene que actualizarlo.
     from apps.notificaciones.services import notificar
 
     notificar(
         documento.empresa.usuario, "DOCUMENTO_REVISADO", tipo="ADVERTENCIA",
-        mensaje=f'Tu documento "{documento.get_tipo_documento_display()}" esta vencido. {motivo} Cargalo de nuevo para seguir participando.',
+        mensaje=(f'Tu documento "{documento.get_tipo_documento_display()}" esta vencido. {motivo} '
+                 "Cargalo de nuevo para seguir participando."),
         link=reverse("empresas:documentos"),
-        clave_dedupe=f"documento:{documento.pk}:vencido:{documento.fecha_carga:%Y%m%d%H%M%S}",
+        clave_dedupe=f"documento:{documento.pk}:vencido:{documento.fecha_vencimiento}",
     )
 
 
-def documentos_camara_vencidos(hoy):
-    """Camaras de Comercio verificadas o cargadas con mas de 30 dias desde su expedicion."""
-    from datetime import timedelta
-
-    limite = hoy - timedelta(days=DIAS_MAXIMOS_CAMARA)
-    return DocumentoEmpresa.objects.filter(
-        tipo_documento="CAMARA_COMERCIO",
-        fecha_expedicion__lt=limite,
-        estado__in=["VERIFICADO", "CARGADO"],
-    )
-
-
-def historial_documental(empresa):
-    """Cambios de estado de la documentacion de una empresa (documentos y convenio), del mas reciente."""
+def historial_documentos(empresa, limite=30):
+    """Cambios de estado de los documentos de la empresa, del mas reciente al mas antiguo."""
     from django.contrib.contenttypes.models import ContentType
     from apps.seguimiento.models import HistorialEstado
-    from apps.seguimiento.services import historial_de
 
-    nombres = {d.pk: d.get_tipo_documento_display()
-               for d in DocumentoEmpresa.objects.filter(empresa=empresa)}
-    de_documentos = HistorialEstado.objects.filter(
+    documentos = {d.pk: d for d in DocumentoEmpresa.objects.filter(empresa=empresa)}
+    registros = HistorialEstado.objects.filter(
         content_type=ContentType.objects.get_for_model(DocumentoEmpresa),
-        object_id__in=list(nombres),
-    ).select_related("realizado_por")
-    entradas = [
-        {
-            "fecha": r.fecha,
-            "elemento": nombres.get(r.object_id, "Documento") if r.campo == "estado" else "Convenio (trámite)",
-            "anterior": r.estado_anterior or "-",
-            "nuevo": r.estado_nuevo,
-            "comentario": r.comentario,
-            "usuario": r.realizado_por,
-            "quien": (r.realizado_por.get_full_name() or r.realizado_por.username) if r.realizado_por else "Sistema",
-        }
-        for r in [*de_documentos, *historial_de(empresa, campo="estado_convenio")]
-    ]
-    return sorted(entradas, key=lambda e: e["fecha"], reverse=True)
+        object_id__in=documentos.keys(),
+    ).select_related("realizado_por")[:limite]
+    for registro in registros:
+        registro.documento = documentos.get(registro.object_id)
+    return registros
 
 
 def cambiar_estado_convenio(empresa, estado_nuevo, usuario, comentario="", fecha_vencimiento=None):
