@@ -249,6 +249,16 @@ def revisar_reto(request, pk):
     if request.method == 'POST' and form.is_valid():
         accion = form.cleaned_data['accion']
         comentario = form.cleaned_data['comentario']
+        if accion == 'aprobar':
+            # HU00: solo se aprueba la participacion de una empresa con toda su
+            # documentacion obligatoria verificada y sin bloqueo.
+            from apps.empresas.services import motivos_para_no_operar
+
+            perfil = getattr(reto.empresa, 'empresa_perfil', None)
+            motivos = motivos_para_no_operar(perfil) if perfil else ['La empresa no tiene perfil registrado.']
+            if motivos:
+                messages.error(request, 'No se puede aprobar: ' + ' '.join(motivos))
+                return redirect('retos:admin_revisar', pk=reto.pk)
         try:
             if accion == 'aprobar':
                 cambiar_estado_reto(reto, 'aprobado', request.user, comentario)
