@@ -441,3 +441,117 @@ class CatalogoDocumentosTests(TestCase):
     def test_empresa_no_accede_al_catalogo(self):
         self.client.force_login(self.usuario_empresa)
         self.assertNotEqual(self.client.get(reverse("empresas:tipos_documento")).status_code, 200)
+
+
+class VencimientoHistorialYSiembraTests(TestCase):
+    """Aviso al vencer, historial documental visible y datos de demo coherentes con la regla de HU00."""
+
+    def setUp(self):
+        from apps.retos.models import Reto
+
+        from .testing import habilitar_empresa
+
+        self.admin = Usuario.objects.create_superuser(username="admin-venc", password="x", email="a@ean.edu.co")
+        self.usuario = Usuario.objects.create_user(username="empresa-venc", password="x", rol="EMPRESA", email="e@example.com")
+        self.empresa = habilitar_empresa(Empresa.objects.create(usuario=self.usuario, nit="900888888", razon_social="Gamma SAS"))
+        self.reto = Reto.objects.create(empresa=self.usuario, titulo="Reto de Gamma", estado="en_revision")
+
+    def _vencer(self, codigo="CAMARA_COMERCIO"):
+        from datetime import date, timedelta
+
+        DocumentoEmpresa.objects.filter(empresa=self.empresa, tipo_documento=codigo).update(
+            fecha_vencimiento=date.today() - timedelta(days=1))
+
+    def _correr_comando(self):
+        from django.core.management import call_command
+
+        call_command("enviar_recordatorios", "--dias", "1", verbosity=0)
+
+    def test_el_documento_vencido_se_marca_avisa_a_la_empresa_y_la_deja_sin_participar(self):
+        from .services import puede_la_empresa_operar
+
+        self.assertTrue(puede_la_empresa_operar(self.empresa))
+        self._vencer()
+        self._correr_comando()
+        self.assertEqual(DocumentoEmpresa.objects.get(empresa=self.empresa, tipo_documento="CAMARA_COMERCIO").estado, "VENCIDO")
+        aviso = Notificacion.objects.get(usuario=self.usuario, evento="DOCUMENTO_REVISADO")
+        self.assertEqual(aviso.tipo, "ADVERTENCIA")
+        self.assertIn("vencido", aviso.mensaje.lower())
+        self.assertFalse(puede_la_empresa_operar(self.empresa))
+
+    def test_repetir_el_comando_no_duplica_el_aviso(self):
+        self._vencer()
+        self._correr_comando()
+        self._correr_comando()
+        self.assertEqual(Notificacion.objects.filter(usuario=self.usuario, evento="DOCUMENTO_REVISADO").count(), 1)
+
+    def test_el_vencimiento_automatico_queda_en_el_historial_como_sistema(self):
+        from .services import historial_documentos
+
+        self._vencer()
+        self._correr_comando()
+        cambio = next(h for h in historial_documentos(self.empresa) if h.estado_nuevo == "VENCIDO")
+        self.assertIsNone(cambio.realizado_por)
+        self.client.force_login(self.usuario)
+        pantalla = self.client.get(reverse("empresas:documentos")).content.decode()
+        self.assertIn("Historial documental", pantalla)
+        self.assertIn("Sistema", pantalla)
+
+    def test_la_revision_de_un_reto_muestra_el_historial_de_la_empresa(self):
+        self._vencer()
+        self._correr_comando()
+        self.client.force_login(self.admin)
+        pantalla = self.client.get(reverse("retos:admin_revisar", args=[self.reto.pk])).content.decode()
+        self.assertIn("Historial documental", pantalla)
+        self.assertIn("VENCIDO", pantalla)
+
+    def test_la_siembra_demo_es_idempotente_y_cubre_los_casos_de_hu00(self):
+        import io
+
+        from django.core.management import call_command
+
+        from apps.presupuesto.models import Presupuesto
+        from apps.unidades_estudio.models import UnidadEstudio
+
+        from .services import motivos_para_no_operar, puede_la_empresa_operar
+
+        for _ in range(2):  # la segunda corrida no debe duplicar ni fallar
+            call_command("sembrar_demo_completa", stdout=io.StringIO(), verbosity=0)
+
+        def empresa(slug):
+            return Empresa.objects.get(usuario__username=f"empresa.{slug}")
+
+        self.assertTrue(puede_la_empresa_operar(empresa("verificada")))
+        self.assertTrue(puede_la_empresa_operar(empresa("sinconvenio")))  # solo se le exime lo del convenio
+        for slug in ("pendiente", "revision", "rechazada"):
+            self.assertFalse(puede_la_empresa_operar(empresa(slug)), slug)
+        # A la empresa "en revision" solo le falta un documento: sirve para completar el ciclo en vivo.
+        faltantes = [m for m in motivos_para_no_operar(empresa("revision")) if "revisión" not in m]
+        self.assertEqual(len(faltantes), 1)
+        self.assertIn("Términos de referencia", faltantes[0])
+        self.assertTrue(any("Vencido" in m for m in motivos_para_no_operar(empresa("rechazada"))))
+
+        self.assertEqual(UnidadEstudio.objects.filter(codigo__startswith="DEMO-").count(), 12)
+        porcentajes = sorted(round(float(p.porcentaje_ejecutado)) for p in Presupuesto.objects.all())
+        self.assertGreater(porcentajes[-1], 100)  # uno excedido
+        self.assertTrue(any(80 <= p <= 100 for p in porcentajes))  # uno en alerta
+
+    def test_un_documento_con_problemas_no_frena_el_resto_del_barrido(self):
+        from unittest import mock
+
+        from .services import marcar_documento_vencido as real
+
+        self._vencer("CAMARA_COMERCIO")
+        self._vencer("RUT")
+        llamadas = []
+
+        def falla_la_primera(documento, usuario=None):
+            llamadas.append(documento.pk)
+            if len(llamadas) == 1:
+                raise RuntimeError("fallo simulado")
+            return real(documento, usuario)
+
+        with mock.patch("apps.empresas.services.marcar_documento_vencido", side_effect=falla_la_primera):
+            self._correr_comando()
+        self.assertEqual(len(llamadas), 2)  # intento los dos
+        self.assertEqual(DocumentoEmpresa.objects.filter(empresa=self.empresa, estado="VENCIDO").count(), 1)
