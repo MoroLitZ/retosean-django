@@ -79,9 +79,9 @@ class RetoForm(BootstrapModelForm):
             'archivos',
         ]
         widgets = {
-            'fecha_inicio_tentativa': forms.DateInput(attrs={'type': 'date'}),
-            'fecha_fin_tentativa': forms.DateInput(attrs={'type': 'date'}),
-            'fecha_limite_postulacion': forms.DateInput(attrs={'type': 'date'}),
+            'fecha_inicio_tentativa': forms.DateInput(attrs={'type': 'date'}, format="%Y-%m-%d"),
+            'fecha_fin_tentativa': forms.DateInput(attrs={'type': 'date'}, format="%Y-%m-%d"),
+            'fecha_limite_postulacion': forms.DateInput(attrs={'type': 'date'}, format="%Y-%m-%d"),
             'descripcion': forms.Textarea(attrs={'rows': 4}),
             'premios': forms.Textarea(attrs={'rows': 3}),
             'criterios_evaluacion': forms.Textarea(attrs={'rows': 4}),
@@ -147,7 +147,7 @@ class SeguimientoRetoForm(BootstrapModelForm):
         model = SeguimientoReto
         fields = ['tipo_sesion', 'fecha_sesion', 'porcentaje_avance', 'avances', 'observaciones', 'acuerdos', 'archivos']
         widgets = {
-            'fecha_sesion': forms.DateInput(attrs={'type': 'date'}),
+            'fecha_sesion': forms.DateInput(attrs={'type': 'date'}, format="%Y-%m-%d"),
             'avances': forms.Textarea(attrs={'rows': 4}),
             'observaciones': forms.Textarea(attrs={'rows': 4}),
             'acuerdos': forms.Textarea(attrs={'rows': 4}),
@@ -330,7 +330,7 @@ class SesionRetoAcademicoForm(BootstrapModelForm):
         model = SesionRetoAcademico
         fields = ['reto', 'tipo', 'fecha_hora', 'enlace_reunion', 'observaciones']
         widgets = {
-            'fecha_hora': forms.DateTimeInput(attrs={'type': 'datetime-local', 'class': 'form-control'}),
+            'fecha_hora': forms.DateTimeInput(attrs={'type': 'datetime-local', 'class': 'form-control'}, format="%Y-%m-%dT%H:%M"),
             'observaciones': forms.Textarea(attrs={'rows': 3, 'class': 'form-control'}),
         }
 
