@@ -386,6 +386,11 @@
             <i class="bi bi-file-earmark-ruled"></i> Tipos de documento
           </a>
         </li>
+        <li class="nav-item">
+          <a href="{% url 'notificaciones:registro_envios' %}" class="nav-link {% if request.resolver_match.url_name == 'registro_envios' %}active{% endif %}">
+            <i class="bi bi-envelope-paper"></i> Registro de notificaciones
+          </a>
+        </li>
         
         <li class="nav-item">
           <a href="{% url 'retos:admin_panel' %}" class="nav-link {% if request.resolver_match.namespace == 'retos' and request.resolver_match.url_name == 'admin_panel' %}active{% endif %}">
