@@ -145,7 +145,7 @@ class HistorialEstadoTests(TestCase):
             alcance="a", entregable_esperado="e", cronograma_sesiones="c",
         )
         self.client.force_login(self.profesor)
-        self.client.get(reverse("retos:enviar_integracion_revision", args=[integracion.pk]))
+        self.client.post(reverse("retos:enviar_integracion_revision", args=[integracion.pk]))
         integracion.refresh_from_db()
         self.assertEqual(integracion.estado, "aprobada")
         self.assertFalse(HistorialEstado.objects.filter(object_id=integracion.pk, estado_nuevo="en_revision").exists())

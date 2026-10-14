@@ -229,7 +229,7 @@ class FlujoIntegracionAcademicaTests(TestCase):
         self.assertEqual(integracion.ecosistema, "Ecosistema de innovacion")
 
         # 2. Enviar a revision: ya no quedan campos obligatorios pendientes.
-        response = self.client.get(
+        response = self.client.post(
             reverse("retos:enviar_integracion_revision", args=[integracion.pk])
         )
         integracion.refresh_from_db()
@@ -255,7 +255,7 @@ class FlujoIntegracionAcademicaTests(TestCase):
         integracion.alcance = ""
         integracion.save(update_fields=["alcance"])
 
-        self.client.get(
+        self.client.post(
             reverse("retos:enviar_integracion_revision", args=[integracion.pk])
         )
         integracion.refresh_from_db()
@@ -293,7 +293,7 @@ class NotificacionEnvioRevisionRetoTests(TestCase):
     def test_enviar_reto_a_revision_notifica_al_admin(self):
         self.client.force_login(self.empresa_usuario)
 
-        response = self.client.get(reverse("retos:enviar_revision", args=[self.reto.pk]))
+        response = self.client.post(reverse("retos:enviar_revision", args=[self.reto.pk]))
 
         self.assertRedirects(response, reverse("retos:detalle", args=[self.reto.pk]))
         self.reto.refresh_from_db()
@@ -436,7 +436,7 @@ class NotificacionPostulacionDocenteTests(TestCase):
     def test_enviar_postulacion_docente_notifica_a_empresa_y_admin(self):
         self.client.force_login(self.profesor)
 
-        response = self.client.get(
+        response = self.client.post(
             reverse("retos:enviar_integracion_revision", args=[self.integracion.pk])
         )
 
@@ -526,7 +526,7 @@ class CicloDeVidaRetoTests(TestCase):
     def test_reto_rechazado_no_se_reenvia_sin_editar(self):
         reto = self._reto("rechazado")
         self.client.force_login(self.empresa)
-        self.client.get(reverse("retos:enviar_revision", args=[reto.pk]))
+        self.client.post(reverse("retos:enviar_revision", args=[reto.pk]))
         reto.refresh_from_db()
         self.assertEqual(reto.estado, "rechazado")
 
@@ -600,3 +600,12 @@ class CicloDeVidaRetoTests(TestCase):
         self.client.force_login(self.empresa)
         response = self.client.get(reverse("retos:detalle", args=[reto.pk]))
         self.assertEqual(response.status_code, 404)
+
+    def test_enviar_a_revision_no_acepta_get(self):
+        """Un enlace o una precarga del navegador no deben cambiar el estado."""
+        reto = self._reto("borrador")
+        self.client.force_login(self.empresa)
+        self.assertEqual(self.client.get(reverse("retos:enviar_revision", args=[reto.pk])).status_code, 405)
+        reto.refresh_from_db()
+        self.assertEqual(reto.estado, "borrador")
+
