@@ -1,6 +1,9 @@
+from decimal import Decimal
+
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.db.models import Prefetch
+from django.db.models import Sum
+from django.db.models.functions import Coalesce
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -25,7 +28,7 @@ def panel(request):
     presupuestos = (
         Presupuesto.objects
         .select_related("reto", "reto__empresa")
-        .prefetch_related(Prefetch("gastos", queryset=Gasto.objects.only("id", "monto", "presupuesto_id")))
+        .annotate(ejecutado=Coalesce(Sum("gastos__monto"), Decimal("0.00")))
         .order_by("-actualizado_en")
     )
     paginator = Paginator(presupuestos, 25)
