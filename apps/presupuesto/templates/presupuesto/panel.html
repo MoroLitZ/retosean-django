@@ -12,7 +12,8 @@
         <tr>
           <th class="ps-4">Reto</th>
           <th>Empresa</th>
-          <th class="text-end">Asignado</th>
+          <th class="text-end">Presupuesto</th>
+          <th class="text-end">Comprometido</th>
           <th class="text-end">Ejecutado</th>
           <th class="text-end">Disponible</th>
           <th style="min-width:170px;">Ejecución</th>
@@ -25,9 +26,10 @@
             <td class="ps-4 fw-semibold text-dark">{{ fila.obj.reto.titulo }}</td>
             <td class="text-muted small">{{ fila.obj.reto.empresa }}</td>
             <td class="text-end">${{ fila.obj.monto_total|floatformat:2 }}</td>
-            <td class="text-end">${{ fila.obj.monto_ejecutado|floatformat:2 }}</td>
-            <td class="text-end {% if fila.obj.monto_disponible < 0 %}text-danger fw-bold{% endif %}">
-              ${{ fila.obj.monto_disponible|floatformat:2 }}
+            <td class="text-end text-warning">${{ fila.comprometido|floatformat:2 }}</td>
+            <td class="text-end">${{ fila.ejecutado|floatformat:2 }}</td>
+            <td class="text-end {% if fila.disponible < 0 %}text-danger fw-bold{% endif %}">
+              ${{ fila.disponible|floatformat:2 }}
             </td>
             <td>
               <div class="progress" style="height:16px;">
@@ -52,7 +54,7 @@
           </tr>
         {% empty %}
           <tr>
-            <td colspan="7" class="text-center text-muted py-5">
+            <td colspan="8" class="text-center text-muted py-5">
               <i class="bi bi-cash-stack d-block mb-2" style="font-size:2.5rem;"></i>
               Todavía no hay presupuestos asignados.
             </td>
