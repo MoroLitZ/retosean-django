@@ -128,6 +128,29 @@ class RecorridoDeRutasTests(TestCase):
                     fallos.append(f"{username:20} {nombre:45} {url} -> {estado}")
         self.assertFalse(fallos, "Rutas con error:\n" + "\n".join(fallos))
 
+    def test_dashboard_admin_filtra_por_ecosistema_y_muestra_impacto(self):
+        from apps.academico.models import Ecosistema
+        from apps.cierre.models import CierreReto
+        from apps.retos.models import Reto
+        from apps.usuarios.models import Usuario
+
+        from . import services
+
+        ecosistema = Ecosistema.objects.create(nombre="Ecosistema de prueba HU05")
+        empresa = Usuario.objects.get(username="empresa.verificada")
+        reto = Reto.objects.create(empresa=empresa, titulo="Reto con impacto", estado="finalizado", ecosistema=ecosistema)
+        CierreReto.objects.create(reto=reto, impacto="SI")
+
+        kpis = services.kpis_admin(None, None, ecosistema_id=ecosistema.pk)
+        self.assertEqual(kpis["retos_total"], 1)
+        self.assertEqual(kpis["impacto_si"], 1)
+        serie = services.series_admin(None, None, ecosistema_id=ecosistema.pk)["impacto"]
+        self.assertEqual(serie["data"], [1])
+
+        self.client.force_login(Usuario.objects.get(username="admin.demo"))
+        response = self.client.get("/dashboard/", {"periodo": "todo", "ecosistema": ecosistema.pk})
+        self.assertEqual(response.context["kpis"]["impacto_si"], 1)
+
     def test_rutas_publicas_sin_sesion(self):
         for nombre, url in [("home", "/"), ("login", "/usuarios/login/"), ("registro", "/usuarios/registro/"),
                             ("recuperar", "/usuarios/recuperar-contrasena/")]:

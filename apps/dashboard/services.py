@@ -27,7 +27,7 @@ def _serie(pares):
     }
 
 
-def _retos_filtrados(desde, hasta, facultad_id=None, programa_id=None):
+def _retos_filtrados(desde, hasta, facultad_id=None, programa_id=None, ecosistema_id=None):
     from apps.retos.models import Reto
 
     retos = Reto.objects.all()
@@ -36,21 +36,31 @@ def _retos_filtrados(desde, hasta, facultad_id=None, programa_id=None):
         retos = retos.filter(facultad_id=facultad_id)
     if programa_id:
         retos = retos.filter(programa_id=programa_id)
+    if ecosistema_id:
+        retos = retos.filter(ecosistema_id=ecosistema_id)
     return retos
 
 
 # ---------------------------------------------------------------- ADMIN
-def kpis_admin(desde, hasta, facultad_id=None, programa_id=None):
+def kpis_admin(desde, hasta, facultad_id=None, programa_id=None, ecosistema_id=None):
     from apps.empresas.models import Empresa
     from apps.evaluacion.models import Entregable
     from apps.participaciones.models import Postulacion
     from apps.retos.models import Reto
     from apps.usuarios.models import Usuario
 
-    retos = _retos_filtrados(desde, hasta, facultad_id, programa_id)
+    from apps.cierre.models import CierreReto
+
+    retos = _retos_filtrados(desde, hasta, facultad_id, programa_id, ecosistema_id)
     postulaciones = Postulacion.objects.filter(reto__in=retos)
+    impacto = dict(
+        CierreReto.objects.filter(reto__in=retos).values_list("impacto").annotate(total=Count("id"))
+    )
 
     return {
+        "impacto_si": impacto.get("SI", 0),
+        "impacto_no": impacto.get("NO", 0),
+        "impacto_evaluacion": impacto.get("EN_EVALUACION", 0),
         "retos_total": retos.count(),
         "retos_activos": retos.filter(estado__in=Reto.ESTADOS_ACTIVOS).count(),
         "retos_finalizados": retos.filter(estado="finalizado").count(),
@@ -68,11 +78,12 @@ def kpis_admin(desde, hasta, facultad_id=None, programa_id=None):
     }
 
 
-def series_admin(desde, hasta, facultad_id=None, programa_id=None):
+def series_admin(desde, hasta, facultad_id=None, programa_id=None, ecosistema_id=None):
+    from apps.cierre.models import CierreReto
     from apps.retos.models import Reto
     from apps.seguimiento.models import IntegracionAcademica
 
-    retos = _retos_filtrados(desde, hasta, facultad_id, programa_id)
+    retos = _retos_filtrados(desde, hasta, facultad_id, programa_id, ecosistema_id)
 
     # Retos por estado (torta)
     etiquetas_estado = dict(Reto.ESTADO_CHOICES)
@@ -107,11 +118,20 @@ def series_admin(desde, hasta, facultad_id=None, programa_id=None):
         for fila in integraciones.values("estado").annotate(total=Count("id")).order_by("-total")
     ]
 
+    # Impacto: la empresa aplico la solucion (Si / No / En evaluacion)
+    etiquetas_impacto = dict(CierreReto.IMPACTO)
+    por_impacto = [
+        (etiquetas_impacto.get(fila["impacto"], fila["impacto"]), fila["total"])
+        for fila in CierreReto.objects.filter(reto__in=retos)
+        .values("impacto").annotate(total=Count("id")).order_by("-total")
+    ]
+
     return {
         "retos_por_estado": _serie(por_estado),
         "retos_por_facultad": _serie(por_facultad),
         "retos_por_mes": _serie(por_mes),
         "integraciones_por_estado": _serie(por_integracion),
+        "impacto": _serie(por_impacto),
     }
 
 
@@ -270,9 +290,10 @@ def series_estudiante(usuario, desde, hasta):
 
 def opciones_de_filtro():
     """Facultades y programas disponibles para los selectores del panel."""
-    from apps.academico.models import Facultad, Programa
+    from apps.academico.models import Ecosistema, Facultad, Programa
 
     return {
+        "ecosistemas": Ecosistema.objects.order_by("nombre"),
         "facultades": Facultad.objects.order_by("nombre"),
         "programas": Programa.objects.select_related("facultad").order_by("nombre"),
     }
