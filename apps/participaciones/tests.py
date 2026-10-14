@@ -50,6 +50,17 @@ class AccesoAEntregablesTests(TestCase):
         self.client.post(self.url, self._payload())
         self.assertTrue(Entregable.objects.filter(reto=self.reto, estudiante=miembro).exists())
 
+    def test_listado_sin_reto_elegido_muestra_los_retos_participando(self):
+        # Regresion: la vista pasa un queryset de Reto en el contexto
+        # "postulaciones", y el template debe iterarlo como Reto (no como
+        # Postulacion) o el {% url %} truena con NoReverseMatch al quedar
+        # sin '.reto.id' valido.
+        self.client.force_login(self.aceptado)
+        response = self.client.get(reverse("participaciones:mis_entregables"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.reto.titulo)
+        self.assertContains(response, self.url)
+
 
 class FavoritosTests(TestCase):
     def setUp(self):
