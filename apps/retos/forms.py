@@ -97,9 +97,10 @@ class RetoForm(BootstrapModelForm):
         if 'facultad' in self.fields:
             self.fields['facultad'].queryset = Facultad.objects.all().order_by('nombre')
         if 'programa' in self.fields:
-            self.fields['programa'].queryset = Programa.objects.filter(
-                facultad_id=self.instance.facultad_id
-            ).order_by('nombre') if self.instance and self.instance.facultad_id else Programa.objects.all().order_by('nombre')
+            programas = Programa.objects.select_related('facultad').order_by('nombre')
+            if self.instance and self.instance.facultad_id:
+                programas = programas.filter(facultad_id=self.instance.facultad_id)
+            self.fields['programa'].queryset = programas
         if 'ecosistema' in self.fields:
             self.fields['ecosistema'].queryset = Ecosistema.objects.all().order_by('nombre')
 

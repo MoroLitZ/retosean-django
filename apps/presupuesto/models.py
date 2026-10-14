@@ -23,6 +23,9 @@ class Presupuesto(models.Model):
 
     @property
     def monto_ejecutado(self):
+        # Los listados anotan `ejecutado` en la consulta para no sumar una vez por fila.
+        if hasattr(self, "ejecutado"):
+            return self.ejecutado
         # Agregamos en la base de datos: iterar self.gastos.all() era N+1
         # y devolvia el int 0 en vez de Decimal cuando no habia gastos.
         return self.gastos.aggregate(

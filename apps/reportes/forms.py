@@ -50,7 +50,7 @@ class ReporteForm(forms.Form):
         widget=forms.Select(attrs={"class": CLASE_CONTROL}),
     )
     programa = forms.ModelChoiceField(
-        label="Programa", queryset=Programa.objects.order_by("nombre"),
+        label="Programa", queryset=Programa.objects.select_related("facultad").order_by("nombre"),
         required=False, empty_label="Todos",
         widget=forms.Select(attrs={"class": CLASE_CONTROL}),
     )
