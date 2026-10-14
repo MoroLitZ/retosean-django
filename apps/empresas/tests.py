@@ -423,6 +423,35 @@ class VencimientoEHistorialDocumentalTests(TestCase):
         )
 
 
+class SiembraDemoTests(TestCase):
+    """El seed de demo depende de las reglas de HU00: si estas cambian, que falle aqui."""
+
+    def test_la_siembra_es_idempotente_y_cubre_los_casos_de_hu00(self):
+        import io
+        from django.core.management import call_command
+        from .services import documentos_faltantes, puede_la_empresa_operar
+        from apps.presupuesto.models import Presupuesto
+        from apps.unidades_estudio.models import UnidadEstudio
+
+        for _ in range(2):  # la segunda corrida no debe duplicar ni fallar
+            call_command("sembrar_demo_completa", stdout=io.StringIO(), verbosity=0)
+
+        def empresa(slug):
+            return Empresa.objects.get(usuario__username=f"empresa.{slug}")
+
+        self.assertTrue(puede_la_empresa_operar(empresa("verificada")))
+        self.assertTrue(puede_la_empresa_operar(empresa("sinconvenio")))  # renuncia al convenio
+        for slug in ("pendiente", "revision", "rechazada"):
+            self.assertFalse(puede_la_empresa_operar(empresa(slug)), slug)
+        motivos = {f["motivo"] for f in documentos_faltantes(empresa("rechazada"))}
+        self.assertTrue({"Vencido", "Rechazado"} <= motivos)
+
+        self.assertEqual(UnidadEstudio.objects.filter(codigo__startswith="DEMO-").count(), 12)
+        porcentajes = sorted(round(float(p.porcentaje_ejecutado)) for p in Presupuesto.objects.all())
+        self.assertGreater(porcentajes[-1], 100)  # uno excedido
+        self.assertTrue(any(80 <= p <= 100 for p in porcentajes))  # uno en alerta
+
+
 class ReglasBordeDocumentosTests(TestCase):
     """Casos limite de HU00 detectados en la revision del codigo."""
 
