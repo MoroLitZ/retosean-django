@@ -8,7 +8,7 @@ from apps.retos.models import Reto
 from apps.usuarios.models import Usuario
 
 from .models import Gasto, Presupuesto
-from .services import registrar_gasto, revisar_umbral
+from .services import ejecutar_gasto, registrar_gasto, revisar_umbral
 
 
 class PresupuestoModeloTests(TestCase):
@@ -37,6 +37,64 @@ class PresupuestoModeloTests(TestCase):
             monto_total=Decimal("0.00"),
         )
         self.assertEqual(vacio.porcentaje_ejecutado, Decimal("0.00"))
+
+
+class ComprometidoVsEjecutadoTests(TestCase):
+    def setUp(self):
+        empresa = Usuario.objects.create_user(username="empresa-ce", password="x", rol="EMPRESA")
+        self.reto = Reto.objects.create(empresa=empresa, titulo="Reto con reservas", estado="aprobado")
+        self.presupuesto = Presupuesto.objects.create(reto=self.reto, monto_total=Decimal("1000.00"))
+
+    def test_gasto_sin_estado_explicito_cuenta_como_ejecutado(self):
+        # Compatibilidad con gastos historicos, previos a este campo.
+        Gasto.objects.create(presupuesto=self.presupuesto, categoria="OTROS", monto=Decimal("100.00"))
+        self.assertEqual(self.presupuesto.monto_ejecutado, Decimal("100.00"))
+        self.assertEqual(self.presupuesto.monto_comprometido, Decimal("0.00"))
+
+    def test_comprometido_y_ejecutado_se_suman_por_separado(self):
+        Gasto.objects.create(
+            presupuesto=self.presupuesto, categoria="MATERIALES", monto=Decimal("300.00"),
+            estado=Gasto.COMPROMETIDO,
+        )
+        Gasto.objects.create(
+            presupuesto=self.presupuesto, categoria="REFRIGERIOS", monto=Decimal("200.00"),
+            estado=Gasto.EJECUTADO,
+        )
+        self.assertEqual(self.presupuesto.monto_comprometido, Decimal("300.00"))
+        self.assertEqual(self.presupuesto.monto_ejecutado, Decimal("200.00"))
+        # Disponible y porcentaje se calculan sobre comprometido + ejecutado.
+        self.assertEqual(self.presupuesto.monto_disponible, Decimal("500.00"))
+        self.assertEqual(self.presupuesto.porcentaje_ejecutado, Decimal("50"))
+
+    def test_ejecutar_gasto_lo_mueve_de_comprometido_a_ejecutado(self):
+        gasto = Gasto.objects.create(
+            presupuesto=self.presupuesto, categoria="OTROS", monto=Decimal("400.00"),
+            estado=Gasto.COMPROMETIDO,
+        )
+        ejecutar_gasto(gasto)
+        gasto.refresh_from_db()
+        self.assertEqual(gasto.estado, Gasto.EJECUTADO)
+        self.assertIsNotNone(gasto.ejecutado_en)
+        self.assertEqual(self.presupuesto.monto_comprometido, Decimal("0.00"))
+        self.assertEqual(self.presupuesto.monto_ejecutado, Decimal("400.00"))
+
+    def test_ejecutar_gasto_ya_ejecutado_no_hace_nada(self):
+        gasto = Gasto.objects.create(
+            presupuesto=self.presupuesto, categoria="OTROS", monto=Decimal("100.00"),
+            estado=Gasto.EJECUTADO,
+        )
+        resultado = ejecutar_gasto(gasto)
+        self.assertEqual(resultado.estado, Gasto.EJECUTADO)
+
+    def test_comprometido_por_si_solo_puede_disparar_la_alerta_del_80(self):
+        # Reservar (no gastar todavia) el 85% del presupuesto ya debe alertar.
+        registrar_gasto(
+            self.presupuesto,
+            Gasto(categoria="OTROS", monto=Decimal("850.00"), estado=Gasto.COMPROMETIDO),
+            self.reto.empresa,
+        )
+        self.presupuesto.refresh_from_db()
+        self.assertTrue(self.presupuesto.alerta_80_enviada)
 
 
 class AlertaDelOchentaTests(TestCase):

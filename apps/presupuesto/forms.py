@@ -27,9 +27,11 @@ class PresupuestoForm(forms.ModelForm):
 class GastoForm(forms.ModelForm):
     class Meta:
         model = Gasto
-        fields = ["categoria", "monto", "descripcion", "comprobante"]
+        fields = ["categoria", "estado", "monto", "descripcion", "comprobante"]
+        labels = {"estado": "Estado del gasto"}
         widgets = {
             "categoria": forms.Select(attrs={"class": CLASE_SELECT}),
+            "estado": forms.Select(attrs={"class": CLASE_SELECT}),
             "monto": forms.NumberInput(attrs={"class": CLASE_INPUT, "step": "0.01", "min": "0.01"}),
             "descripcion": forms.Textarea(attrs={"class": CLASE_INPUT, "rows": 2}),
             "comprobante": forms.ClearableFileInput(attrs={"class": CLASE_INPUT}),

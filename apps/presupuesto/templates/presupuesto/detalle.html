@@ -15,10 +15,18 @@
             <h3 class="fw-bold text-dark mb-0">${{ presupuesto.monto_total|floatformat:2 }}</h3>
           </div>
           <div class="mb-3">
+            <span class="text-muted text-uppercase small fw-bold">Comprometido</span>
+            <h4 class="fw-bold mb-0 text-warning">
+              ${{ presupuesto.monto_comprometido|floatformat:2 }}
+            </h4>
+            <span class="text-muted" style="font-size:.72rem;">Reservado, aún no pagado</span>
+          </div>
+          <div class="mb-3">
             <span class="text-muted text-uppercase small fw-bold">Ejecutado</span>
             <h4 class="fw-bold mb-0 {% if porcentaje >= 100 %}text-danger{% elif porcentaje >= 80 %}text-warning{% else %}text-success{% endif %}">
               ${{ presupuesto.monto_ejecutado|floatformat:2 }}
             </h4>
+            <span class="text-muted" style="font-size:.72rem;">Ya pagado</span>
           </div>
           <div class="mb-3">
             <span class="text-muted text-uppercase small fw-bold">Disponible</span>
@@ -38,8 +46,8 @@
           {% if porcentaje >= 80 %}
             <div class="alert alert-warning small mb-0 py-2">
               <i class="bi bi-exclamation-triangle-fill"></i>
-              La ejecución superó el 80% del presupuesto. Los administradores y la empresa
-              fueron notificados.
+              Lo comprometido + ejecutado superó el 80% del presupuesto. Los administradores y
+              la empresa fueron notificados.
             </div>
           {% endif %}
         {% else %}
@@ -104,6 +112,7 @@
           <thead class="table-light">
             <tr>
               <th class="ps-4">Categoría</th>
+              <th>Estado</th>
               <th>Descripción</th>
               <th class="text-end">Monto</th>
               <th>Registrado por</th>
@@ -116,6 +125,13 @@
               <tr>
                 <td class="ps-4">
                   <span class="badge bg-secondary">{{ gasto.get_categoria_display }}</span>
+                </td>
+                <td>
+                  {% if gasto.estado == 'COMPROMETIDO' %}
+                    <span class="badge bg-warning text-dark">Comprometido</span>
+                  {% else %}
+                    <span class="badge bg-success">Ejecutado</span>
+                  {% endif %}
                 </td>
                 <td class="text-muted small">{{ gasto.descripcion|default:"-"|truncatechars:70 }}</td>
                 <td class="text-end fw-semibold">${{ gasto.monto|floatformat:2 }}</td>
@@ -130,6 +146,14 @@
                     </a>
                   {% endif %}
                   {% if puede_editar %}
+                    {% if gasto.estado == 'COMPROMETIDO' %}
+                      <form method="post" action="{% url 'presupuesto:marcar_ejecutado' gasto.pk %}" class="d-inline">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-outline-success" title="Marcar como ejecutado">
+                          <i class="bi bi-check-lg"></i>
+                        </button>
+                      </form>
+                    {% endif %}
                     <form method="post" action="{% url 'presupuesto:eliminar_gasto' gasto.pk %}" class="d-inline">
                       {% csrf_token %}
                       <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar gasto">
@@ -141,7 +165,7 @@
               </tr>
             {% empty %}
               <tr>
-                <td colspan="6" class="text-center text-muted py-5">
+                <td colspan="7" class="text-center text-muted py-5">
                   <i class="bi bi-receipt d-block mb-2" style="font-size:2.5rem;"></i>
                   Sin gastos registrados.
                 </td>
