@@ -51,6 +51,19 @@ python manage.py sembrar_catalogo --demo
 python manage.py sembrar_demo_completa
 ```
 
+### Con Docker
+
+```bash
+docker compose up --build
+docker compose exec web python manage.py sembrar_catalogo --demo
+docker compose exec web python manage.py sembrar_demo_completa
+```
+
+Levanta Django en http://localhost:8000, PostgreSQL 18 (puerto 5433 en el equipo,
+para no chocar con una instalación local) y Mailpit en http://localhost:8025, donde
+llegan todos los correos de la plataforma. El código se monta como volumen, así que
+los cambios se recargan sin reconstruir la imagen.
+
 ### Variables de entorno
 
 | Variable | Uso |
