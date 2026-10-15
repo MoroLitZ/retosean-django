@@ -391,3 +391,34 @@ class LogisticaEInformeHU09Tests(BaseHackathonTests):
         self.client.force_login(estudiante)
         respuesta = self.client.get(reverse("hackaton:informe_final", args=[self.hackathon.pk]))
         self.assertEqual(respuesta.status_code, 302)
+
+
+class ExpertoJuradoTests(BaseHackathonTests):
+    """Un experto asignado como jurado ve y vota su hackathon; los demas no le aparecen."""
+
+    def setUp(self):
+        super().setUp()
+        self.experto = Usuario.objects.create_user(username="exp-jur", password="x", rol="EXPERTO")
+        Jurado.objects.create(hackathon=self.hackathon, usuario=self.experto, nombre="Experto")
+        otro_reto = Reto.objects.create(empresa=self.empresa, titulo="Otro", estado="en_curso", tipo="hackathon")
+        self.ajeno = Hackathon.objects.create(reto=otro_reto, estado="publicado")
+        self.client.force_login(self.experto)
+
+    def test_lista_solo_sus_hackathones(self):
+        respuesta = self.client.get(reverse("hackaton:lista"))
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(list(respuesta.context["hackathones"]), [self.hackathon])
+
+    def test_ve_el_detalle_del_suyo_pero_no_el_ajeno(self):
+        self.assertEqual(self.client.get(reverse("hackaton:detalle", args=[self.hackathon.pk])).status_code, 200)
+        self.assertRedirects(self.client.get(reverse("hackaton:detalle", args=[self.ajeno.pk])),
+                             reverse("hackaton:lista"))
+
+    def test_vota_como_jurado(self):
+        estudiante = self._estudiante("est-exp")
+        equipo = self._equipo("Equipo Experto", estudiante)
+        self._inscribir(equipo)
+        self.client.post(reverse("hackaton:votar", args=[self.hackathon.pk]), {
+            "equipo": equipo.pk, "puntaje": "4", "comentario": "Bien",
+        })
+        self.assertTrue(VotacionHackaton.objects.filter(jurado__usuario=self.experto, equipo=equipo).exists())
