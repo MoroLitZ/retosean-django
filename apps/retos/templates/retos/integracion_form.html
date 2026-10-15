@@ -80,34 +80,53 @@
             </div>
         </div>
 
-        <!-- Tarjeta 4: Equipo -->
+        <!-- Tarjeta 4: Equipo y cronograma (HU03) -->
+        {% for fs, titulo, ayuda in formsets %}
         <div class="card border-0 shadow-sm mb-4" style="border-radius: 12px;">
             <div class="card-body p-4">
-                <h5 class="fw-semibold text-primary mb-3 fs-6">4. Equipo</h5>
-                <div class="row g-3">
-                    <div class="col-md-12">
-                        <label class="form-label fw-semibold small text-muted" for="{{ form.equipo_profesores.id_for_label }}">{{ form.equipo_profesores.label }}</label>
-                        {{ form.equipo_profesores }}
-                        {% for error in form.equipo_profesores.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
-                    </div>
-                    <div class="col-md-12">
-                        <label class="form-label fw-semibold small text-muted" for="{{ form.equipo_estudiantes.id_for_label }}">{{ form.equipo_estudiantes.label }}</label>
-                        {{ form.equipo_estudiantes }}
-                        {% for error in form.equipo_estudiantes.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
-                    </div>
-                    <div class="col-md-12">
-                        <label class="form-label fw-semibold small text-muted" for="{{ form.expertos_invitados.id_for_label }}">{{ form.expertos_invitados.label }}</label>
-                        {{ form.expertos_invitados }}
-                        {% for error in form.expertos_invitados.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
-                    </div>
+                <h5 class="fw-semibold text-primary mb-1 fs-6">{{ titulo }}</h5>
+                <p class="text-muted small mb-3">{{ ayuda }}</p>
+                {{ fs.management_form }}
+                {% for error in fs.non_form_errors %}<div class="text-danger small mb-2">{{ error }}</div>{% endfor %}
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-2" data-formset="{{ fs.prefix }}">
+                        <thead class="table-light">
+                            <tr>
+                                {% for field in fs.empty_form.visible_fields %}{% if field.name != 'DELETE' %}<th class="small">{{ field.label }}</th>{% endif %}{% endfor %}
+                                <th class="small text-center">Quitar</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for f in fs %}
+                            <tr>
+                                {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
+                                {% for field in f.visible_fields %}{% if field.name != 'DELETE' %}
+                                <td>{{ field }}{% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}</td>
+                                {% endif %}{% endfor %}
+                                <td class="text-center">{% if f.DELETE %}{{ f.DELETE }}{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
+                <template id="vacio-{{ fs.prefix }}">
+                    <tr>
+                        {% for hidden in fs.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+                        {% for field in fs.empty_form.visible_fields %}{% if field.name != 'DELETE' %}<td>{{ field }}</td>{% endif %}{% endfor %}
+                        <td class="text-center">{{ fs.empty_form.DELETE }}</td>
+                    </tr>
+                </template>
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-agregar="{{ fs.prefix }}">
+                    <i class="bi bi-plus-lg"></i> Agregar fila
+                </button>
             </div>
         </div>
+        {% endfor %}
 
-        <!-- Tarjeta 5: Logística -->
+        <!-- Tarjeta 6: Logística -->
         <div class="card border-0 shadow-sm mb-4" style="border-radius: 12px;">
             <div class="card-body p-4">
-                <h5 class="fw-semibold text-primary mb-3 fs-6">5. Logística y Requerimientos</h5>
+                <h5 class="fw-semibold text-primary mb-3 fs-6">6. Logística y Requerimientos</h5>
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label fw-semibold small text-muted" for="{{ form.requerimientos_empresa.id_for_label }}">{{ form.requerimientos_empresa.label }}</label>
@@ -136,4 +155,19 @@
         </div>
     </form>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Agrega una fila vacia al formset usando la plantilla empty_form de Django.
+  document.querySelectorAll('[data-agregar]').forEach(function (boton) {
+    boton.addEventListener('click', function () {
+      const prefijo = boton.dataset.agregar;
+      const total = document.getElementById('id_' + prefijo + '-TOTAL_FORMS');
+      const html = document.getElementById('vacio-' + prefijo).innerHTML.replace(/__prefix__/g, total.value);
+      document.querySelector('[data-formset="' + prefijo + '"] tbody').insertAdjacentHTML('beforeend', html);
+      total.value = Number(total.value) + 1;
+    });
+  });
+</script>
 {% endblock %}

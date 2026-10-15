@@ -17,6 +17,12 @@ class Hackathon(models.Model):
     reglas = models.TextField(blank=True)
     estado = models.CharField(max_length=20, choices=ESTADOS, default="borrador")
     resultados_publicados = models.BooleanField(default=False)
+    # Logistica del evento (HU09): espacio, transmision e invitados.
+    MODALIDADES = [("presencial", "Presencial"), ("virtual", "Virtual"), ("hibrida", "Hibrida")]
+    modalidad = models.CharField(max_length=12, choices=MODALIDADES, default="presencial")
+    lugar = models.CharField("Espacio fisico", max_length=180, blank=True)
+    enlace_transmision = models.URLField("Enlace de transmision", blank=True)
+    notas_logistica = models.TextField("Notas de logistica", blank=True)
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
 
@@ -27,6 +33,32 @@ class Hackathon(models.Model):
 
     def __str__(self):
         return f"Hackathon: {self.reto.titulo}"
+
+
+class InvitadoHackathon(models.Model):
+    """Invitado al evento (mentor, ponente, patrocinador...) con confirmacion (HU09)."""
+
+    TIPOS = [
+        ("INVITADO", "Invitado"),
+        ("MENTOR", "Mentor"),
+        ("PONENTE", "Ponente"),
+        ("PATROCINADOR", "Patrocinador"),
+    ]
+    hackathon = models.ForeignKey(Hackathon, on_delete=models.CASCADE, related_name="invitados")
+    tipo = models.CharField(max_length=15, choices=TIPOS, default="INVITADO")
+    nombre = models.CharField(max_length=150)
+    organizacion = models.CharField(max_length=150, blank=True)
+    email = models.EmailField(blank=True)
+    confirmado = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = "invitados_hackaton"
+        verbose_name = "Invitado de hackathon"
+        verbose_name_plural = "Invitados de hackathon"
+        ordering = ["tipo", "nombre"]
+
+    def __str__(self):
+        return f"{self.nombre} ({self.get_tipo_display()})"
 
 
 class EtapaHackaton(models.Model):

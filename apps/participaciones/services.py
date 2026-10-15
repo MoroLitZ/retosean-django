@@ -10,13 +10,23 @@ from .models import Equipo, MiembroEquipo, Postulacion
 MAQUINA_POSTULACION = MaquinaEstados(
     "la postulacion",
     {
-        "PENDIENTE": {"ACEPTADA", "RECHAZADA", "RETIRADA"},
+        "PENDIENTE": {"EN_REVISION", "ACEPTADA", "RECHAZADA", "RETIRADA"},
+        # La empresa abrio la lista de postulaciones de su reto.
+        "EN_REVISION": {"ACEPTADA", "RECHAZADA", "RETIRADA"},
         "RETIRADA": {"PENDIENTE"},
         "ACEPTADA": set(),
         "RECHAZADA": set(),
     },
     dict(Postulacion.ESTADOS),
 )
+
+
+def marcar_postulaciones_en_revision(postulaciones, usuario):
+    """Pasa a En revision las postulaciones pendientes que la empresa acaba de abrir."""
+    from apps.seguimiento.services import cambiar_estado
+
+    for postulacion in postulaciones.filter(estado="PENDIENTE"):
+        cambiar_estado(postulacion, MAQUINA_POSTULACION, "EN_REVISION", usuario, "La empresa abrio la postulacion.")
 
 
 def sincronizar_equipo_academico(equipo_academico):

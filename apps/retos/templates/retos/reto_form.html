@@ -9,7 +9,7 @@
     {% csrf_token %}
     {% for field in form %}
       <!-- Si es el campo de convenio o campos grandes, que ocupen todo el ancho (col-12) -->
-      <div class="col-md-{% if field.name == 'descripcion' or field.name == 'premios' or field.name == 'criterios_evaluacion' or field.name == 'archivos' or field.name == 'tiene_convenio_institucional' %}12{% else %}6{% endif %}">
+      <div class="col-md-{% if field.name == 'descripcion' or field.name == 'premios' or field.name == 'criterios_evaluacion' or field.name == 'uso_esperado_resultados' or field.name == 'archivos' or field.name == 'tiene_convenio_institucional' %}12{% else %}6{% endif %}">
         
         {% if field.name == 'tiene_convenio_institucional' %}
           <!-- Estilo especial tipo switch o checkbox amigable para el convenio -->

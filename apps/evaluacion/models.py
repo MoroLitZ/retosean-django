@@ -34,6 +34,10 @@ class Entregable(models.Model):
     comentario_estudiante = models.TextField(blank=True, null=True)
     comentario_profesor = models.TextField(blank=True, null=True)
     nota = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    # HU12: la nota y la retroalimentacion solo las ve el estudiante cuando el
+    # profesor publica las calificaciones del reto.
+    calificacion_publicada = models.BooleanField(default=False)
+    calificacion_publicada_en = models.DateTimeField(null=True, blank=True)
     fecha_entrega = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
     estado = models.CharField(max_length=20, choices=ESTADOS, default="ENVIADO")

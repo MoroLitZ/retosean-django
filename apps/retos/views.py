@@ -3,10 +3,12 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
+from django.db.models import Prefetch, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from apps.empresas.decorators import solo_empresa_con_documentos
+from apps.empresas.services import historial_documentos
 from apps.usuarios.roles import es_admin
 from apps.usuarios.decorators import (
     profesor_o_admin,
@@ -24,9 +26,12 @@ from .forms import (
     RevisionRetoForm,
     SeguimientoRetoForm,
     EquipoRetoAcademicoForm, 
+    ParticipantesFormSet,
+    SesionesFormSet,
     SesionRetoAcademicoForm
 )
-from .models import Reto, RetoArchivo, EquipoRetoAcademico
+from .models import EquipoRetoAcademico, Reto, RetoArchivo
+from apps.seguimiento.models import HistorialEstado
 from apps.seguimiento.models import IntegracionAcademica, SeguimientoArchivo, SeguimientoReto
 from django.urls import reverse
 
@@ -124,7 +129,7 @@ def crear_reto(request):
         _guardar_archivos_reto(reto, form.cleaned_data.get('archivos', []))
         messages.success(request, 'Reto guardado como borrador.')
         if request.POST.get('accion') == 'enviar':
-            return redirect('retos:enviar_revision', pk=reto.pk)
+            return _enviar_reto(request, reto)
         return redirect('retos:mis_retos')
     return render(request, 'retos/reto_form.html', {
         'form': form,
@@ -152,7 +157,7 @@ def editar_reto(request, pk):
         _guardar_archivos_reto(reto, form.cleaned_data.get('archivos', []))
         messages.success(request, 'Reto actualizado.')
         if request.POST.get('accion') == 'enviar':
-            return redirect('retos:enviar_revision', pk=reto.pk)
+            return _enviar_reto(request, reto)
         return redirect('retos:detalle', pk=reto.pk)
     return render(request, 'retos/reto_form.html', {
         'form': form,
@@ -172,8 +177,13 @@ def _programas_por_facultad():
 
 
 @solo_empresa_con_documentos
+@require_POST
 def enviar_revision(request, pk):
-    reto = get_object_or_404(Reto, pk=pk, empresa=request.user)
+    # Solo POST: un enlace o una precarga del navegador no deben enviar el reto.
+    return _enviar_reto(request, get_object_or_404(Reto, pk=pk, empresa=request.user))
+
+
+def _enviar_reto(request, reto):
     if not reto.puede_editar_empresa:
         messages.error(request, 'Este reto no puede enviarse a aprobacion desde su estado actual.')
         return redirect('retos:detalle', pk=reto.pk)
@@ -216,7 +226,12 @@ def eliminar_reto(request, pk):
 
 @rol_requerido('EMPRESA', 'ADMIN', 'PROFESOR', 'ESTUDIANTE')
 def detalle_reto(request, pk):
-    reto = get_object_or_404(Reto.objects.select_related('empresa'), pk=pk)
+    reto = get_object_or_404(
+        Reto.objects.select_related('empresa').prefetch_related(
+            Prefetch('historial_estados', queryset=HistorialEstado.objects.select_related('realizado_por'))
+        ),
+        pk=pk,
+    )
     if not _puede_ver_reto(request.user, reto):
         raise PermissionDenied('No tienes acceso a este reto.')
     es_favorito = reto.favoritos.filter(usuario=request.user).exists()
@@ -249,6 +264,16 @@ def revisar_reto(request, pk):
     if request.method == 'POST' and form.is_valid():
         accion = form.cleaned_data['accion']
         comentario = form.cleaned_data['comentario']
+        if accion == 'aprobar':
+            # HU00: solo se aprueba la participacion de una empresa con toda su
+            # documentacion obligatoria verificada y sin bloqueo.
+            from apps.empresas.services import motivos_para_no_operar
+
+            perfil = getattr(reto.empresa, 'empresa_perfil', None)
+            motivos = motivos_para_no_operar(perfil) if perfil else ['La empresa no tiene perfil registrado.']
+            if motivos:
+                messages.error(request, 'No se puede aprobar: ' + ' '.join(motivos))
+                return redirect('retos:admin_revisar', pk=reto.pk)
         try:
             if accion == 'aprobar':
                 cambiar_estado_reto(reto, 'aprobado', request.user, comentario)
@@ -259,7 +284,11 @@ def revisar_reto(request, pk):
         except TransicionInvalida as error:
             messages.error(request, str(error))
         return redirect('retos:admin_panel')
-    return render(request, 'retos/admin_revisar_reto.html', {'reto': reto, 'form': form})
+    empresa = getattr(reto.empresa, 'empresa_perfil', None)
+    return render(request, 'retos/admin_revisar_reto.html', {
+        'reto': reto, 'form': form,
+        'historial_documentos': historial_documentos(empresa) if empresa else [],
+    })
 
 
 @solo_administrador
@@ -318,20 +347,80 @@ def mis_integraciones(request):
     return render(request, 'retos/mis_integraciones.html', {'integraciones': integraciones})
 
 
+def _formsets_integracion(request, integracion):
+    """Equipo y cronograma estructurados de la integracion (HU03)."""
+    datos = request.POST if request.method == 'POST' else None
+    return (
+        ParticipantesFormSet(datos, instance=integracion, prefix='participantes'),
+        SesionesFormSet(datos, instance=integracion, prefix='sesiones'),
+    )
+
+
+def _formsets_en_pantalla(participantes, sesiones):
+    return [
+        (participantes, '4. Equipo',
+         'Profesores (cedula, correo, facultad), estudiantes (documento, correo, programa) '
+         'y expertos invitados opcionales. Se requiere al menos un profesor.'),
+        (sesiones, '5. Cronograma de sesiones',
+         'Inicio, seguimiento(s), preseleccion opcional y evaluacion/reconocimiento, con fecha.'),
+    ]
+
+
+def _guardar_formsets(integracion, participantes, sesiones):
+    participantes.instance = integracion
+    participantes.save()
+    sesiones.instance = integracion
+    for sesion in sesiones.save(commit=False):
+        sesion.reto = integracion.reto
+        sesion.save()
+    for sesion in sesiones.deleted_objects:
+        sesion.delete()
+    if integracion.estado == 'publicada':
+        notificar_participantes_integracion(integracion)
+
+
+def notificar_participantes_integracion(integracion):
+    """Avisa una sola vez a cada estudiante con cuenta en la plataforma (HU03)."""
+    from apps.seguimiento.models import ParticipanteIntegracion
+
+    pendientes = list(integracion.participantes.filter(
+        rol=ParticipanteIntegracion.ESTUDIANTE, usuario__isnull=False, notificado_en__isnull=True,
+    ).select_related('usuario'))
+    if not pendientes:
+        return
+    notificar_muchos(
+        [p.usuario for p in pendientes], 'EQUIPO_ASIGNADO',
+        mensaje=(
+            f'Fuiste asignado al reto "{integracion.reto.titulo}" en el curso de '
+            f'{integracion.profesor.get_full_name() or integracion.profesor.username}. '
+            'Revisa el cronograma de sesiones.'
+        ),
+        link=reverse('retos:mis_equipos_estudiante'),
+        clave_dedupe=f'integracion:{integracion.pk}:asignado',
+    )
+    ParticipanteIntegracion.objects.filter(pk__in=[p.pk for p in pendientes]).update(notificado_en=timezone.now())
+
+
 @solo_profesor
 def crear_integracion(request):
     form = IntegracionAcademicaForm(request.POST or None)
-    if request.method == 'POST' and form.is_valid():
-        integracion = form.save(commit=False)
-        integracion.profesor = request.user
-        integracion.estado = 'borrador'
-        integracion.save()
-        registrar_estado_inicial(integracion, '', 'borrador', request.user, 'Integracion creada.')
+    participantes, sesiones = _formsets_integracion(request, IntegracionAcademica())
+    if request.method == 'POST' and form.is_valid() and participantes.is_valid() and sesiones.is_valid():
+        with transaction.atomic():
+            integracion = form.save(commit=False)
+            integracion.profesor = request.user
+            integracion.estado = 'borrador'
+            integracion.save()
+            _guardar_formsets(integracion, participantes, sesiones)
+            registrar_estado_inicial(integracion, '', 'borrador', request.user, 'Integracion creada.')
         messages.success(request, 'Integracion academica guardada como borrador.')
         if request.POST.get('accion') == 'enviar':
-            return redirect('retos:enviar_integracion_revision', pk=integracion.pk)
+            return _enviar_integracion(request, integracion)
         return redirect('retos:mis_integraciones')
-    return render(request, 'retos/integracion_form.html', {'form': form, 'titulo': 'Crear integracion academica'})
+    return render(request, 'retos/integracion_form.html', {
+        'form': form, 'formsets': _formsets_en_pantalla(participantes, sesiones),
+        'titulo': 'Crear integracion academica',
+    })
 
 
 @solo_profesor
@@ -341,8 +430,11 @@ def editar_integracion(request, pk):
         messages.error(request, 'Esta integracion no puede editarse desde su estado actual.')
         return redirect('retos:detalle_integracion', pk=integracion.pk)
     form = IntegracionAcademicaForm(request.POST or None, instance=integracion)
-    if request.method == 'POST' and form.is_valid():
-        integracion = form.save()
+    participantes, sesiones = _formsets_integracion(request, integracion)
+    if request.method == 'POST' and form.is_valid() and participantes.is_valid() and sesiones.is_valid():
+        with transaction.atomic():
+            integracion = form.save()
+            _guardar_formsets(integracion, participantes, sesiones)
         if integracion.estado == 'rechazada':
             integracion.comentarios_revision = ''
             cambiar_estado_entidad(
@@ -352,18 +444,26 @@ def editar_integracion(request, pk):
             )
         messages.success(request, 'Integracion academica actualizada.')
         if request.POST.get('accion') == 'enviar':
-            return redirect('retos:enviar_integracion_revision', pk=integracion.pk)
+            return _enviar_integracion(request, integracion)
         return redirect('retos:detalle_integracion', pk=integracion.pk)
     return render(request, 'retos/integracion_form.html', {
         'form': form,
+        'formsets': _formsets_en_pantalla(participantes, sesiones),
         'integracion': integracion,
         'titulo': 'Editar integracion academica',
     })
 
 
 @solo_profesor
+@require_POST
 def enviar_integracion_revision(request, pk):
-    integracion = get_object_or_404(IntegracionAcademica, pk=pk, profesor=request.user)
+    # Solo POST: un enlace o una precarga del navegador no deben enviar la integracion.
+    return _enviar_integracion(
+        request, get_object_or_404(IntegracionAcademica, pk=pk, profesor=request.user)
+    )
+
+
+def _enviar_integracion(request, integracion):
     faltantes = integracion.campos_faltantes_para_revision()
     if faltantes:
         messages.error(request, 'Completa estos campos antes de enviar: ' + ', '.join(faltantes) + '.')
@@ -415,11 +515,11 @@ def detalle_integracion(request, pk):
     )
     if request.user.rol == 'PROFESOR' and integracion.profesor_id != request.user.pk:
         raise PermissionDenied('No tienes acceso a esta integracion.')
-    sesiones = integracion.reto.sesiones_academicas.all()
     equipos = integracion.reto.equipos_academicos.prefetch_related('estudiantes')
     return render(request, 'retos/detalle_integracion.html', {
         'integracion': integracion,
-        'sesiones': sesiones,
+        'sesiones': integracion.sesiones.all(),
+        'participantes': integracion.participantes.all(),
         'equipos': equipos,
     })
 
@@ -438,6 +538,7 @@ def publicar_integracion(request, pk):
             integracion, MAQUINA_INTEGRACION, 'publicada', request.user,
             'Integracion publicada para los estudiantes.',
         )
+        notificar_participantes_integracion(integracion)
         # Aprobado -> Abierto: con la configuracion academica aprobada y
         # publicada, el reto queda visible para los estudiantes (HU10).
         reto = integracion.reto
@@ -521,7 +622,7 @@ def revisar_integracion(request, pk):
 @solo_administrador
 def admin_vinculaciones(request):
     integraciones = IntegracionAcademica.objects.select_related(
-        'reto', 'profesor'
+        'reto', 'reto__empresa', 'profesor'
     ).order_by('-creado_en')
     return render(request, 'retos/admin_vinculaciones.html', {
         'integraciones': integraciones,
@@ -616,6 +717,7 @@ def registrar_sesion_academica(request, pk):
         if form.is_valid():
             sesion = form.save(commit=False)
             sesion.reto = integracion.reto
+            sesion.integracion = integracion
             sesion.save()
             messages.success(request, 'Sesión académica registrada en el cronograma con éxito.')
             return redirect('retos:detalle_integracion', pk=integracion.pk)
@@ -679,5 +781,12 @@ def eliminar_equipo_academico(request, pk):
 @rol_requerido('ESTUDIANTE')
 def mis_equipos_estudiante(request):
     """Muestra los equipos académicos y retos en los que el estudiante está inscrito."""
+    from apps.retos.models import SesionRetoAcademico
+
     equipos = EquipoRetoAcademico.objects.filter(estudiantes=request.user).select_related('reto')
-    return render(request, 'retos/mis_equipos_estudiante.html', {'equipos': equipos})
+    # HU03: el cronograma es visible para todas las partes, incluido el estudiante asignado.
+    sesiones = SesionRetoAcademico.objects.filter(
+        Q(integracion__participantes__usuario=request.user) | Q(reto__equipos_academicos__estudiantes=request.user),
+        integracion__estado='publicada',
+    ).select_related('reto').distinct().order_by('fecha_hora')
+    return render(request, 'retos/mis_equipos_estudiante.html', {'equipos': equipos, 'sesiones': sesiones})

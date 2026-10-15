@@ -1,10 +1,11 @@
 """Logica de negocio del hackathon (HU09): etapas, ranking y publicacion."""
 
-from django.db.models import Avg, Count, Sum
+from django.db.models import Avg, Count, Max, Sum
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.notificaciones.services import notificar_muchos
-from apps.seguimiento.services import MaquinaEstados
+from apps.seguimiento.services import MaquinaEstados, registrar_cambio_estado
 
 from .models import EtapaHackaton, InscripcionHackaton, Jurado, VotacionHackaton
 
@@ -20,14 +21,6 @@ MAQUINA_INSCRIPCION = MaquinaEstados(
     },
     dict(InscripcionHackaton.ESTADOS),
 )
-
-
-def etapa_vigente(hackathon, tipo):
-    """Devuelve la etapa del tipo indicado si esta abierta hoy, o None."""
-    etapa = hackathon.etapas.filter(tipo=tipo).first()
-    if etapa is None:
-        return None
-    return etapa if etapa.vigente else None
 
 
 def inscripciones_abiertas(hackathon):
@@ -122,12 +115,15 @@ def publicar(hackathon, usuario):
     return hackathon
 
 
-def publicar_resultados(hackathon, usuario):
+def publicar_resultados(hackathon, usuario, comentario="Resultados publicados."):
     """Marca los resultados como publicos y notifica a los equipos."""
+    anterior = hackathon.estado
     hackathon.resultados_publicados = True
     if hackathon.estado != "finalizado":
         hackathon.estado = "finalizado"
     hackathon.save(update_fields=["resultados_publicados", "estado", "actualizado_en"])
+    if anterior != hackathon.estado:
+        registrar_cambio_estado(hackathon, anterior, hackathon.estado, usuario, comentario)
 
     tabla = ranking(hackathon)
     ganador = tabla[0]["equipo"] if tabla else None
@@ -142,6 +138,42 @@ def publicar_resultados(hackathon, usuario):
         clave_dedupe=f"hackaton:{hackathon.pk}:resultados",
     )
     return tabla
+
+
+def fecha_de_cierre(hackathon):
+    """Momento en que se publican solos los resultados: el inicio de la etapa de
+    premiacion o, si no tiene fecha, el fin de la ultima etapa con fecha."""
+    premiacion = hackathon.etapas.filter(tipo="premiacion", inicia_en__isnull=False).order_by("inicia_en").first()
+    if premiacion:
+        return premiacion.inicia_en
+    return hackathon.etapas.aggregate(fin=Max("termina_en"))["fin"]
+
+
+def avanzar_por_calendario(hackathon, ahora=None):
+    """Avanza el hackathon segun sus etapas (HU09). Devuelve lo que hizo.
+
+    Publicado -> En curso al empezar la etapa de desarrollo; al llegar el
+    cierre, finaliza y publica resultados y ganadores automaticamente. Es
+    idempotente: lo usan el comando programado y la vista de detalle.
+    """
+    ahora = ahora or timezone.now()
+    cambios = []
+    if hackathon.estado == "publicado" and hackathon.etapas.filter(
+        tipo="desarrollo", inicia_en__isnull=False, inicia_en__lte=ahora
+    ).exists():
+        hackathon.estado = "en_curso"
+        hackathon.save(update_fields=["estado", "actualizado_en"])
+        registrar_cambio_estado(
+            hackathon, "publicado", "en_curso", None, "Avance automatico: inicio de la etapa de desarrollo."
+        )
+        cambios.append("en_curso")
+
+    cierre = fecha_de_cierre(hackathon)
+    if (hackathon.estado in {"publicado", "en_curso"} and not hackathon.resultados_publicados
+            and cierre and cierre <= ahora):
+        publicar_resultados(hackathon, None, "Cierre automatico segun el calendario: resultados publicados.")
+        cambios.append("resultados_publicados")
+    return cambios
 
 
 def crear_etapas_por_defecto(hackathon):

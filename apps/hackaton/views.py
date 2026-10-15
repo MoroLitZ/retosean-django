@@ -1,5 +1,8 @@
 from django.contrib import messages
+from django.db import transaction
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.retos.models import Reto
@@ -12,6 +15,8 @@ from .forms import (
     EtapaFormSet,
     HackathonForm,
     InscripcionForm,
+    InvitadoFormSet,
+    LogisticaForm,
     JuradoForm,
     VotacionForm,
 )
@@ -27,6 +32,11 @@ def _puede_gestionar(user, hackathon):
     return hackathon.reto.integraciones_seguimiento.filter(profesor=user).exists()
 
 
+def _puede_exportar(user, hackathon):
+    """El informe final lo descargan los gestores y la empresa duena del reto."""
+    return _puede_gestionar(user, hackathon) or hackathon.reto.empresa_id == user.pk
+
+
 def _jurado_de(hackathon, user):
     return Jurado.objects.filter(hackathon=hackathon, usuario=user).first()
 
@@ -37,21 +47,25 @@ def _puede_ver(user, hackathon):
     El resto de roles conserva el acceso que ya tenia; solo el estudiante queda
     filtrado por estado, que es el agujero que cerraba C.5.4.
     """
+    if user.rol == "EXPERTO" and not es_admin(user):
+        return _jurado_de(hackathon, user) is not None
     if es_admin(user) or user.rol != "ESTUDIANTE":
         return True
     return hackathon.estado in ("publicado", "en_curso", "finalizado")
 
 
 # ------------------------------------------------------------- LISTADOS
-@rol_requerido("ADMIN", "PROFESOR", "EMPRESA", "ESTUDIANTE")
+@rol_requerido("ADMIN", "PROFESOR", "EMPRESA", "ESTUDIANTE", "EXPERTO")
 def lista(request):
-    hackathones = Hackathon.objects.select_related("reto", "reto__empresa").prefetch_related("etapas")
+    hackathones = Hackathon.objects.select_related("reto", "reto__empresa").prefetch_related("etapas", "inscripciones")
     if not es_admin(request.user):
         rol = request.user.rol
         if rol == "EMPRESA":
             hackathones = hackathones.filter(reto__empresa=request.user)
         elif rol == "PROFESOR":
             hackathones = hackathones.filter(reto__integraciones_seguimiento__profesor=request.user)
+        elif rol == "EXPERTO":
+            hackathones = hackathones.filter(jurados__usuario=request.user)
         else:
             hackathones = hackathones.filter(estado__in=["publicado", "en_curso", "finalizado"])
     return render(request, "hackaton/lista.html", {
@@ -61,7 +75,7 @@ def lista(request):
     })
 
 
-@rol_requerido("ADMIN", "PROFESOR", "EMPRESA", "ESTUDIANTE")
+@rol_requerido("ADMIN", "PROFESOR", "EMPRESA", "ESTUDIANTE", "EXPERTO")
 def detalle(request, pk):
     hackathon = get_object_or_404(
         Hackathon.objects.select_related("reto", "reto__empresa").prefetch_related("etapas", "jurados"),
@@ -70,6 +84,8 @@ def detalle(request, pk):
     if not _puede_ver(request.user, hackathon):
         messages.error(request, "No tienes acceso a este hackathon.")
         return redirect("hackaton:lista")
+    # HU09: si el calendario ya lo indica, avanza de estado y publica resultados.
+    services.avanzar_por_calendario(hackathon)
     inscripciones = hackathon.inscripciones.select_related("equipo").order_by("estado", "-creado_en")
     jurado = _jurado_de(hackathon, request.user)
 
@@ -80,6 +96,9 @@ def detalle(request, pk):
         "jurados": hackathon.jurados.all(),
         "inscripciones": inscripciones,
         "puede_gestionar": _puede_gestionar(request.user, hackathon),
+        "puede_exportar": _puede_exportar(request.user, hackathon),
+        "invitados": hackathon.invitados.all(),
+        "fecha_cierre": services.fecha_de_cierre(hackathon),
         "es_jurado": jurado is not None,
         "inscripciones_abiertas": services.inscripciones_abiertas(hackathon),
         "votacion_abierta": services.votacion_abierta(hackathon),
@@ -273,7 +292,8 @@ def gestionar_inscripcion(request, pk):
 
 
 # --------------------------------------------------------------- JURADO
-@rol_requerido("ADMIN", "PROFESOR", "EMPRESA")
+# Un experto solo entra como jurado asignado; la vista lo comprueba con _jurado_de.
+@rol_requerido("ADMIN", "PROFESOR", "EMPRESA", "EXPERTO")
 def votar(request, pk):
     hackathon = get_object_or_404(Hackathon.objects.select_related("reto"), pk=pk)
     jurado = _jurado_de(hackathon, request.user)
@@ -328,9 +348,10 @@ def votar(request, pk):
 
 
 # -------------------------------------------------------------- RANKING
-@rol_requerido("ADMIN", "PROFESOR", "EMPRESA", "ESTUDIANTE")
+@rol_requerido("ADMIN", "PROFESOR", "EMPRESA", "ESTUDIANTE", "EXPERTO")
 def ranking(request, pk):
     hackathon = get_object_or_404(Hackathon.objects.select_related("reto"), pk=pk)
+    services.avanzar_por_calendario(hackathon)
     puede_ver = (
         hackathon.resultados_publicados
         or _puede_gestionar(request.user, hackathon)
@@ -343,3 +364,50 @@ def ranking(request, pk):
         "tabla": services.ranking(hackathon) if puede_ver else [],
         "puede_gestionar": _puede_gestionar(request.user, hackathon),
     })
+
+
+# ------------------------------------------------------------ LOGISTICA
+@rol_requerido(*GESTORES)
+def logistica(request, pk):
+    """Espacio, transmision e invitados del evento (HU09)."""
+    hackathon = get_object_or_404(Hackathon.objects.select_related("reto"), pk=pk)
+    if not _puede_gestionar(request.user, hackathon):
+        messages.error(request, "No gestionas este hackathon.")
+        return redirect("hackaton:detalle", pk=hackathon.pk)
+    datos = request.POST if request.method == "POST" else None
+    form = LogisticaForm(datos, instance=hackathon)
+    invitados = InvitadoFormSet(datos, instance=hackathon, prefix="invitados")
+    if request.method == "POST" and form.is_valid() and invitados.is_valid():
+        with transaction.atomic():
+            form.save()
+            invitados.save()
+        messages.success(request, "Logistica del evento actualizada.")
+        return redirect("hackaton:detalle", pk=hackathon.pk)
+    return render(request, "hackaton/logistica.html", {
+        "titulo": f"Logistica: {hackathon.reto.titulo}",
+        "hackathon": hackathon,
+        "form": form,
+        "invitados": invitados,
+    })
+
+
+# --------------------------------------------------------- INFORME FINAL
+@rol_requerido("ADMIN", "PROFESOR", "EMPRESA")
+def informe_final(request, pk):
+    """Informe final exportable del hackathon en PDF o Excel (HU09)."""
+    from .informe import informe_excel, informe_pdf
+
+    hackathon = get_object_or_404(Hackathon.objects.select_related("reto", "reto__empresa"), pk=pk)
+    if not _puede_exportar(request.user, hackathon):
+        messages.error(request, "No tienes acceso al informe de este hackathon.")
+        return redirect("hackaton:detalle", pk=hackathon.pk)
+    services.avanzar_por_calendario(hackathon)
+    marca = timezone.localtime().strftime("%Y%m%d")
+    if request.GET.get("formato") == "excel":
+        contenido = informe_excel(hackathon)
+        tipo, extension = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"
+    else:
+        contenido, tipo, extension = informe_pdf(hackathon), "application/pdf", "pdf"
+    respuesta = HttpResponse(contenido, content_type=tipo)
+    respuesta["Content-Disposition"] = f'attachment; filename="informe-hackathon-{hackathon.pk}-{marca}.{extension}"'
+    return respuesta

@@ -1,6 +1,7 @@
 import os
 
 from django.conf import settings
+from django.contrib.contenttypes.fields import GenericRelation
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, models, transaction
 from django.utils import timezone
@@ -66,6 +67,8 @@ class Reto(models.Model):
     PREFIJOS_CONSECUTIVO = {"reto": "RETO", "hackathon": "HACK"}
 
     objects = RetoManager()
+    # Bitacora unica (seguimiento.HistorialEstado), igual que el resto de entidades.
+    historial_estados = GenericRelation("seguimiento.HistorialEstado", related_query_name="reto")
     todos = models.Manager()
 
     empresa = models.ForeignKey(
@@ -75,6 +78,8 @@ class Reto(models.Model):
     )
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, default="reto")
     titulo = models.CharField(max_length=180, blank=True)
+    # HU01: nombre corto del reto, ademas de la descripcion en pregunta abierta.
+    nombre_corto = models.CharField(max_length=60, blank=True)
     descripcion = models.TextField(blank=True)
     area = models.CharField(max_length=120, blank=True, choices=AREA_CHOICES)
     nivel_academico = models.CharField(max_length=120, blank=True, choices=NIVEL_ACADEMICO_CHOICES)
@@ -105,6 +110,10 @@ class Reto(models.Model):
     premios = models.TextField(blank=True)
     documento_soporte = models.FileField(upload_to="retos/soportes/", blank=True, null=True)
     criterios_evaluacion = models.TextField(blank=True)
+    # HU01: uso esperado de los resultados e insumos que aporta la empresa.
+    uso_esperado_resultados = models.TextField(blank=True)
+    insumos_inicio = models.TextField(blank=True)
+    insumos_cierre = models.TextField(blank=True)
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default="borrador")
     # Consecutivo por tipo y por anio de aprobacion: RETO-2026-001, HACK-2026-001.
     consecutivo = models.PositiveIntegerField(null=True, blank=True)
@@ -197,30 +206,6 @@ class Reto(models.Model):
         raise IntegrityError("No se pudo asignar un consecutivo unico al reto.")
 
 
-class HistorialEstadoReto(models.Model):
-    reto = models.ForeignKey('retos.Reto', on_delete=models.CASCADE, related_name="historial_estados")
-    estado_anterior = models.CharField(max_length=20, blank=True)
-    estado_nuevo = models.CharField(max_length=20, choices=Reto.ESTADO_CHOICES)
-    comentario = models.TextField(blank=True)
-    realizado_por = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="cambios_estado_retos",
-    )
-    fecha = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "historial_estados_reto"
-        ordering = ["-fecha"]
-        verbose_name = "Historial de Estado de Reto"
-        verbose_name_plural = "Historial de Estados de Reto"
-
-    def __str__(self):
-        return f"{self.reto} -> {self.estado_nuevo}"
-
-
 class RetoArchivo(models.Model):
     reto = models.ForeignKey(Reto, on_delete=models.CASCADE, related_name="archivos")
     archivo = models.FileField(upload_to="retos/soportes/")
@@ -278,6 +263,11 @@ class SesionRetoAcademico(models.Model): # <--- Cambiamos el nombre para que no 
     ]
     
     reto = models.ForeignKey(Reto, on_delete=models.CASCADE, related_name='sesiones_academicas') # <--- related_name único
+    # HU03: el cronograma es de la integracion academica que lo define.
+    integracion = models.ForeignKey(
+        'seguimiento.IntegracionAcademica', on_delete=models.CASCADE,
+        null=True, blank=True, related_name='sesiones',
+    )
     tipo = models.CharField(max_length=20, choices=TIPO_SESION_CHOICES)
     fecha_hora = models.DateTimeField()
     enlace_reunion = models.URLField(blank=True, null=True)

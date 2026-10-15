@@ -1,6 +1,7 @@
 """Emision y renderizado de certificados y portafolio (HU16)."""
 
 import io
+from xml.sax.saxutils import escape
 
 from django.core.files.base import ContentFile
 from django.urls import reverse
@@ -33,7 +34,6 @@ def _participantes_del_reto(reto):
     from apps.evaluacion.models import Entregable
     from apps.hackaton.models import Jurado
     from apps.participaciones.models import Postulacion
-    from apps.retos.models import EquipoRetoAcademico
     from apps.seguimiento.models import IntegracionAcademica
     from apps.usuarios.models import Usuario
 
@@ -64,7 +64,6 @@ def _participantes_del_reto(reto):
     if reto.empresa_id:
         elegibles.setdefault(reto.empresa_id, (reto.empresa, "EMPRESA"))
 
-    del EquipoRetoAcademico
     return list(elegibles.values())
 
 
@@ -146,18 +145,18 @@ def generar_pdf_certificado(certificado):
                   estilo("Titulo", fontSize=22, textColor=NEGRO, spaceAfter=18,
                          fontName="Helvetica-Bold")),
         Paragraph("Se certifica que", estilo("Intro", fontSize=11, textColor=GRIS, spaceAfter=8)),
-        Paragraph(certificado.nombre_participante,
+        Paragraph(escape(certificado.nombre_participante),
                   estilo("Nombre", fontSize=24, textColor=NEGRO, spaceAfter=12,
                          fontName="Helvetica-Bold")),
         Paragraph(
             f"participo en calidad de <b>{papel}</b> en el reto empresarial",
             estilo("Rol", fontSize=11, textColor=GRIS, spaceAfter=8),
         ),
-        Paragraph(f'"{reto.titulo}"',
+        Paragraph(f'"{escape(reto.titulo)}"',
                   estilo("Reto", fontSize=15, textColor=VERDE_EAN_OSC, spaceAfter=8,
                          fontName="Helvetica-Bold")),
         Paragraph(
-            f"propuesto por {reto.empresa.get_full_name() or reto.empresa.username}"
+            f"propuesto por {escape(reto.empresa.get_full_name() or reto.empresa.username)}"
             + (f", con una dedicacion de {certificado.horas} horas" if certificado.horas else "")
             + ".",
             estilo("Empresa", fontSize=11, textColor=GRIS, spaceAfter=22),
@@ -231,7 +230,7 @@ def generar_pdf_portafolio(usuario, certificados, entregables):
 
     def tabla(cabeceras, filas, anchos):
         datos = [[Paragraph(f"<b>{c}</b>", celda_cabecera) for c in cabeceras]]
-        datos += [[Paragraph(str(v), celda) for v in fila] for fila in filas]
+        datos += [[Paragraph(escape(str(v)), celda) for v in fila] for fila in filas]
         t = Table(datos, colWidths=[documento.width * a for a in anchos], repeatRows=1)
         t.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), VERDE_EAN),

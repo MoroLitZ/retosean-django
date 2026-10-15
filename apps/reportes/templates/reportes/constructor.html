@@ -86,12 +86,59 @@
             {% endfor %}
           </div>
 
-          <button type="submit" class="btn btn-primary fw-bold">
-            <i class="bi bi-download"></i> Generar y descargar
-          </button>
+          <div class="row g-2 align-items-end mb-3">
+            <div class="col-md-8">
+              <label for="{{ form.destinatarios.id_for_label }}" class="form-label small fw-semibold text-secondary">
+                {{ form.destinatarios.label }}
+              </label>
+              {{ form.destinatarios }}
+              {% for error in form.destinatarios.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+          </div>
+
+          <div class="d-flex flex-wrap gap-2">
+            <button type="submit" name="accion" value="previsualizar" class="btn btn-outline-secondary fw-bold">
+              <i class="bi bi-eye"></i> Vista previa
+            </button>
+            <button type="submit" name="accion" value="descargar" class="btn btn-primary fw-bold">
+              <i class="bi bi-download"></i> Generar y descargar
+            </button>
+            <button type="submit" name="accion" value="enviar" class="btn btn-outline-primary fw-bold">
+              <i class="bi bi-envelope"></i> Generar y enviar por correo
+            </button>
+          </div>
         </form>
       </div>
     </div>
+
+    {% if vista_previa %}
+    <div class="card-panel mt-3" id="vista-previa">
+      <div class="card-panel-header">
+        <span>Vista previa · {{ definicion_actual.nombre }}</span>
+        <span class="small text-muted fw-normal">
+          {{ vista_previa.mostradas }} de {{ vista_previa.total }} registro{{ vista_previa.total|pluralize }}
+        </span>
+      </div>
+      <div class="p-3">
+        <p class="text-muted small mb-2"><i class="bi bi-funnel"></i> {{ vista_previa.filtros }}</p>
+        <div class="table-responsive" style="max-height: 480px;">
+          <table class="table table-sm table-striped align-middle mb-0 small">
+            <thead class="table-light"><tr>{% for e in vista_previa.encabezados %}<th>{{ e }}</th>{% endfor %}</tr></thead>
+            <tbody>
+              {% for fila in vista_previa.filas %}
+              <tr>{% for valor in fila %}<td>{{ valor|default:'-' }}</td>{% endfor %}</tr>
+              {% empty %}
+              <tr><td colspan="{{ vista_previa.encabezados|length }}" class="text-center text-muted py-3">Sin registros con estos filtros.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if vista_previa.total > vista_previa.mostradas %}
+        <p class="text-muted small mt-2 mb-0">Se muestran las primeras {{ vista_previa.mostradas }} filas; el archivo incluye todas.</p>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
   </div>
 
   <div class="col-lg-4">

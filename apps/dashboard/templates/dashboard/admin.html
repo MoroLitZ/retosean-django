@@ -20,6 +20,15 @@
       {% endfor %}
     </select>
   </div>
+  <div class="col-sm-6 col-md-2">
+    <label for="ecosistema" class="form-label small fw-semibold text-secondary mb-1">Ecosistema</label>
+    <select name="ecosistema" id="ecosistema" class="form-select form-select-sm">
+      <option value="">Todos</option>
+      {% for e in ecosistemas %}
+        <option value="{{ e.pk }}" {% if ecosistema_id == e.pk|stringformat:"s" %}selected{% endif %}>{{ e.nombre }}</option>
+      {% endfor %}
+    </select>
+  </div>
 {% endblock %}
 
 {% block kpis %}
@@ -35,6 +44,12 @@
   {% include 'dashboard/_kpi.html' with etiqueta="Estudiantes" valor=kpis.estudiantes_total icono="mortarboard" color="#65a30d" %}
   {% include 'dashboard/_kpi.html' with etiqueta="Docentes" valor=kpis.profesores_total icono="person-video3" color="#db2777" %}
   {% include 'dashboard/_kpi.html' with etiqueta="Postulaciones" valor=kpis.postulaciones_total icono="send" color="#dc2626" nota=kpis.postulaciones_aceptadas|stringformat:"s"|add:" aceptadas" %}
+</div>
+
+<div class="row g-3 mb-4">
+  {% include 'dashboard/_kpi.html' with etiqueta="Solución aplicada" valor=kpis.impacto_si icono="check2-circle" color="#16a34a" nota="la empresa la aplicó" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="No aplicada" valor=kpis.impacto_no icono="x-circle" color="#dc2626" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Impacto en evaluación" valor=kpis.impacto_evaluacion icono="hourglass" color="#f59e0b" %}
 </div>
 {% endblock %}
 
@@ -69,6 +84,14 @@
       <div class="card-panel-header">Integraciones académicas</div>
       <div class="p-3" style="height:280px;">
         <canvas data-serie="integraciones_por_estado" data-tipo="doughnut"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card-panel h-100">
+      <div class="card-panel-header">Impacto: ¿la empresa aplicó la solución?</div>
+      <div class="p-3" style="height:280px;">
+        <canvas data-serie="impacto" data-tipo="doughnut"></canvas>
       </div>
     </div>
   </div>

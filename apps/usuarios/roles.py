@@ -9,12 +9,14 @@ ROL_ADMIN = 'ADMIN'
 ROL_EMPRESA = 'EMPRESA'
 ROL_PROFESOR = 'PROFESOR'
 ROL_ESTUDIANTE = 'ESTUDIANTE'
+ROL_EXPERTO = 'EXPERTO'
 
 DASHBOARD_POR_ROL = {
     ROL_ADMIN: 'usuarios:admin_dashboard',
     ROL_EMPRESA: 'usuarios:empresa_dashboard',
     ROL_PROFESOR: 'usuarios:profesor_dashboard',
     ROL_ESTUDIANTE: 'usuarios:estudiante_dashboard',
+    ROL_EXPERTO: 'dashboard:panel',
 }
 
 

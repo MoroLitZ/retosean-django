@@ -5,11 +5,29 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
   <div><h2 class="page-title">Evaluacion formal</h2><p class="page-subtitle">Usa puntaje libre o una rubrica configurada para cada reto.</p></div>
 </div>
+{% if por_publicar %}
+<div class="card-panel mb-4">
+  <div class="card-panel-header"><i class="bi bi-megaphone me-2"></i>Calificaciones sin publicar</div>
+  <div class="p-3 d-flex flex-wrap gap-3">
+    {% for item in por_publicar %}
+    <form method="post" action="{% url 'evaluacion:publicar_calificaciones' item.reto_id %}" class="d-flex align-items-center gap-2"
+          onsubmit="return confirm('¿Publicar {{ item.total }} calificación(es) del reto? Los estudiantes las verán y recibirán una notificación.')">
+      {% csrf_token %}
+      <span class="small">{{ item.reto__titulo }}: <strong>{{ item.total }}</strong></span>
+      <button class="btn btn-sm btn-ean">Publicar</button>
+    </form>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
 {% for e in entregables %}
 <section class="card-panel mb-4" id="entregable-{{ e.pk }}">
   <div class="card-panel-header">
     <span>{{ e.titulo }} · {{ e.reto.titulo }}</span>
-    <span class="badge {% if e.estado == 'CALIFICADO' %}bg-success{% else %}bg-warning text-dark{% endif %}">{{ e.get_estado_display }}</span>
+    <span>
+      <span class="badge {% if e.estado == 'CALIFICADO' %}bg-success{% else %}bg-warning text-dark{% endif %}">{{ e.get_estado_display }}</span>
+      {% if e.estado == 'CALIFICADO' and not e.calificacion_publicada %}<span class="badge bg-secondary">Sin publicar</span>{% endif %}
+    </span>
   </div>
   <div class="p-4">
     <div class="row g-4">
@@ -40,6 +58,14 @@
           {% endif %}{% endfor %}
           <label class="form-label">Retroalimentacion</label>
           <textarea class="form-control mb-3" name="comentario" rows="3">{{ e.comentario_profesor|default:'' }}</textarea>
+          {% if e.estado == 'CALIFICADO' %}
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" name="confirmar_recalificacion" value="1" id="recalificar-{{ e.pk }}">
+            <label class="form-check-label small" for="recalificar-{{ e.pk }}">
+              Confirmo que quiero volver a calificar (nota actual: {{ e.nota }}). La nueva nota quedará sin publicar.
+            </label>
+          </div>
+          {% endif %}
           <button class="btn btn-ean" type="submit">Guardar evaluacion</button>
         </form>
       </div>

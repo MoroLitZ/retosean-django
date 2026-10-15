@@ -6,7 +6,7 @@ from django.contrib import messages
 
 from apps.retos.models import Reto
 from apps.participaciones.models import Postulacion as PostulacionReto
-from apps.academico.models import Certificado, Facultad, Programa
+from apps.academico.models import Certificado, Ecosistema, Facultad, Programa
 from apps.academico.services import generar_pdf_portafolio, obtener_pdf_certificado
 from apps.usuarios.decorators import solo_estudiante
 from apps.usuarios.roles import es_admin, url_dashboard_para
@@ -32,6 +32,7 @@ def explorar_retos(request):
     tipo = request.GET.get('tipo', '')
     area = request.GET.get('area', '')
     nivel = request.GET.get('nivel', '')
+    ecosistema = request.GET.get('ecosistema', '')
 
     if facultad:
         retos_qs = retos_qs.filter(facultad_id=facultad)
@@ -43,6 +44,8 @@ def explorar_retos(request):
         retos_qs = retos_qs.filter(area=area)
     if nivel:
         retos_qs = retos_qs.filter(nivel_academico=nivel)
+    if ecosistema:
+        retos_qs = retos_qs.filter(ecosistema_id=ecosistema)
 
     retos_qs = retos_qs.distinct().order_by('-creado_en')
 
@@ -68,10 +71,11 @@ def explorar_retos(request):
         'tipos': Reto.TIPO_CHOICES,
         'areas': areas,
         'niveles': niveles,
+        'ecosistemas': Ecosistema.objects.order_by('nombre'),
         'favoritos_ids': favoritos_ids,
         'filtros': {
             'q': q, 'facultad': facultad, 'programa': programa,
-            'tipo': tipo, 'area': area, 'nivel': nivel,
+            'tipo': tipo, 'area': area, 'nivel': nivel, 'ecosistema': ecosistema,
         },
         'querystring': request.GET.urlencode(),
     })
