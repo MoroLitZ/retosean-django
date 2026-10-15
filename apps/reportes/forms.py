@@ -75,6 +75,26 @@ class ReporteForm(forms.Form):
         widget=forms.Select(attrs={"class": CLASE_CONTROL}),
     )
 
+    destinatarios = forms.CharField(
+        label="Enviar a (correos separados por coma)", required=False,
+        widget=forms.TextInput(attrs={"class": CLASE_INPUT, "placeholder": "Por defecto, tu correo"}),
+    )
+
+    MAX_DESTINATARIOS = 10
+
+    def clean_destinatarios(self):
+        from django.core.validators import validate_email
+
+        correos = [c.strip() for c in (self.cleaned_data.get("destinatarios") or "").replace(";", ",").split(",") if c.strip()]
+        if len(correos) > self.MAX_DESTINATARIOS:
+            raise forms.ValidationError(f"Maximo {self.MAX_DESTINATARIOS} destinatarios.")
+        for correo in correos:
+            try:
+                validate_email(correo)
+            except forms.ValidationError:
+                raise forms.ValidationError(f"Correo invalido: {correo}")
+        return correos
+
     def __init__(self, *args, usuario=None, **kwargs):
         super().__init__(*args, **kwargs)
         definiciones = disponibles_para(usuario) if usuario else []

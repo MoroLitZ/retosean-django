@@ -266,3 +266,66 @@ class ReportesConDatosHostilesTests(TestCase):
                     _, contenido, _, _ = construir_reporte(
                         self.admin, definicion, definicion.columnas, formato, self.filtros)
                     self.assertTrue(contenido.startswith(firma))
+
+
+class VistaPreviaYEnvioHU06Tests(TestCase):
+    """HU06: vista previa en pantalla y envio del reporte por correo."""
+
+    def setUp(self):
+        self.admin = Usuario.objects.create_superuser(username="admin-hu06", password="x", email="admin@ean.edu.co")
+        empresa = Usuario.objects.create_user(username="emp-hu06", password="x", rol="EMPRESA")
+        for i in range(3):
+            Reto.objects.create(empresa=empresa, titulo=f"Reto previo {i}", estado="aprobado")
+        self.client.force_login(self.admin)
+
+    def _post(self, **extra):
+        return self.client.post(reverse("reportes:constructor"), {
+            "reporte": "retos", "formato": "PDF", "periodo": "todo", **extra,
+        })
+
+    def test_vista_previa_muestra_filas_sin_generar_archivo(self):
+        respuesta = self._post(accion="previsualizar")
+        self.assertEqual(respuesta.status_code, 200)
+        previa = respuesta.context["vista_previa"]
+        self.assertEqual(previa["total"], 3)
+        self.assertEqual(len(previa["filas"]), 3)
+        self.assertContains(respuesta, "Reto previo 0")
+        self.assertFalse(ReporteGenerado.objects.exists())
+
+    def test_enviar_por_correo_adjunta_el_archivo_y_lo_registra(self):
+        from django.core import mail
+
+        respuesta = self._post(accion="enviar", destinatarios="jefe@ean.edu.co; otra@ean.edu.co")
+        self.assertRedirects(respuesta, reverse("reportes:historial"))
+        self.assertEqual(len(mail.outbox), 1)
+        correo = mail.outbox[0]
+        self.assertEqual(correo.to, ["jefe@ean.edu.co", "otra@ean.edu.co"])
+        self.assertEqual(correo.attachments[0][2], "application/pdf")
+        registro = ReporteGenerado.objects.get()
+        self.assertTrue(registro.enviado_por_email)
+        self.assertEqual(registro.filtros["enviado_a"], ["jefe@ean.edu.co", "otra@ean.edu.co"])
+
+    def test_sin_destinatarios_se_envia_al_propio_usuario(self):
+        from django.core import mail
+
+        self._post(accion="enviar")
+        self.assertEqual(mail.outbox[0].to, ["admin@ean.edu.co"])
+
+    def test_correo_invalido_no_genera_nada(self):
+        from django.core import mail
+
+        respuesta = self._post(accion="enviar", destinatarios="no-es-correo")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertFalse(ReporteGenerado.objects.exists())
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_fallo_de_envio_conserva_el_reporte_y_lo_marca(self):
+        from unittest import mock
+
+        with mock.patch("django.core.mail.EmailMessage.send", side_effect=OSError("SMTP caido")):
+            self._post(accion="enviar")
+        registro = ReporteGenerado.objects.get()
+        self.assertFalse(registro.enviado_por_email)
+        self.assertIn("SMTP caido", registro.filtros["error_envio"])
+        historial = self.client.get(reverse("reportes:historial"))
+        self.assertContains(historial, "Fallido")

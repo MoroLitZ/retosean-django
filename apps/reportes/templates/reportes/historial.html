@@ -59,6 +59,7 @@
           <th class="text-center">Registros</th>
           <th class="text-center">Variables</th>
           <th>Fecha</th>
+          <th>Correo</th>
           <th class="text-end pe-4">Archivo</th>
         </tr>
       </thead>
@@ -79,6 +80,13 @@
             <td class="text-center text-muted">{{ fila.registros|default:"-" }}</td>
             <td class="text-center text-muted">{{ fila.columnas }}</td>
             <td class="text-muted small">{{ fila.obj.creado_en|date:"d/m/Y H:i" }}</td>
+            <td class="small">
+              {% if fila.obj.enviado_por_email %}
+                <span class="badge bg-success-subtle text-success" title="{{ fila.obj.filtros.enviado_a|join:', ' }}"><i class="bi bi-envelope-check"></i> Enviado</span>
+              {% elif fila.obj.filtros.error_envio %}
+                <span class="badge bg-danger-subtle text-danger" title="{{ fila.obj.filtros.error_envio }}"><i class="bi bi-envelope-x"></i> Fallido</span>
+              {% else %}<span class="text-muted">-</span>{% endif %}
+            </td>
             <td class="text-end pe-4">
               {% if fila.obj.archivo %}
                 <a href="{% url 'reportes:descargar' fila.obj.pk %}" class="btn btn-sm btn-outline-primary">
@@ -91,7 +99,7 @@
           </tr>
         {% empty %}
           <tr>
-            <td colspan="7" class="text-center text-muted py-5">
+            <td colspan="8" class="text-center text-muted py-5">
               <i class="bi bi-file-earmark-x d-block mb-2" style="font-size:2.5rem;"></i>
               Todavía no se ha generado ningún reporte.
             </td>
