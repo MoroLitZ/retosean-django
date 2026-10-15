@@ -1,4 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.db.models import Q
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.utils import timezone
@@ -66,7 +67,7 @@ def postular_a_reto(request, reto_id):
             cambiar_estado(
                 postulacion, MAQUINA_POSTULACION, 'PENDIENTE', request.user, 'Postulacion reenviada.'
             )
-        _notificar_nueva_postulacion(reto, request.user)
+        _notificar_nueva_postulacion(postulacion)
         _confirmar_postulacion_al_estudiante(postulacion)
         messages.success(
             request,
@@ -100,14 +101,16 @@ def _confirmar_postulacion_al_estudiante(postulacion):
     )
 
 
-def _notificar_nueva_postulacion(reto, estudiante):
+def _notificar_nueva_postulacion(postulacion):
     """Avisa a la empresa dueña del reto sobre una postulacion nueva."""
     from django.urls import reverse
 
     from apps.notificaciones.services import notificar
 
+    reto = postulacion.reto
+    estudiante = postulacion.estudiante
     nombre = estudiante.get_full_name() or estudiante.username
-    link = reverse('retos:detalle', kwargs={'pk': reto.pk})
+    link = reverse('empresas:postulaciones')
     clave = f'postulacion-nueva:{reto.pk}:{estudiante.pk}'
 
     notificar(
@@ -240,12 +243,16 @@ def _estudiante_participa_en(usuario, reto):
         return True
     if EquipoRetoAcademico.objects.filter(reto=reto, estudiantes=usuario).exists():
         return True
-    return Entregable.objects.filter(reto=reto, estudiante=usuario).exists()
+    return Entregable.objects.filter(
+        Q(reto=reto, estudiante=usuario)
+        | Q(reto=reto, equipo__miembros__estudiante=usuario)
+    ).exists()
 
 
 @solo_estudiante
 def mis_entregables(request, reto_id=None):
     from apps.retos.models import EquipoRetoAcademico
+    from apps.participaciones.models import Equipo
 
     reto = None
     entregables_subidos = []
@@ -258,7 +265,7 @@ def mis_entregables(request, reto_id=None):
         estudiantes=request.user
     ).values_list('reto_id', flat=True)
     retos_entregable_ids = Entregable.objects.filter(
-        estudiante=request.user
+        Q(estudiante=request.user) | Q(equipo__miembros__estudiante=request.user)
     ).values_list('reto_id', flat=True)
     todos_mis_retos_ids = set(retos_aceptados_ids) | set(retos_equipo_ids) | set(retos_entregable_ids)
 
@@ -284,22 +291,33 @@ def mis_entregables(request, reto_id=None):
                 messages.error(request, 'Este reto ya fue cerrado formalmente y no recibe mas entregables.')
                 return redirect('participaciones:mis_entregables_reto', reto_id=reto.id)
 
-            form = EntregableForm(request.POST, request.FILES)
+            equipos = Equipo.objects.filter(
+                reto=reto, miembros__estudiante=request.user
+            ).distinct()
+            form = EntregableForm(request.POST, request.FILES, equipos=equipos)
             if form.is_valid():
                 titulo = form.cleaned_data.get('titulo') or 'Entregable del reto'
-                entregable, created = Entregable.objects.get_or_create(
-                    reto=reto,
-                    estudiante=request.user,
-                    titulo=titulo,
-                    defaults={
-                        'archivo': form.cleaned_data['archivo'],
-                        'es_final': form.cleaned_data.get('es_final', False),
-                        'comentario_estudiante': form.cleaned_data.get('comentario_estudiante', ''),
-                        'estado': 'ENVIADO',
-                    }
-                )
+                equipo = form.cleaned_data.get('equipo')
+                filtros = {'reto': reto, 'estudiante': request.user, 'titulo': titulo}
+                if equipo:
+                    filtros = {'reto': reto, 'equipo': equipo, 'titulo': titulo}
+                entregable = Entregable.objects.filter(**filtros).first()
+                created = entregable is None
+                if created:
+                    entregable = Entregable(
+                        reto=reto,
+                        estudiante=request.user,
+                        equipo=equipo,
+                        titulo=titulo,
+                        archivo=form.cleaned_data['archivo'],
+                        es_final=form.cleaned_data.get('es_final', False),
+                        comentario_estudiante=form.cleaned_data.get('comentario_estudiante', ''),
+                        estado='ENVIADO',
+                    )
+                    entregable.save()
                 if not created:
                     entregable.archivo = form.cleaned_data['archivo']
+                    entregable.equipo = equipo
                     entregable.es_final = form.cleaned_data.get('es_final', False)
                     entregable.comentario_estudiante = form.cleaned_data.get('comentario_estudiante', '')
                     entregable.save()
@@ -309,12 +327,20 @@ def mis_entregables(request, reto_id=None):
                 return redirect('participaciones:mis_entregables_reto', reto_id=reto.id)
         else:
             if reto.estado != 'finalizado':
-                form = EntregableForm()
+                equipos = Equipo.objects.filter(
+                    reto=reto, miembros__estudiante=request.user
+                ).distinct()
+                form = EntregableForm(equipos=equipos)
 
         entregables_subidos = (
             Entregable.objects
-            .filter(reto=reto, estudiante=request.user)
+            .filter(
+                Q(reto=reto, estudiante=request.user)
+                | Q(reto=reto, equipo__miembros__estudiante=request.user)
+            )
             .prefetch_related('historial_comentarios__autor')
+            .select_related('equipo')
+            .distinct()
             .order_by('-fecha_entrega')
         )
 

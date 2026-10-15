@@ -56,10 +56,12 @@ class Reto(models.Model):
     ESTADOS_VIGENTES = ("aprobado", "abierto", "en_curso", "pausado", "finalizado")
     # Retos vivos para los indicadores de "retos activos".
     ESTADOS_ACTIVOS = ("aprobado", "abierto", "en_curso", "pausado")
-    # Visibles para estudiantes y abiertos a postulacion (HU10/HU11).
+    # Abiertos a postulacion (HU10/HU11).
     ESTADOS_ABIERTOS = ("abierto",)
-    # El estudiante puede consultar el detalle desde que el reto se abre.
-    ESTADOS_VISIBLES_ESTUDIANTE = ("abierto", "en_curso", "pausado", "finalizado")
+    # El estudiante puede descubrir retos aprobados, aunque solo puede
+    # postularse cuando el reto esta abierto.
+    ESTADOS_EXPLORABLES = ("aprobado", "abierto")
+    ESTADOS_VISIBLES_ESTUDIANTE = ("aprobado", "abierto", "en_curso", "pausado", "finalizado")
     # Integrables por un profesor (HU03) y con cierre gestionable (HU08).
     ESTADOS_INTEGRABLES = ("aprobado", "abierto", "en_curso", "pausado")
 

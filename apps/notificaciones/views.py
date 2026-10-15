@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
@@ -11,6 +12,20 @@ from apps.usuarios.decorators import solo_admin
 
 from .models import Notificacion, PreferenciaNotificacion
 from .eventos import EVENTOS
+
+
+def _normalizar_link(notificacion):
+    """Corrige enlaces antiguos de postulaciones recibidas por empresas."""
+    if (
+        notificacion.evento == 'POSTULACION_NUEVA'
+        and getattr(notificacion.usuario, 'rol', None) == 'EMPRESA'
+    ):
+        destino = reverse('empresas:postulaciones')
+        if notificacion.link != destino:
+            notificacion.link = destino
+            notificacion.save(update_fields=['link'])
+        return destino
+    return notificacion.link
 
 
 def _destino_seguro(request, fallback='notificaciones:bandeja'):
@@ -33,9 +48,12 @@ def bandeja(request):
         notificaciones = notificaciones.filter(leida=True)
 
     paginator = Paginator(notificaciones, 20)
+    pagina = paginator.get_page(request.GET.get('page'))
+    for notificacion in pagina:
+        _normalizar_link(notificacion)
     return render(request, 'notificaciones/bandeja.html', {
         'titulo': 'Mis Notificaciones',
-        'notificaciones': paginator.get_page(request.GET.get('page')),
+        'notificaciones': pagina,
         'filtro': filtro,
         'no_leidas': Notificacion.objects.filter(usuario=request.user, leida=False).count(),
     })
@@ -46,8 +64,9 @@ def bandeja(request):
 def marcar_leida(request, pk):
     notificacion = get_object_or_404(Notificacion, pk=pk, usuario=request.user)
     notificacion.marcar_leida()
-    if notificacion.link:
-        return redirect(notificacion.link)
+    destino = _normalizar_link(notificacion)
+    if destino:
+        return redirect(destino)
     return redirect(_destino_seguro(request))
 
 

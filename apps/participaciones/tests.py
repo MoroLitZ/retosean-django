@@ -51,6 +51,31 @@ class AccesoAEntregablesTests(TestCase):
         self.client.post(self.url, self._payload())
         self.assertTrue(Entregable.objects.filter(reto=self.reto, estudiante=miembro).exists())
 
+    def test_miembro_puede_enviar_entregable_como_equipo(self):
+        from apps.retos.models import EquipoRetoAcademico
+
+        miembro = Usuario.objects.create_user(username="est-equipo-manual", password="x", rol="ESTUDIANTE")
+        equipo = EquipoRetoAcademico.objects.create(reto=self.reto, nombre_equipo="Equipo Manual")
+        equipo.estudiantes.add(miembro)
+        from apps.participaciones.services import sincronizar_equipo_academico
+        sincronizar_equipo_academico(equipo)
+        equipo_operativo = equipo.equipo_espejo
+
+        self.client.force_login(miembro)
+        response = self.client.post(
+            reverse("participaciones:mis_entregables_reto", args=[self.reto.pk]),
+            {
+                "titulo": "Entrega grupal",
+                "equipo": equipo_operativo.pk,
+                "archivo": SimpleUploadedFile("entrega.pdf", b"contenido"),
+                "comentario_estudiante": "Entrega del equipo.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        entregable = Entregable.objects.get(titulo="Entrega grupal")
+        self.assertEqual(entregable.equipo_id, equipo_operativo.pk)
+
     def test_listado_sin_reto_elegido_muestra_los_retos_participando(self):
         # Regresion: la vista pasa un queryset de Reto en el contexto
         # "postulaciones", y el template debe iterarlo como Reto (no como
@@ -87,6 +112,16 @@ class FavoritosTests(TestCase):
         self.client.force_login(self.estudiante)
         response = self.client.post(self.url, {"next": "https://evil.example.com/robo"})
         self.assertRedirects(response, reverse("academico:explorar_retos"))
+
+    def test_favorito_aprobado_no_muestra_accion_de_postulacion(self):
+        self.client.force_login(self.estudiante)
+        self.client.post(self.url)
+
+        response = self.client.get(reverse("participaciones:mis_favoritos"))
+
+        self.assertContains(response, "Reto favorito")
+        self.assertContains(response, "Próximamente disponible")
+        self.assertNotContains(response, "Postularme")
 
 
 class PostulacionProgramaDropdownTests(TestCase):
@@ -181,6 +216,11 @@ class FlujoNotificacionesYRevisionPostulacionTests(TestCase):
                 evento="POSTULACION_NUEVA",
             ).exists()
         )
+        notificacion = Notificacion.objects.get(
+            usuario=self.empresa,
+            evento="POSTULACION_NUEVA",
+        )
+        self.assertEqual(notificacion.link, reverse("empresas:postulaciones"))
         self.assertFalse(
             Notificacion.objects.filter(
                 usuario=self.admin,

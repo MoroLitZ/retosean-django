@@ -170,9 +170,19 @@ class RegistroEmpresaForm(UserCreationForm):
 
 
 class EntregableForm(forms.ModelForm):
+    def __init__(self, *args, equipos=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['equipo'] = forms.ModelChoiceField(
+            queryset=equipos if equipos is not None else Entregable.objects.none(),
+            required=False,
+            empty_label='Entrega individual',
+            label='Modalidad de entrega',
+            widget=forms.Select(attrs={'class': 'form-select'}),
+        )
+
     class Meta:
         model = Entregable
-        fields = ["titulo", "es_final", "archivo", "comentario_estudiante"]
+        fields = ["titulo", "equipo", "es_final", "archivo", "comentario_estudiante"]
         widgets = {
             "titulo": forms.TextInput(attrs={"class": "form-control"}),
             "es_final": forms.CheckboxInput(attrs={"class": "form-check-input"}),

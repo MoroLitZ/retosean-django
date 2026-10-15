@@ -4,96 +4,71 @@
 {% block page_title %}Mis Notificaciones{% endblock %}
 
 {% block content %}
-<div class="card-panel">
-  <div class="card-panel-header d-flex justify-content-between align-items-center">
-    <span>Centro de notificaciones</span>
-    <a href="{% url 'notificaciones:preferencias' %}" class="btn btn-sm btn-outline-light">
-      <i class="bi bi-sliders"></i> Preferencias
-    </a>
-  </div>
+<style>
+  .notification-page { --notif-ink:#123047; --notif-blue:#1d567b; --notif-soft:#edf6fa; --notif-line:rgba(18,48,71,.12); }
+  .notif-hero { position:relative; overflow:hidden; padding:1.65rem 2rem; color:#fff; background:linear-gradient(120deg,#123047,#1d567b); border-radius:14px; box-shadow:0 14px 30px rgba(18,48,71,.15); }
+  .notif-hero::after { content:''; position:absolute; right:7%; top:0; width:1px; height:100%; background:rgba(255,255,255,.12); transform:skewX(-18deg); }
+  .notif-hero-content { position:relative; z-index:1; }
+  .notif-kicker { color:#9ed5e8; font-size:.68rem; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
+  .notif-hero h1 { margin:.3rem 0 .35rem; color:#fff; font-family:'Poppins',sans-serif; font-size:1.7rem; letter-spacing:0; }
+  .notif-hero p { margin:0; color:rgba(255,255,255,.7); font-size:.82rem; }
+  .notif-hero .btn { position:relative; z-index:1; border-radius:8px; }
+  .notif-toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:1rem; margin:1rem 0 .75rem; padding:.85rem 1rem; background:#fff; border:1px solid var(--notif-line); border-radius:10px; }
+  .notif-toolbar-title { color:var(--notif-ink); font-size:.88rem; font-weight:800; }
+  .notif-toolbar-title small { display:block; margin-top:.2rem; color:#7a8d96; font-size:.7rem; font-weight:400; }
+  .notif-filters { display:flex; flex-wrap:wrap; gap:.35rem; }
+  .notif-filters .btn { border-radius:7px; font-size:.75rem; }
+  .notif-list { display:grid; gap:.65rem; }
+  .notif-item { display:flex; align-items:flex-start; gap:.85rem; padding:1rem 1.1rem; background:#fff; border:1px solid var(--notif-line); border-left:3px solid transparent; border-radius:10px; box-shadow:0 5px 15px rgba(18,48,71,.035); }
+  .notif-item.unread { background:#f7fbfe; border-left-color:#2379aa; }
+  .notif-icon { display:grid; width:10px; height:10px; flex:0 0 10px; margin:6px 4px 0 2px; place-items:center; background:#2d8a40; border-radius:50%; font-size:0; }
+  .notif-item.unread .notif-icon { box-shadow:0 0 0 4px rgba(35,121,170,.12); }
+  .notif-item:not(.unread) .notif-icon { background:#b8c7cd; }
+  .notif-main { min-width:0; flex:1; }
+  .notif-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; }
+  .notif-heading h2 { margin:0; color:var(--notif-ink); font-size:.86rem; font-weight:800; }
+  .notif-time { flex:0 0 auto; color:#83949b; font-size:.68rem; }
+  .notif-message { margin:.3rem 0 .65rem; color:#6b7d85; font-size:.76rem; line-height:1.45; }
+  .notif-action { border-radius:6px; font-size:.72rem; }
+  .notif-empty { padding:3.5rem 1rem; color:#71858d; text-align:center; background:linear-gradient(135deg,#fff,#f0f8fb); border:1px dashed #b9d4df; border-radius:12px; }
+  .notif-empty i { display:grid; width:58px; height:58px; margin:0 auto 1rem; place-items:center; color:#28769b; background:var(--notif-soft); border-radius:50%; font-size:1.5rem; }
+  .notif-empty h2 { margin-bottom:.35rem; color:var(--notif-ink); font-family:'Poppins',sans-serif; font-size:1.15rem; }
+  .notif-pagination { display:flex; justify-content:center; margin-top:1.2rem; }
+  @media (max-width:600px) { .notif-hero { padding:1.4rem; } .notif-heading { display:block; } .notif-time { display:block; margin-top:.3rem; } }
+</style>
 
-  <div class="p-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
-      <div class="btn-group btn-group-sm" role="group">
-        <a href="{% url 'notificaciones:bandeja' %}"
-           class="btn {% if not filtro %}btn-primary{% else %}btn-outline-secondary{% endif %}">Todas</a>
-        <a href="?filtro=no_leidas"
-           class="btn {% if filtro == 'no_leidas' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
-          No leidas {% if no_leidas %}<span class="badge bg-danger ms-1">{{ no_leidas }}</span>{% endif %}
-        </a>
-        <a href="?filtro=leidas"
-           class="btn {% if filtro == 'leidas' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Leidas</a>
+<div class="notification-page">
+  <section class="notif-hero">
+    <div class="notif-hero-content d-flex flex-wrap align-items-center justify-content-between gap-3">
+      <div><div class="notif-kicker">Centro personal</div><h1>Tus avisos, en un solo lugar</h1><p>Retos, postulaciones, entregables y fechas importantes.</p></div>
+      <a href="{% url 'notificaciones:preferencias' %}" class="btn btn-light btn-sm">Preferencias</a>
+    </div>
+  </section>
+
+  <div class="notif-toolbar">
+    <div class="notif-toolbar-title">Actividad reciente<small>{{ no_leidas }} aviso{{ no_leidas|pluralize }} pendiente{{ no_leidas|pluralize }} de leer.</small></div>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <div class="notif-filters" role="group" aria-label="Filtrar notificaciones">
+        <a href="{% url 'notificaciones:bandeja' %}" class="btn {% if not filtro %}btn-primary{% else %}btn-outline-secondary{% endif %}">Todas</a>
+        <a href="?filtro=no_leidas" class="btn {% if filtro == 'no_leidas' %}btn-primary{% else %}btn-outline-secondary{% endif %}">No leidas {% if no_leidas %}<span class="badge bg-danger ms-1">{{ no_leidas }}</span>{% endif %}</a>
+        <a href="?filtro=leidas" class="btn {% if filtro == 'leidas' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Leidas</a>
       </div>
-
-      {% if no_leidas %}
-        <form method="post" action="{% url 'notificaciones:marcar_todas_leidas' %}">
-          {% csrf_token %}
-          <input type="hidden" name="next" value="{{ request.get_full_path }}">
-          <button type="submit" class="btn btn-sm btn-outline-primary">
-            <i class="bi bi-check2-all"></i> Marcar todas como leidas
-          </button>
-        </form>
-      {% endif %}
+      {% if no_leidas %}<form method="post" action="{% url 'notificaciones:marcar_todas_leidas' %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-check2-all me-1"></i> Marcar todas</button></form>{% endif %}
     </div>
-
-    <div class="list-group">
-      {% for n in notificaciones %}
-        <div class="list-group-item d-flex gap-3 align-items-start {% if not n.leida %}bg-light border-start border-primary border-3{% endif %}">
-          <div class="pt-1">
-            {% if n.tipo == 'EXITO' %}<i class="bi bi-check-circle-fill text-success fs-5"></i>
-            {% elif n.tipo == 'ADVERTENCIA' %}<i class="bi bi-exclamation-triangle-fill text-warning fs-5"></i>
-            {% elif n.tipo == 'ERROR' %}<i class="bi bi-x-circle-fill text-danger fs-5"></i>
-            {% else %}<i class="bi bi-info-circle-fill text-info fs-5"></i>{% endif %}
-          </div>
-          <div class="flex-grow-1">
-            <div class="d-flex justify-content-between align-items-start">
-              <h6 class="fw-bold mb-1 text-dark">{{ n.titulo }}</h6>
-              <small class="text-muted text-nowrap ms-3">{{ n.creada_en|date:"d/m/Y H:i" }}</small>
-            </div>
-            <p class="mb-2 small text-muted">{{ n.mensaje|linebreaksbr }}</p>
-            {% if not n.leida %}
-              <form method="post" action="{% url 'notificaciones:marcar_leida' n.pk %}" class="d-inline">
-                {% csrf_token %}
-                <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                <button type="submit" class="btn btn-sm btn-outline-primary">
-                  {% if n.link %}<i class="bi bi-box-arrow-up-right"></i> Ver{% else %}<i class="bi bi-check2"></i> Marcar leida{% endif %}
-                </button>
-              </form>
-            {% elif n.link %}
-              <a href="{{ n.link }}" class="btn btn-sm btn-outline-secondary">
-                <i class="bi bi-box-arrow-up-right"></i> Ver
-              </a>
-            {% endif %}
-          </div>
-        </div>
-      {% empty %}
-        <div class="text-center p-5">
-          <i class="bi bi-bell-slash display-1 text-muted" style="font-size:3.5rem;"></i>
-          <h5 class="fw-bold text-dark mt-3">Sin notificaciones</h5>
-          <p class="text-muted mb-0">Aqui apareceran los avisos sobre tus retos, postulaciones y entregables.</p>
-        </div>
-      {% endfor %}
-    </div>
-
-    {% if notificaciones.has_other_pages %}
-      <nav class="mt-4">
-        <ul class="pagination pagination-sm justify-content-center mb-0">
-          {% if notificaciones.has_previous %}
-            <li class="page-item">
-              <a class="page-link" href="?filtro={{ filtro }}&page={{ notificaciones.previous_page_number }}">Anterior</a>
-            </li>
-          {% endif %}
-          <li class="page-item disabled">
-            <span class="page-link">{{ notificaciones.number }} de {{ notificaciones.paginator.num_pages }}</span>
-          </li>
-          {% if notificaciones.has_next %}
-            <li class="page-item">
-              <a class="page-link" href="?filtro={{ filtro }}&page={{ notificaciones.next_page_number }}">Siguiente</a>
-            </li>
-          {% endif %}
-        </ul>
-      </nav>
-    {% endif %}
   </div>
+
+  <div class="notif-list">
+    {% for n in notificaciones %}
+      <article class="notif-item {% if not n.leida %}unread{% endif %}">
+        <div class="notif-icon">{% if n.tipo == 'EXITO' %}<i class="bi bi-check-circle-fill text-success"></i>{% elif n.tipo == 'ADVERTENCIA' %}<i class="bi bi-exclamation-triangle-fill text-warning"></i>{% elif n.tipo == 'ERROR' %}<i class="bi bi-x-circle-fill text-danger"></i>{% else %}<i class="bi bi-info-circle-fill text-info"></i>{% endif %}</div>
+        <div class="notif-main"><div class="notif-heading"><h2>{{ n.titulo }}</h2><time class="notif-time">{{ n.creada_en|date:"d/m/Y H:i" }}</time></div><p class="notif-message">{{ n.mensaje|linebreaksbr }}</p>
+          {% if not n.leida %}<form method="post" action="{% url 'notificaciones:marcar_leida' n.pk %}" class="d-inline">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button type="submit" class="btn btn-sm btn-outline-primary notif-action">{% if n.link %}<i class="bi bi-box-arrow-up-right me-1"></i> Ver{% else %}<i class="bi bi-check2 me-1"></i> Marcar leida{% endif %}</button></form>{% elif n.link %}<a href="{{ n.link }}" class="btn btn-sm btn-outline-secondary notif-action"><i class="bi bi-box-arrow-up-right me-1"></i> Ver</a>{% endif %}
+        </div>
+      </article>
+    {% empty %}<div class="notif-empty"><i class="bi bi-bell-slash"></i><h2>Todo está al día</h2><p class="mb-0">Aquí aparecerán los avisos sobre tus retos, postulaciones y entregables.</p></div>{% endfor %}
+  </div>
+
+  {% if notificaciones.has_other_pages %}<nav class="notif-pagination"><ul class="pagination pagination-sm mb-0">{% if notificaciones.has_previous %}<li class="page-item"><a class="page-link" href="?filtro={{ filtro }}&page={{ notificaciones.previous_page_number }}">Anterior</a></li>{% endif %}<li class="page-item disabled"><span class="page-link">{{ notificaciones.number }} de {{ notificaciones.paginator.num_pages }}</span></li>{% if notificaciones.has_next %}<li class="page-item"><a class="page-link" href="?filtro={{ filtro }}&page={{ notificaciones.next_page_number }}">Siguiente</a></li>{% endif %}</ul></nav>{% endif %}
 </div>
 {% endblock %}
+

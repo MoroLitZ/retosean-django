@@ -59,10 +59,14 @@
                     <span class="btn btn-success btn-sm flex-fill disabled">
                       <i class="bi bi-check-circle"></i> Ya te postulaste
                     </span>
-                  {% else %}
+                  {% elif favorito.reto.esta_abierto %}
                     <a href="{% url 'participaciones:postular_a_reto' favorito.reto.pk %}" class="btn btn-primary btn-sm flex-fill">
                       <i class="bi bi-send"></i> Postularme
                     </a>
+                  {% else %}
+                    <span class="btn btn-secondary btn-sm flex-fill disabled">
+                      <i class="bi bi-hourglass-split"></i> Próximamente disponible
+                    </span>
                   {% endif %}
                 </div>
               </div>
