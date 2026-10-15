@@ -76,9 +76,10 @@ corregir su decisión (Aceptada ↔ Rechazada).
 
 **Auditoría:** cada cambio de estado de documentos, convenio, bloqueo de empresa,
 integraciones, postulaciones, entregables, inscripciones y cuentas (activa/inactiva,
-rol) queda en `seguimiento.HistorialEstado` (quién, cuándo, de, a, comentario). Los
-retos conservan su tabla propia `retos.HistorialEstadoReto`, que ya muestra el
-detalle del reto; unificar ambas queda pendiente.
+rol), retos y hackathones queda en una sola bitácora, `seguimiento.HistorialEstado`
+(quién, cuándo, de, a, comentario). La antigua tabla `historial_estados_reto` se
+migró allí conservando fechas y autores. Los avances automáticos del hackathon
+por calendario quedan registrados sin usuario.
 
 ## HU00 — Documentación de la empresa
 
