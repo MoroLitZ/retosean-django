@@ -29,6 +29,10 @@ from django.db import transaction
 from django.utils import timezone
 
 PASSWORD_DEMO = "RetosEAN2026"
+EMPRESAS_DEMO = [
+    "empresa.verificada", "empresa.pendiente", "empresa.revision",
+    "empresa.rechazada", "empresa.sinconvenio",
+]
 
 
 class Command(BaseCommand):
@@ -51,12 +55,15 @@ class Command(BaseCommand):
             self._sembrar_retos_en_todos_los_estados(usuarios)
             self._sembrar_reto_flujo_completo(usuarios)
             self._sembrar_hackathon_en_todos_los_estados(usuarios)
+            self._sembrar_presupuestos(usuarios)
+            self._sembrar_archivos_de_retos()
+            self._sembrar_unidades_estudio()
             self._sembrar_notificaciones(usuarios)
 
         self.stdout.write(self.style.SUCCESS(
             f"\nSiembra completa. Usuarios de prueba (contrasena '{PASSWORD_DEMO}'):\n"
             "  admin.demo | admin2.demo\n"
-            "  empresa.verificada / empresa.pendiente / empresa.revision / empresa.rechazada\n"
+            "  empresa.verificada / empresa.pendiente / empresa.revision / empresa.rechazada / empresa.sinconvenio\n"
             "  profesor.demo / profesor2.demo\n"
             "  estudiante.demo / estudiante2.demo / estudiante3.demo / estudiante4.demo\n"
             "  experto.demo\n"
@@ -78,10 +85,24 @@ class Command(BaseCommand):
         # Las empresas demo (y sus documentos/contactos en cascada) tambien se
         # recrean en cada corrida, para no arrastrar documentos de versiones
         # anteriores del seed que ya no coinciden con el reparto actual.
-        empresas_demo = Empresa.objects.filter(
-            usuario__username__in=["empresa.verificada", "empresa.pendiente", "empresa.revision", "empresa.rechazada"]
-        )
+        from django.contrib.contenttypes.models import ContentType
+
+        from apps.empresas.models import DocumentoEmpresa
+        from apps.seguimiento.models import HistorialEstado
+        from apps.unidades_estudio.models import UnidadEstudio
+
+        empresas_demo = Empresa.objects.filter(usuario__username__in=EMPRESAS_DEMO)
+        # HistorialEstado apunta por GenericForeignKey y no se borra en cascada.
+        ids_empresas = list(empresas_demo.values_list("pk", flat=True))
+        ids_docs = list(DocumentoEmpresa.objects.filter(empresa__in=ids_empresas).values_list("pk", flat=True))
+        HistorialEstado.objects.filter(
+            content_type=ContentType.objects.get_for_model(DocumentoEmpresa), object_id__in=ids_docs
+        ).delete()
+        HistorialEstado.objects.filter(
+            content_type=ContentType.objects.get_for_model(Empresa), object_id__in=ids_empresas
+        ).delete()
         borrados_empresas, _ = empresas_demo.delete()
+        UnidadEstudio.objects.filter(codigo__startswith="DEMO-").delete()
 
         self.stdout.write(
             f"Reset: {borrados} filas relacionadas con retos DEMO borradas, "
@@ -137,7 +158,7 @@ class Command(BaseCommand):
         empresas_usuarios = []
         for i, (slug, nombre) in enumerate([
             ("verificada", "Verificada"), ("pendiente", "Pendiente"),
-            ("revision", "En Revision"), ("rechazada", "Rechazada"),
+            ("revision", "En Revision"), ("rechazada", "Rechazada"), ("sinconvenio", "Sin Convenio"),
         ]):
             eu = self._usuario(f"empresa.{slug}", f"contacto@empresa-{slug}.co", f"Empresa {nombre}", "S.A.S.", "EMPRESA")
             empresas_usuarios.append((slug, eu))
@@ -172,6 +193,7 @@ class Command(BaseCommand):
             "pendiente": ("900222222-2", "PENDIENTE", "PENDIENTE"),
             "revision": ("900333333-3", "EN_REVISION", "PENDIENTE"),
             "rechazada": ("900444444-4", "RECHAZADA", "RECHAZADO"),
+            "sinconvenio": ("900555555-5", "VERIFICADA", "APROBADO"),
         }
         empresas = {}
         for slug, (nit, estado_val, estado_listas) in specs.items():
@@ -183,6 +205,7 @@ class Command(BaseCommand):
                     "sector_industrial": "Tecnologia", "estado_validacion": estado_val,
                     "estado_listas_restrictivas": estado_listas,
                     "observaciones_admin": "Pendiente de revisar soportes." if estado_val == "EN_REVISION" else "",
+                    "renuncio_a_convenio": slug == "sinconvenio",
                 },
             )
             empresas[slug] = empresa
@@ -191,33 +214,11 @@ class Command(BaseCommand):
                 defaults={"nombre": eu.first_name, "cargo": "Gerente de Innovacion", "telefono": "3000000000", "es_principal": True},
             )
 
-        # Documentos legales: uno por cada estado posible. DocumentoEmpresa tiene
-        # unique_together (empresa, tipo_documento) y solo hay 4 tipos, asi que
-        # el 5to estado (VENCIDO) usa el mismo tipo que el primero pero en OTRA
-        # empresa, en vez de repetir una combinacion ya creada.
-        estados_doc = ["PENDIENTE", "CARGADO", "VERIFICADO", "RECHAZADO"]
-        tipos_doc = ["CAMARA_COMERCIO", "RUT", "CEDULA_REPRESENTANTE", "CONVENIO"]
-        empresas_lista = list(empresas.values())
-
-        def _crear_documento(empresa, tipo, estado):
-            defaults = {"estado": estado}
-            if estado in ("CARGADO", "VERIFICADO", "RECHAZADO", "VENCIDO"):
-                defaults["archivo"] = ContentFile(b"%PDF-1.4 demo", name=f"{tipo.lower()}-{empresa.nit}.pdf")
-            if tipo == "CAMARA_COMERCIO":
-                defaults["fecha_expedicion"] = timezone.localdate() - timedelta(days=200)
-            if estado == "VENCIDO":
-                defaults["fecha_vencimiento"] = timezone.localdate() - timedelta(days=10)
-            elif estado == "RECHAZADO":
-                defaults["motivo_rechazo"] = "El documento no corresponde al NIT registrado."
-            DocumentoEmpresa.objects.get_or_create(empresa=empresa, tipo_documento=tipo, defaults=defaults)
-
-        for i, (tipo, estado) in enumerate(zip(tipos_doc, estados_doc)):
-            _crear_documento(empresas_lista[i % len(empresas_lista)], tipo, estado)
-        # 5ta combinacion, en la empresa que en el loop anterior recibio RUT (no
-        # CAMARA_COMERCIO), asi (empresa, CAMARA_COMERCIO) sigue siendo unica.
-        _crear_documento(empresas_lista[1 % len(empresas_lista)], "CAMARA_COMERCIO", "VENCIDO")
-
-        self.stdout.write(f"Empresas: {len(empresas)} (una por cada estado de validacion), documentos legales en sus 5 estados.")
+        self._sembrar_documentos(u["admin"], empresas)
+        self.stdout.write(
+            f"Empresas: {len(empresas)} (una por cada estado de validacion + una que renuncia al convenio), "
+            "los 8 documentos de HU00 en distintos estados, convenio en sus 4 tramites e historial documental."
+        )
         return empresas
 
     # ------------------------------------------------------- retos por estado
@@ -294,7 +295,9 @@ class Command(BaseCommand):
         from apps.participaciones.models import Equipo, MiembroEquipo, Postulacion, RetoFavorito
         from apps.presupuesto.models import Gasto, Presupuesto
         from apps.retos.models import EquipoRetoAcademico, SesionRetoAcademico
-        from apps.seguimiento.models import IntegracionAcademica, SeguimientoArchivo, SeguimientoReto
+        from apps.seguimiento.models import (
+            IntegracionAcademica, ParticipanteIntegracion, SeguimientoArchivo, SeguimientoReto,
+        )
 
         reto = self._reto_base(u, "verificada", "DEMO · Reto con flujo completo (finalizado)", "finalizado")
         admin = u["admin"]
@@ -315,7 +318,7 @@ class Command(BaseCommand):
 
         # Integracion academica del profesor con este reto (necesaria para
         # habilitar equipo/entregables en la practica), en estado 'publicada'.
-        IntegracionAcademica.objects.get_or_create(
+        integracion_publicada, _ = IntegracionAcademica.objects.get_or_create(
             reto=reto, profesor=profesor,
             defaults={
                 "facultad": "Ingenieria", "nivel_formacion": "Pregrado", "programa_academico": "Ingenieria de Sistemas",
@@ -355,11 +358,30 @@ class Command(BaseCommand):
         equipo_academico.estudiantes.add(*estudiantes[:2])
         equipo_academico.expertos_invitados.add(u["experto"])
 
-        # Sesiones del reto academico: una por cada tipo.
-        for tipo in ["inicio", "seguimiento", "preseleccion", "evaluacion"]:
+        # HU03: equipo estructurado de la integracion publicada (profesor, dos
+        # estudiantes con cuenta y un experto externo sin cuenta).
+        integrantes = [
+            (ParticipanteIntegracion.PROFESOR, profesor, "1020304050", {"facultad": "Ingenieria"}),
+            (ParticipanteIntegracion.ESTUDIANTE, estudiantes[0], "1098765432", {"programa": "Ingenieria de Sistemas"}),
+            (ParticipanteIntegracion.ESTUDIANTE, estudiantes[1], "1098765433", {"programa": "Ingenieria de Sistemas"}),
+        ]
+        for rol, usuario, documento, extra in integrantes:
+            ParticipanteIntegracion.objects.get_or_create(
+                integracion=integracion_publicada, rol=rol, documento=documento,
+                defaults={"nombre": usuario.get_full_name() or usuario.username, "email": usuario.email,
+                          "usuario": usuario, **extra},
+            )
+        ParticipanteIntegracion.objects.get_or_create(
+            integracion=integracion_publicada, rol=ParticipanteIntegracion.EXPERTO, documento="79111222",
+            defaults={"nombre": "Laura Mentora", "email": "mentora@innovacion.co", "facultad": "Innovacion SAS"},
+        )
+
+        # Sesiones del cronograma: una por cada tipo, escalonadas en el tiempo.
+        for dias, tipo in [(1, "inicio"), (15, "seguimiento"), (30, "preseleccion"), (45, "evaluacion")]:
             SesionRetoAcademico.objects.get_or_create(
                 reto=reto, tipo=tipo,
-                defaults={"fecha_hora": timezone.now() + timedelta(days=1), "observaciones": f"Sesion de {tipo}."},
+                defaults={"integracion": integracion_publicada, "fecha_hora": timezone.now() + timedelta(days=dias),
+                          "observaciones": f"Sesion de {tipo}."},
             )
 
         # Seguimiento: una sesion por cada tipo de sesion posible.
@@ -438,7 +460,10 @@ class Command(BaseCommand):
         ]:
             Gasto.objects.get_or_create(
                 presupuesto=presupuesto, categoria=categoria,
-                defaults={"monto": monto, "descripcion": f"Gasto demo de {categoria.lower()}.", "registrado_por": profesor},
+                defaults={
+                    "monto": monto, "descripcion": f"Gasto demo de {categoria.lower()}.", "registrado_por": profesor,
+                    "estado": Gasto.COMPROMETIDO if categoria in ("ESPACIOS", "OTROS") else Gasto.EJECUTADO,
+                },
             )
 
         # Agenda + cierre + reconocimientos + entregable final + encuesta.
@@ -517,9 +542,18 @@ class Command(BaseCommand):
             crear_etapas_por_defecto(hackathon)
 
             if estado in ("en_curso", "finalizado"):
+                # HU09: logistica del evento con un invitado confirmado y otro pendiente.
+                hackathon.modalidad, hackathon.lugar = "hibrida", "Auditorio Principal EAN, Sede Legacy"
+                hackathon.enlace_transmision = "https://www.youtube.com/@UniversidadEAN"
+                hackathon.save(update_fields=["modalidad", "lugar", "enlace_transmision"])
+                hackathon.invitados.get_or_create(nombre="Laura Mentora", defaults={
+                    "tipo": "MENTOR", "organizacion": "Innovacion SAS", "confirmado": True})
+                hackathon.invitados.get_or_create(nombre="Carlos Ponente", defaults={
+                    "tipo": "PONENTE", "organizacion": "Camara de Comercio"})
                 jurado, _ = Jurado.objects.get_or_create(
                     hackathon=hackathon, email="jurado.demo@externo.co",
-                    defaults={"nombre": "Jurado Demo", "especialidad": "Innovacion"},
+                    # El experto demo es el jurado: asi su panel y la votacion tienen datos.
+                    defaults={"nombre": "Jurado Demo", "especialidad": "Innovacion", "usuario": u["experto"]},
                 )
                 equipo, _ = Equipo.objects.get_or_create(reto=reto, nombre="Equipo Hackathon Demo")
                 for est in u["estudiantes"][:2]:
@@ -545,6 +579,160 @@ class Command(BaseCommand):
         self.stdout.write(f"Hackathones: {len(estados)} (uno por cada estado), con jurados/inscripciones/votacion donde aplica.")
 
     # ----------------------------------------------------------- notificaciones
+    # ------------------------------------------------- documentos (HU00)
+    def _sembrar_documentos(self, admin, empresas):
+        """Cada empresa ilustra un caso de HU00 sobre el catalogo de tipos.
+
+        Pasa por los servicios (no por el ORM) para dejar el historial y los avisos como en un caso real.
+        """
+        from apps.empresas.models import DocumentoEmpresa
+        from apps.empresas.services import (
+            cambiar_estado_convenio, cargar_documento, marcar_documento_vencido, revisar_documento,
+        )
+        from apps.seguimiento.services import registrar_cambio_estado
+
+        hoy = timezone.localdate()
+        # Los ocho documentos obligatorios de la historia. La minuta es propia del convenio.
+        requeridos = [
+            "MINUTA_CONVENIO", "CAMARA_COMERCIO", "RUT", "CEDULA_REPRESENTANTE",
+            "LISTAS_INFORMA", "FORMATO_COMPROMISO", "TERMINOS_REFERENCIA", "FICHA_RETO",
+        ]
+
+        def documento(empresa, codigo, final, dias=1, motivo=""):
+            if DocumentoEmpresa.objects.filter(empresa=empresa, tipo_documento=codigo).exists():
+                return  # idempotente: no reabrir lo ya sembrado
+            if final == "PENDIENTE":  # solicitado, aun sin archivo
+                doc = DocumentoEmpresa.objects.create(empresa=empresa, tipo_documento=codigo, estado="PENDIENTE")
+                registrar_cambio_estado(doc, "", "PENDIENTE", admin, "Documento solicitado a la empresa.")
+                return
+            archivo = ContentFile(b"%PDF-1.4 demo", name=f"{codigo.lower()}-{empresa.nit}.pdf")
+            # Listas Informa la sube la universidad (permiso especial), no la empresa.
+            quien = admin if codigo == "LISTAS_INFORMA" else empresa.usuario
+            doc, _ = cargar_documento(empresa, codigo, archivo, hoy - timedelta(days=dias), quien)
+            if final in ("VERIFICADO", "RECHAZADO"):
+                revisar_documento(doc, final, admin, motivo)
+            elif final == "VENCIDO":
+                marcar_documento_vencido(doc, admin)
+
+        def convenio(empresa, *pasos):
+            if empresa.estado_convenio != "NO_RADICADO":
+                return
+            for estado, comentario, vence in pasos:
+                cambiar_estado_convenio(empresa, estado, admin, comentario, vence)
+
+        def al_dia(empresa, omitir=()):
+            for codigo in requeridos:
+                if codigo not in omitir:
+                    documento(empresa, codigo, "VERIFICADO", dias=5 if codigo == "CAMARA_COMERCIO" else 1)
+
+        # Completa: los ocho al dia, mas el convenio firmado (opcional) y su tramite.
+        e = empresas["verificada"]
+        al_dia(e)
+        documento(e, "CONVENIO", "VERIFICADO")
+        convenio(e, ("FIRMADO", "Convenio firmado por las partes.", hoy + timedelta(days=300)))
+
+        # Sin nada cargado: ve la alerta de "falta cargarlo".
+        documento(empresas["pendiente"], "RUT", "PENDIENTE")
+
+        # En revision: le falta cargar los Terminos de referencia y tiene dos documentos
+        # esperando al administrador. Sirve para completar el ciclo en vivo.
+        e = empresas["revision"]
+        for codigo in ("MINUTA_CONVENIO", "RUT", "CEDULA_REPRESENTANTE", "LISTAS_INFORMA", "FORMATO_COMPROMISO"):
+            documento(e, codigo, "VERIFICADO")
+        documento(e, "CAMARA_COMERCIO", "CARGADO", dias=3)
+        documento(e, "FICHA_RETO", "CARGADO", dias=2)
+        convenio(e, ("RADICADO", "Convenio recibido para tramite.", None))
+
+        # Rechazada: un documento rechazado, la camara vencida y el convenio atascado en Juridica.
+        e = empresas["rechazada"]
+        documento(e, "RUT", "RECHAZADO", motivo="El documento no corresponde al NIT registrado.")
+        documento(e, "CAMARA_COMERCIO", "VENCIDO", dias=45)
+        convenio(e, ("RADICADO", "Convenio recibido para tramite.", None),
+                 ("EN_JURIDICA", "En revision del area juridica.", None))
+
+        # Sin convenio: se le eximen solo los documentos propios del convenio (la minuta).
+        al_dia(empresas["sinconvenio"], omitir=("MINUTA_CONVENIO",))
+
+    # ------------------------------------------------------- presupuestos
+    def _sembrar_presupuestos(self, u):
+        """Presupuestos con gastos comprometidos y ejecutados en distintos niveles de uso."""
+        from apps.presupuesto.models import Gasto, Presupuesto
+        from apps.presupuesto.services import registrar_gasto
+        from apps.retos.models import Reto
+
+        E, C = Gasto.EJECUTADO, Gasto.COMPROMETIDO
+        casos = {  # estado del reto: (presupuesto, [(categoria, monto, estado)])
+            "en_curso": (5_000_000, [("REFRIGERIOS", 600_000, E), ("MATERIALES", 1_400_000, E),
+                                     ("ESPACIOS", 1_500_000, C), ("IMPRESIONES", 800_000, C)]),  # 86 %: alerta del 80 %
+            "pausado": (2_000_000, [("MATERIALES", 1_200_000, E), ("OTROS", 900_000, C)]),  # 105 %: excedido
+            "abierto": (3_000_000, [("IMPRESIONES", 500_000, C)]),  # 17 %: sin alerta
+        }
+        for estado, (monto, gastos) in casos.items():
+            reto = Reto.objects.filter(titulo=f"DEMO · Reto en estado {estado}").first()
+            if reto is None:
+                continue
+            presupuesto, _ = Presupuesto.objects.get_or_create(reto=reto, defaults={"monto_total": monto})
+            if presupuesto.gastos.exists():
+                continue
+            for categoria, valor, estado_gasto in gastos:
+                registrar_gasto(presupuesto, Gasto(
+                    categoria=categoria, monto=valor, estado=estado_gasto,
+                    descripcion=f"Gasto demo de {categoria.lower()} ({estado_gasto.lower()}).",
+                ), u["admin"])
+        self.stdout.write("Presupuestos: 4 con gastos comprometidos y ejecutados (17 %, 29 %, 86 % y 105 %).")
+
+    def _sembrar_archivos_de_retos(self):
+        """Adjuntos en retos aun sin cerrar, para ver el listado de archivos al revisar."""
+        from apps.retos.models import Reto, RetoArchivo
+
+        contenido = b"%PDF-1.4 demo"
+        for estado in ("en_revision", "aprobado", "abierto"):
+            reto = Reto.objects.filter(titulo=f"DEMO · Reto en estado {estado}").first()
+            if reto is None:
+                continue
+            for nombre in ("Ficha del reto.pdf", "Terminos de referencia.pdf"):
+                if not reto.archivos.filter(nombre_original=nombre).exists():
+                    RetoArchivo.objects.create(
+                        reto=reto, nombre_original=nombre, tamano=len(contenido),
+                        archivo=ContentFile(contenido, name=nombre.replace(" ", "_")),
+                    )
+
+    # --------------------------------------------------- unidades de estudio
+    def _sembrar_unidades_estudio(self):
+        from apps.academico.models import Programa
+        from apps.unidades_estudio.models import UnidadEstudio
+
+        programas = list(Programa.objects.order_by("id")[:6])
+        if not programas:
+            return
+        # (nombre, periodo, ciclo, activa, con PDF)
+        unidades = [
+            ("Fundamentos de Programacion", "2026-2", "Ciclo basico", True, True),
+            ("Calculo Diferencial", "2026-2", "Ciclo basico", True, False),
+            ("Estructuras de Datos", "2026-2", "Ciclo profesional", True, True),
+            ("Bases de Datos", "2026-2", "Ciclo profesional", True, True),
+            ("Ingenieria de Software", "2026-2", "Ciclo profesional", True, False),
+            ("Gestion de Proyectos", "2026-1", "Ciclo profesional", True, True),
+            ("Probabilidad y Estadistica", "2026-1", "Ciclo basico", True, False),
+            ("Inteligencia Artificial", "2026-1", "Ciclo de profundizacion", True, True),
+            ("Emprendimiento e Innovacion", "2026-1", "Ciclo de profundizacion", True, False),
+            ("Etica Profesional", "2025-2", "Ciclo basico", False, False),
+            ("Electiva de Analitica", "2025-2", "Ciclo de profundizacion", False, True),
+            ("Practica Empresarial", "2026-2", "Ciclo de profundizacion", True, True),
+        ]
+        for i, (nombre, periodo, ciclo, activa, con_pdf) in enumerate(unidades, start=1):
+            codigo = f"DEMO-{i:03d}"
+            unidad, creada = UnidadEstudio.objects.get_or_create(
+                codigo=codigo,
+                defaults={
+                    "nombre": nombre, "programa": programas[(i - 1) % len(programas)],
+                    "periodo": periodo, "ciclo": ciclo, "activo": activa,
+                },
+            )
+            if creada and con_pdf:
+                unidad.archivo.save(f"{codigo}.pdf", ContentFile(b"%PDF-1.4 demo"), save=True)
+        self.stdout.write(f"Unidades de estudio: {len(unidades)} (en {len(programas)} programas, 2 inactivas).")
+
     def _sembrar_notificaciones(self, u):
         from apps.notificaciones.models import Notificacion, PreferenciaNotificacion
 

@@ -14,7 +14,8 @@ from apps.empresas.models import Empresa
 from apps.retos.models import Reto
 from .decorators import solo_admin, solo_empresa, solo_estudiante, solo_profesor
 from .roles import es_admin, url_dashboard_para
-from .services import cambiar_estado_cuenta, cambiar_rol
+from .permisos import PERMISOS_MODULO
+from .services import asignar_permisos_modulo, cambiar_estado_cuenta, cambiar_rol, enviar_bienvenida
 
 
 # ── Rutas de autenticación y perfil ──────────────────────────────
@@ -91,6 +92,7 @@ def vista_registro(request):
         form = RegistroAcademicoForm(request.POST or None)
         if request.method == 'POST' and form.is_valid():
             user = form.save()
+            enviar_bienvenida(user)
             login(request, user)
             messages.success(request, f'¡Bienvenido a RetosEAN, {user.first_name or user.username}!')
             return redirect(_url_para_usuario(user))
@@ -100,6 +102,7 @@ def vista_registro(request):
         form = RegistroEmpresaForm(request.POST or None)
         if request.method == 'POST' and form.is_valid():
             user = form.save()
+            enviar_bienvenida(user)
             login(request, user)
             messages.success(request, '¡Organización registrada! Bienvenido a RetosEAN.')
             return redirect(_url_para_usuario(user))
@@ -234,6 +237,8 @@ def importar_usuarios(request):
 
         if not lectura.error_global and request.POST.get('accion') == 'confirmar':
             creados = importar(lectura.validas, request.user)
+            for usuario in creados:
+                enviar_bienvenida(usuario)
             messages.success(request, f'{len(creados)} usuario(s) creado(s) correctamente.')
             if lectura.invalidas:
                 messages.warning(
@@ -263,15 +268,55 @@ def log_actividad(request):
     """Bitacora de accesos y cambios sobre las cuentas (HU13)."""
     registros = LogActividad.objects.select_related('usuario', 'realizado_por')
     accion = request.GET.get('accion', '')
+    usuario_q = request.GET.get('usuario', '').strip()
+    desde = request.GET.get('desde', '')
+    hasta = request.GET.get('hasta', '')
     if accion:
         registros = registros.filter(accion=accion)
+    if usuario_q:
+        registros = registros.filter(
+            Q(identificador__icontains=usuario_q)
+            | Q(usuario__username__icontains=usuario_q)
+            | Q(realizado_por__username__icontains=usuario_q)
+        )
+    if desde:
+        registros = registros.filter(creado_en__date__gte=desde)
+    if hasta:
+        registros = registros.filter(creado_en__date__lte=hasta)
 
     paginator = Paginator(registros, 50)
     return render(request, 'usuarios/admin/log_actividad.html', {
         'titulo': 'Registro de Actividad',
         'registros': paginator.get_page(request.GET.get('page')),
         'accion': accion,
+        'usuario_q': usuario_q,
+        'desde': desde,
+        'hasta': hasta,
         'acciones': LogActividad.ACCIONES,
+    })
+
+
+@solo_admin
+def permisos_usuario(request, pk):
+    """Permisos especiales por modulo de una cuenta (HU13)."""
+    usuario = get_object_or_404(Usuario, pk=pk)
+    if request.method == 'POST':
+        agregados, quitados = asignar_permisos_modulo(usuario, request.POST.getlist('permisos'), request.user)
+        if agregados or quitados:
+            messages.success(request, f'Permisos de {usuario.username} actualizados.')
+        else:
+            messages.info(request, 'No hubo cambios en los permisos.')
+        return redirect('usuarios:permisos_usuario', pk=usuario.pk)
+    explicitos = {
+        f'{p.content_type.app_label}.{p.codename}'
+        for p in usuario.user_permissions.select_related('content_type')
+    }
+    return render(request, 'usuarios/admin/permisos_usuario.html', {
+        'usuario_obj': usuario,
+        'permisos': [
+            {'codigo': codigo, 'nombre': nombre, 'descripcion': descripcion, 'asignado': codigo in explicitos}
+            for codigo, nombre, descripcion in PERMISOS_MODULO
+        ],
     })
 
 

@@ -8,8 +8,11 @@ se quiera sin duplicar filas.
     python manage.py sembrar_catalogo --dry-run    # no escribe, solo informa
 """
 
+from datetime import timedelta
+
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.utils import timezone
 
 from apps.academico import catalogo_base
 
@@ -147,7 +150,7 @@ class Command(BaseCommand):
         )
 
         # Perfiles por rol.
-        Empresa.objects.get_or_create(
+        empresa_demo, _ = Empresa.objects.get_or_create(
             usuario=empresa_user,
             defaults={
                 "nit": "900000000-1",
@@ -157,6 +160,25 @@ class Command(BaseCommand):
                 "estado_listas_restrictivas": "APROBADO",
             },
         )
+        # La empresa demo queda habilitada: todos sus documentos obligatorios
+        # del catalogo verificados y vigentes.
+        from django.core.files.base import ContentFile
+
+        from apps.empresas.models import DocumentoEmpresa, TipoDocumentoLegal
+
+        for tipo in TipoDocumentoLegal.objects.filter(activo=True):
+            if not tipo.es_requerido_para(empresa_demo):
+                continue
+            expedicion = timezone.localdate() - timedelta(days=5)
+            DocumentoEmpresa.objects.get_or_create(
+                empresa=empresa_demo, tipo_documento=tipo.codigo,
+                defaults={
+                    "estado": "VERIFICADO",
+                    "archivo": ContentFile(b"%PDF-1.4 demo", name=f"{tipo.codigo.lower()}-demo.pdf"),
+                    "fecha_expedicion": expedicion,
+                    "fecha_vencimiento": expedicion + timedelta(days=tipo.vigencia_dias) if tipo.vigencia_dias else None,
+                },
+            )
 
         facultad = Facultad.objects.order_by("id").first()
         programa = Programa.objects.order_by("id").first()

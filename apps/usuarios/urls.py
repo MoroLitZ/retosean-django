@@ -54,6 +54,7 @@ urlpatterns = [
     path('admin/usuarios/',  views.lista_usuarios,    name='lista_usuarios'),
     path('admin/usuarios/<int:pk>/rol/',    views.cambiar_rol_usuario,     name='cambiar_rol'),
     path('admin/usuarios/<int:pk>/estado/', views.alternar_estado_usuario, name='alternar_estado'),
+    path('admin/usuarios/<int:pk>/permisos/', views.permisos_usuario, name='permisos_usuario'),
     path('admin/usuarios/importar/',        views.importar_usuarios,       name='importar_usuarios'),
     path('admin/usuarios/plantilla/',       views.plantilla_importacion,   name='plantilla_importacion'),
     path('admin/actividad/', views.log_actividad,     name='log_actividad'),

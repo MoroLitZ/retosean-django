@@ -109,6 +109,21 @@
               <ul class="errorlist">{% for e in form.sector_industrial.errors %}<li><i class="bi bi-x-circle me-1"></i>{{ e }}</li>{% endfor %}</ul>
             {% endif %}
           </div>
+          <div class="col-sm-4">
+            <label class="form-label fw-semibold">Tipo de convocatoria</label>
+            {{ form.tipo_convocatoria }}
+            {% for e in form.tipo_convocatoria.errors %}<ul class="errorlist"><li>{{ e }}</li></ul>{% endfor %}
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label fw-semibold">Área responsable</label>
+            {{ form.area_responsable }}
+            {% for e in form.area_responsable.errors %}<ul class="errorlist"><li>{{ e }}</li></ul>{% endfor %}
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label fw-semibold">Sitio web</label>
+            {{ form.sitio_web }}
+            {% for e in form.sitio_web.errors %}<ul class="errorlist"><li>{{ e }}</li></ul>{% endfor %}
+          </div>
         </div>
 
         <!-- SECCIÓN 2: Credenciales de Acceso -->

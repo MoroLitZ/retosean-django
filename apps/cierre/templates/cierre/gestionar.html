@@ -140,7 +140,48 @@
 
     <!-- Columna Derecha: Premios, Reconocimientos y Formalización -->
     <div class="col-lg-5">
-        
+
+        <!-- Logística de eventos (HU08) -->
+        <div class="card-panel mb-4">
+            <div class="card-panel-header">
+                <i class="bi bi-calendar-event me-2 text-muted"></i>Logística de eventos
+            </div>
+            <div class="p-4">
+                <form method="post" action="{% url 'cierre:agregar_solicitud_logistica' reto.pk %}" class="row g-2 mb-3">
+                    {% csrf_token %}
+                    <div class="col-6">{{ solicitud_form.evento }}</div>
+                    <div class="col-6">{{ solicitud_form.tipo }}</div>
+                    <div class="col-12">{{ solicitud_form.descripcion }}</div>
+                    <div class="col-12">
+                        <button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-plus-lg me-1"></i>Solicitar</button>
+                    </div>
+                </form>
+                {% for s in solicitudes_logistica %}
+                    <div class="p-2 mb-2 bg-light rounded border small">
+                        <div class="d-flex justify-content-between gap-2">
+                            <strong>{{ s.get_tipo_display }} · {{ s.get_evento_display }}</strong>
+                            <span class="badge {% if s.estado == 'CONFIRMADA' %}bg-success{% elif s.estado == 'DESCARTADA' %}bg-secondary{% else %}bg-warning text-dark{% endif %}">{{ s.get_estado_display }}</span>
+                        </div>
+                        <div class="text-muted">{{ s.descripcion }}</div>
+                        <div class="text-muted">Pedida por {{ s.solicitada_por|default:'-' }} el {{ s.creada_en|date:'d/m/Y' }}</div>
+                        {% if es_admin %}
+                        <form method="post" action="{% url 'cierre:estado_solicitud_logistica' s.pk %}" class="d-flex gap-1 mt-1">
+                            {% csrf_token %}
+                            {% if s.estado == 'SOLICITADA' %}
+                                <button name="estado" value="CONFIRMADA" class="btn btn-sm btn-success py-0">Confirmar</button>
+                                <button name="estado" value="DESCARTADA" class="btn btn-sm btn-outline-secondary py-0">Descartar</button>
+                            {% else %}
+                                <button name="estado" value="SOLICITADA" class="btn btn-sm btn-outline-secondary py-0">Reabrir</button>
+                            {% endif %}
+                        </form>
+                        {% endif %}
+                    </div>
+                {% empty %}
+                    <span class="text-muted small">Sin solicitudes de logística.</span>
+                {% endfor %}
+            </div>
+        </div>
+
         <!-- Reconocimientos y Menciones -->
         <div class="card-panel mb-4">
             <div class="card-panel-header">

@@ -111,6 +111,11 @@ class Certificado(models.Model):
 
     @property
     def nombre_participante(self):
+        # La empresa se certifica con su razon social, no con el nombre de la cuenta.
+        if self.rol_participacion == "EMPRESA":
+            perfil = getattr(self.usuario, "empresa_perfil", None)
+            if perfil and perfil.razon_social:
+                return perfil.razon_social
         return self.usuario.get_full_name() or self.usuario.username
 
     @property

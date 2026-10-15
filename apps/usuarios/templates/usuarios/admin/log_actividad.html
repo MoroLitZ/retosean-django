@@ -16,12 +16,27 @@
     <form method="get" class="row g-2 align-items-end">
       <div class="col-sm-6 col-md-4">
         <label for="accion" class="form-label small fw-semibold text-secondary mb-1">Tipo de acción</label>
-        <select name="accion" id="accion" class="form-select form-select-sm" onchange="this.form.submit()">
+        <select name="accion" id="accion" class="form-select form-select-sm">
           <option value="">Todas</option>
           {% for valor, nombre in acciones %}
             <option value="{{ valor }}" {% if accion == valor %}selected{% endif %}>{{ nombre }}</option>
           {% endfor %}
         </select>
+      </div>
+      <div class="col-sm-6 col-md-3">
+        <label for="usuario" class="form-label small fw-semibold text-secondary mb-1">Usuario</label>
+        <input type="text" name="usuario" id="usuario" value="{{ usuario_q }}" class="form-control form-control-sm" placeholder="Nombre de usuario">
+      </div>
+      <div class="col-6 col-md-2">
+        <label for="desde" class="form-label small fw-semibold text-secondary mb-1">Desde</label>
+        <input type="date" name="desde" id="desde" value="{{ desde }}" class="form-control form-control-sm">
+      </div>
+      <div class="col-6 col-md-2">
+        <label for="hasta" class="form-label small fw-semibold text-secondary mb-1">Hasta</label>
+        <input type="date" name="hasta" id="hasta" value="{{ hasta }}" class="form-control form-control-sm">
+      </div>
+      <div class="col-md-1">
+        <button class="btn btn-sm btn-primary w-100">Filtrar</button>
       </div>
     </form>
   </div>
@@ -71,7 +86,7 @@
       <ul class="pagination pagination-sm justify-content-center mb-0">
         {% if registros.has_previous %}
           <li class="page-item">
-            <a class="page-link" href="?accion={{ accion }}&page={{ registros.previous_page_number }}">Anterior</a>
+            <a class="page-link" href="?accion={{ accion }}&usuario={{ usuario_q|urlencode }}&desde={{ desde }}&hasta={{ hasta }}&page={{ registros.previous_page_number }}">Anterior</a>
           </li>
         {% endif %}
         <li class="page-item disabled">
@@ -79,7 +94,7 @@
         </li>
         {% if registros.has_next %}
           <li class="page-item">
-            <a class="page-link" href="?accion={{ accion }}&page={{ registros.next_page_number }}">Siguiente</a>
+            <a class="page-link" href="?accion={{ accion }}&usuario={{ usuario_q|urlencode }}&desde={{ desde }}&hasta={{ hasta }}&page={{ registros.next_page_number }}">Siguiente</a>
           </li>
         {% endif %}
       </ul>

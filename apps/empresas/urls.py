@@ -20,4 +20,9 @@ urlpatterns = [
     path('admin/procesar-aprobacion/<int:documento_id>/', views.procesar_aprobacion, name='procesar_aprobacion'),
     path('admin/empresa/<int:empresa_id>/listas/', views.procesar_listas_restrictivas, name='procesar_listas_restrictivas'),
     path('admin/empresa/<int:empresa_id>/convenio/', views.actualizar_convenio, name='actualizar_convenio'),
+    path('admin/empresa/<int:empresa_id>/documento-especial/', views.cargar_documento_especial, name='cargar_documento_especial'),
+    path('admin/empresa/<int:empresa_id>/bloqueo/', views.cambiar_bloqueo, name='cambiar_bloqueo'),
+    path('admin/tipos-documento/', views.tipos_documento, name='tipos_documento'),
+    path('admin/tipos-documento/nuevo/', views.editar_tipo_documento, name='crear_tipo_documento'),
+    path('admin/tipos-documento/<int:pk>/', views.editar_tipo_documento, name='editar_tipo_documento'),
 ]

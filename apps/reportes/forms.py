@@ -37,11 +37,11 @@ class ReporteForm(forms.Form):
     )
     desde = forms.DateField(
         label="Desde", required=False,
-        widget=forms.DateInput(attrs={"type": "date", "class": CLASE_INPUT}),
+        widget=forms.DateInput(attrs={"type": "date", "class": CLASE_INPUT}, format="%Y-%m-%d"),
     )
     hasta = forms.DateField(
         label="Hasta", required=False,
-        widget=forms.DateInput(attrs={"type": "date", "class": CLASE_INPUT}),
+        widget=forms.DateInput(attrs={"type": "date", "class": CLASE_INPUT}, format="%Y-%m-%d"),
     )
 
     facultad = forms.ModelChoiceField(
@@ -50,7 +50,7 @@ class ReporteForm(forms.Form):
         widget=forms.Select(attrs={"class": CLASE_CONTROL}),
     )
     programa = forms.ModelChoiceField(
-        label="Programa", queryset=Programa.objects.order_by("nombre"),
+        label="Programa", queryset=Programa.objects.select_related("facultad").order_by("nombre"),
         required=False, empty_label="Todos",
         widget=forms.Select(attrs={"class": CLASE_CONTROL}),
     )
@@ -74,6 +74,26 @@ class ReporteForm(forms.Form):
         choices=[("", "Todos")] + list(Empresa.ESTADO_VALIDACION),
         widget=forms.Select(attrs={"class": CLASE_CONTROL}),
     )
+
+    destinatarios = forms.CharField(
+        label="Enviar a (correos separados por coma)", required=False,
+        widget=forms.TextInput(attrs={"class": CLASE_INPUT, "placeholder": "Por defecto, tu correo"}),
+    )
+
+    MAX_DESTINATARIOS = 10
+
+    def clean_destinatarios(self):
+        from django.core.validators import validate_email
+
+        correos = [c.strip() for c in (self.cleaned_data.get("destinatarios") or "").replace(";", ",").split(",") if c.strip()]
+        if len(correos) > self.MAX_DESTINATARIOS:
+            raise forms.ValidationError(f"Maximo {self.MAX_DESTINATARIOS} destinatarios.")
+        for correo in correos:
+            try:
+                validate_email(correo)
+            except forms.ValidationError:
+                raise forms.ValidationError(f"Correo invalido: {correo}")
+        return correos
 
     def __init__(self, *args, usuario=None, **kwargs):
         super().__init__(*args, **kwargs)
