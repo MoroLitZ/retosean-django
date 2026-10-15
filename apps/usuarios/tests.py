@@ -291,3 +291,30 @@ class RegistroEmpresaHU01Tests(TestCase):
         empresa = Empresa.objects.get(nit="901222333")
         self.assertEqual(empresa.area_responsable, "Transformacion digital")
         self.assertEqual(empresa.tipo_convocatoria, "RETO")
+
+
+class LoginConCorreoTests(TestCase):
+    """El formulario dice "Usuario o correo": ambos deben funcionar."""
+
+    def setUp(self):
+        Usuario.objects.create_user(username="ana", email="Ana@Example.com", password="clave-larga-123", rol="ESTUDIANTE")
+
+    def _login(self, identificador):
+        return self.client.post(reverse("usuarios:login"), {"username": identificador, "password": "clave-larga-123"})
+
+    def test_entra_con_el_usuario(self):
+        self._login("ana")
+        self.assertIn("_auth_user_id", self.client.session)
+
+    def test_entra_con_el_correo_sin_importar_mayusculas(self):
+        self._login("ana@example.com")
+        self.assertIn("_auth_user_id", self.client.session)
+
+    def test_correo_compartido_no_permite_entrar(self):
+        Usuario.objects.create_user(username="ana2", email="ana@example.com", password="clave-larga-123", rol="ESTUDIANTE")
+        self._login("ana@example.com")
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_correo_con_clave_incorrecta_falla(self):
+        self.client.post(reverse("usuarios:login"), {"username": "ana@example.com", "password": "otra"})
+        self.assertNotIn("_auth_user_id", self.client.session)

@@ -8,6 +8,7 @@ se quedaba sin menu lateral.
 from .roles import (
     ROL_EMPRESA,
     ROL_ESTUDIANTE,
+    ROL_EXPERTO,
     ROL_PROFESOR,
     es_admin,
     rol_de,
@@ -24,6 +25,7 @@ def rol_flags(request):
             'es_empresa': False,
             'es_profesor': False,
             'es_estudiante': False,
+            'es_experto': False,
         }
     return {
         'rol_actual': rol_de(user),
@@ -31,4 +33,5 @@ def rol_flags(request):
         'es_empresa': tiene_rol(user, ROL_EMPRESA),
         'es_profesor': tiene_rol(user, ROL_PROFESOR),
         'es_estudiante': tiene_rol(user, ROL_ESTUDIANTE),
+        'es_experto': tiene_rol(user, ROL_EXPERTO),
     }

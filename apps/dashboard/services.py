@@ -288,6 +288,48 @@ def series_estudiante(usuario, desde, hasta):
     }
 
 
+# --------------------------------------------------------------- EXPERTO
+def _jurados_de(usuario):
+    from apps.hackaton.models import Jurado
+
+    return Jurado.objects.filter(usuario=usuario)
+
+
+def kpis_experto(usuario, desde, hasta):
+    """Experto: jurado de hackathones y/o invitado a equipos academicos."""
+    from apps.hackaton.models import InscripcionHackaton, VotacionHackaton
+    from apps.retos.models import EquipoRetoAcademico
+
+    jurados = _jurados_de(usuario)
+    hackathon_ids = list(jurados.values_list("hackathon_id", flat=True))
+    votos = acotar(VotacionHackaton.objects.filter(jurado__in=jurados), "fecha", desde, hasta)
+    aceptadas = InscripcionHackaton.objects.filter(hackathon_id__in=hackathon_ids, estado="ACEPTADA")
+    votados = set(VotacionHackaton.objects.filter(jurado__in=jurados).values_list("hackathon_id", "equipo_id"))
+    por_evaluar = sum(1 for h, e in aceptadas.values_list("hackathon_id", "equipo_id") if (h, e) not in votados)
+
+    return {
+        "hackathones_asignados": len(set(hackathon_ids)),
+        "hackathones_en_curso": jurados.filter(hackathon__estado="en_curso").count(),
+        "equipos_por_evaluar": por_evaluar,
+        "votos_emitidos": votos.count(),
+        "puntaje_promedio": votos.aggregate(promedio=Avg("puntaje"))["promedio"],
+        "equipos_academicos": EquipoRetoAcademico.objects.filter(expertos_invitados=usuario).count(),
+    }
+
+
+def series_experto(usuario, desde, hasta):
+    from apps.hackaton.models import VotacionHackaton
+
+    votos = acotar(
+        VotacionHackaton.objects.filter(jurado__in=_jurados_de(usuario)), "fecha", desde, hasta
+    )
+    por_hackathon = [
+        (fila["hackathon__reto__titulo"] or "Sin titulo", fila["total"])
+        for fila in votos.values("hackathon__reto__titulo").annotate(total=Count("id")).order_by("-total")[:8]
+    ]
+    return {"votos_por_hackathon": _serie(por_hackathon)}
+
+
 def opciones_de_filtro():
     """Facultades y programas disponibles para los selectores del panel."""
     from apps.academico.models import Ecosistema, Facultad, Programa

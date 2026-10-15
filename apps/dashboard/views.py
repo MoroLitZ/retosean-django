@@ -5,6 +5,7 @@ from apps.usuarios.roles import (
     ROL_ADMIN,
     ROL_EMPRESA,
     ROL_ESTUDIANTE,
+    ROL_EXPERTO,
     ROL_PROFESOR,
     rol_de,
 )
@@ -59,6 +60,12 @@ def panel(request):
             'series': services.series_estudiante(request.user, desde, hasta),
         })
         plantilla = 'dashboard/estudiante.html'
+    elif rol == ROL_EXPERTO:
+        contexto.update({
+            'kpis': services.kpis_experto(request.user, desde, hasta),
+            'series': services.series_experto(request.user, desde, hasta),
+        })
+        plantilla = 'dashboard/experto.html'
     else:
         # Usuario autenticado sin rol (p. ej. creado por importacion masiva):
         # en vez de un panel vacio, se le explica que falta asignarle rol.

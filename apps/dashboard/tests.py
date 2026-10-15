@@ -160,3 +160,27 @@ class RecorridoDeRutasTests(TestCase):
                             ("recuperar", "/usuarios/recuperar-contrasena/")]:
             with self.subTest(nombre):
                 self.assertLess(self.client.get(url).status_code, 400)
+
+
+class PanelExpertoTests(TestCase):
+    """Antes un EXPERTO veia el aviso de "no tienes rol asignado"."""
+
+    def test_el_experto_tiene_su_panel_de_jurado(self):
+        from django.urls import reverse
+
+        from apps.hackaton.models import Hackathon, Jurado
+        from apps.retos.models import Reto
+        from apps.usuarios.models import Usuario
+
+        experto = Usuario.objects.create_user(username="exp-panel", password="x", rol="EXPERTO")
+        empresa = Usuario.objects.create_user(username="emp-panel", password="x", rol="EMPRESA")
+        reto = Reto.objects.create(empresa=empresa, titulo="Hack", tipo="hackathon", estado="en_curso")
+        hackathon = Hackathon.objects.create(reto=reto, estado="en_curso")
+        Jurado.objects.create(hackathon=hackathon, usuario=experto, nombre="Exp")
+
+        self.client.force_login(experto)
+        respuesta = self.client.get(reverse("dashboard:panel"))
+        self.assertTemplateUsed(respuesta, "dashboard/experto.html")
+        self.assertNotIn("sin_rol", respuesta.context)
+        self.assertEqual(respuesta.context["kpis"]["hackathones_asignados"], 1)
+        self.assertEqual(respuesta.context["kpis"]["hackathones_en_curso"], 1)
