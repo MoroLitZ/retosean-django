@@ -410,7 +410,7 @@
   </style>
   {% block extra_css %}{% endblock %}
 </head>
-<body class="{% if es_admin %}role-admin{% elif es_empresa %}role-empresa{% elif es_profesor %}role-profesor{% elif es_estudiante %}role-estudiante{% endif %}">
+<body class="{% if es_admin %}role-admin{% elif es_empresa %}role-empresa{% elif es_profesor %}role-profesor{% elif es_estudiante %}role-estudiante{% elif es_experto %}role-experto{% endif %}">
 
 <!-- Mobile overlay -->
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
@@ -649,6 +649,14 @@
         <li class="nav-item">
           <a href="{% url 'retos:mis_equipos_estudiante' %}" class="nav-link {% if request.resolver_match.url_name == 'mis_equipos_estudiante' %}active{% endif %}">
             <i class="bi bi-people-fill"></i> Mis Equipos y Retos
+          </a>
+        </li>
+      {% elif es_experto %}
+        {# ── EXPERTO ── #}
+        <li><div class="nav-section-label">Jurado</div></li>
+        <li class="nav-item">
+          <a href="{% url 'dashboard:panel' %}" class="nav-link {% if request.resolver_match.namespace == 'dashboard' %}active{% endif %}">
+            <i class="bi bi-speedometer2"></i> Dashboard
           </a>
         </li>
       {% endif %}

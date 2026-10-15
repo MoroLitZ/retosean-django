@@ -98,6 +98,7 @@ DATABASES = {
 }
 
 AUTH_USER_MODEL = "usuarios.Usuario"
+AUTHENTICATION_BACKENDS = ["apps.usuarios.backends.UsuarioOCorreoBackend"]
 
 LANGUAGE_CODE = "es-co"
 TIME_ZONE = "America/Bogota"
