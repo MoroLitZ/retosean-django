@@ -23,10 +23,8 @@ class IntegracionAcademica(models.Model):
     descripcion = models.TextField(blank=True)
     alcance = models.TextField(blank=True)
     entregable_esperado = models.CharField(max_length=180, blank=True)
-    cronograma_sesiones = models.TextField(blank=True)
-    equipo_profesores = models.TextField(blank=True)
-    equipo_estudiantes = models.TextField(blank=True)
-    expertos_invitados = models.TextField(blank=True)
+    # Notas libres del cronograma; las sesiones con fecha son SesionRetoAcademico (HU03).
+    cronograma_sesiones = models.TextField("Notas del cronograma", blank=True)
     requerimientos_empresa = models.TextField(blank=True)
     requerimientos_internos = models.TextField(blank=True)
     espacio_fisico = models.CharField(max_length=180, blank=True)
@@ -54,16 +52,28 @@ class IntegracionAcademica(models.Model):
         ("descripcion", "Descripcion"),
         ("alcance", "Alcance"),
         ("entregable_esperado", "Entregable esperado"),
-        ("cronograma_sesiones", "Cronograma de sesiones"),
+    ]
+    # HU03: sesiones obligatorias del cronograma (la preseleccion es opcional).
+    SESIONES_REQUERIDAS = [
+        ("inicio", "una sesion de inicio"),
+        ("seguimiento", "al menos una sesion de seguimiento"),
+        ("evaluacion", "una sesion de evaluacion"),
     ]
 
     def campos_faltantes_para_revision(self):
-        """Campos obligatorios sin diligenciar para enviar la integracion a revision."""
-        return [
+        """Lo que falta diligenciar para enviar la integracion a revision."""
+        faltantes = [
             etiqueta
             for campo, etiqueta in self.CAMPOS_REQUERIDOS_REVISION
             if not (getattr(self, campo, "") or "").strip()
         ]
+        if self.pk is None:
+            return faltantes + ["al menos un profesor en el equipo"] + [e for _, e in self.SESIONES_REQUERIDAS]
+        if not self.participantes.filter(rol=ParticipanteIntegracion.PROFESOR).exists():
+            faltantes.append("al menos un profesor en el equipo")
+        tipos = set(self.sesiones.values_list("tipo", flat=True))
+        faltantes += [etiqueta for tipo, etiqueta in self.SESIONES_REQUERIDAS if tipo not in tipos]
+        return faltantes
 
     @property
     def puede_editar_profesor(self):
@@ -75,6 +85,53 @@ class IntegracionAcademica(models.Model):
             raise ValidationError({"profesor": "La integracion debe pertenecer a un usuario Profesor."})
         if self.reto_id and self.reto.estado not in self.reto.ESTADOS_INTEGRABLES:
             raise ValidationError({"reto": "Solo se pueden integrar retos aprobados, abiertos o en curso."})
+
+
+class ParticipanteIntegracion(models.Model):
+    """Integrante del equipo de una integracion academica (HU03).
+
+    Profesores: nombre, cedula, correo y facultad. Estudiantes: nombre, documento,
+    correo y programa. Expertos invitados (opcionales): nombre, cedula, correo y
+    facultad u organizacion. Si el correo corresponde a una cuenta de la
+    plataforma, queda enlazada para poder notificarla.
+    """
+
+    PROFESOR = "PROFESOR"
+    ESTUDIANTE = "ESTUDIANTE"
+    EXPERTO = "EXPERTO"
+    ROLES = [(PROFESOR, "Profesor"), (ESTUDIANTE, "Estudiante"), (EXPERTO, "Experto invitado")]
+
+    integracion = models.ForeignKey(IntegracionAcademica, on_delete=models.CASCADE, related_name="participantes")
+    rol = models.CharField(max_length=12, choices=ROLES)
+    nombre = models.CharField(max_length=150)
+    documento = models.CharField("Cedula / documento", max_length=30, blank=True)
+    email = models.EmailField("Correo", blank=True)
+    facultad = models.CharField("Facultad u organizacion", max_length=150, blank=True)
+    programa = models.CharField(max_length=160, blank=True)
+    usuario = models.ForeignKey(
+        "usuarios.Usuario", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="participaciones_integracion",
+    )
+    notificado_en = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "participantes_integracion"
+        verbose_name = "Participante de integracion"
+        verbose_name_plural = "Participantes de integracion"
+        ordering = ["rol", "nombre"]
+
+    def __str__(self):
+        return f"{self.nombre} ({self.get_rol_display()})"
+
+    def save(self, *args, **kwargs):
+        # Enlaza la cuenta de la plataforma cuando el correo identifica a una sola.
+        if self.email and self.usuario_id is None:
+            from apps.usuarios.models import Usuario
+
+            cuentas = list(Usuario.objects.filter(email__iexact=self.email)[:2])
+            if len(cuentas) == 1:
+                self.usuario = cuentas[0]
+        super().save(*args, **kwargs)
 
 
 class SeguimientoReto(models.Model):
@@ -132,8 +189,8 @@ class HistorialEstado(models.Model):
 
     Documentos de empresa, convenios, integraciones, postulaciones, entregables,
     inscripciones de hackathon y cuentas de usuario escriben aqui a traves de
-    `apps.seguimiento.services.cambiar_estado`. Los retos conservan su propio
-    `retos.HistorialEstadoReto`, que ya muestra la UI del detalle del reto.
+    `apps.seguimiento.services.cambiar_estado`; los retos tambien (antes tenian
+    su propia tabla `historial_estados_reto`, migrada aqui).
     """
 
     content_type = models.ForeignKey(
@@ -163,3 +220,22 @@ class HistorialEstado(models.Model):
 
     def __str__(self):
         return f"{self.content_type.model}#{self.object_id}: {self.estado_anterior} -> {self.estado_nuevo}"
+
+    def _etiqueta(self, valor):
+        """Etiqueta legible del valor segun los choices del campo en el modelo de origen."""
+        from django.contrib.contenttypes.models import ContentType
+
+        modelo = ContentType.objects.get_for_id(self.content_type_id).model_class()
+        try:
+            choices = dict(modelo._meta.get_field(self.campo).flatchoices)
+        except Exception:
+            choices = {}
+        return choices.get(valor, valor)
+
+    @property
+    def etiqueta_anterior(self):
+        return self._etiqueta(self.estado_anterior) if self.estado_anterior else ""
+
+    @property
+    def etiqueta_nueva(self):
+        return self._etiqueta(self.estado_nuevo)

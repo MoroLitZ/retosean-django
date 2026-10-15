@@ -33,6 +33,13 @@
           </span>
         </div>
 
+        {% if fecha_cierre and not hackathon.resultados_publicados %}
+          <p class="small text-muted mb-0">
+            <i class="bi bi-clock"></i> Los resultados se publican automaticamente el
+            <strong>{{ fecha_cierre|date:"d/m/Y H:i" }}</strong>.
+          </p>
+        {% endif %}
+
         {% if hackathon.reglas %}
           <hr>
           <span class="text-muted text-uppercase small fw-bold">Reglas</span>
@@ -47,6 +54,16 @@
         <a href="{% url 'hackaton:ranking' hackathon.pk %}" class="btn btn-outline-primary btn-sm">
           <i class="bi bi-trophy"></i> Ver resultados
         </a>
+        {% if puede_exportar %}
+          <div class="btn-group btn-group-sm" role="group" aria-label="Informe final">
+            <a href="{% url 'hackaton:informe_final' hackathon.pk %}?formato=pdf" class="btn btn-outline-danger">
+              <i class="bi bi-file-earmark-pdf"></i> Informe final PDF
+            </a>
+            <a href="{% url 'hackaton:informe_final' hackathon.pk %}?formato=excel" class="btn btn-outline-success">
+              <i class="bi bi-file-earmark-excel"></i> Excel
+            </a>
+          </div>
+        {% endif %}
 
         {% if es_jurado and votacion_abierta %}
           <a href="{% url 'hackaton:votar' hackathon.pk %}" class="btn btn-primary btn-sm">
@@ -71,6 +88,9 @@
           <a href="{% url 'hackaton:jurados' hackathon.pk %}" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-person-badge"></i> Gestionar jurados
           </a>
+          <a href="{% url 'hackaton:logistica' hackathon.pk %}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-geo-alt"></i> Logistica e invitados
+          </a>
           {% if hackathon.estado == 'borrador' %}
             <form method="post" action="{% url 'hackaton:publicar' hackathon.pk %}">
               {% csrf_token %}
@@ -94,6 +114,34 @@
 
   {# ── Columna derecha: etapas, equipos y jurados ── #}
   <div class="col-lg-8">
+    <div class="card-panel mb-3">
+      <div class="card-panel-header">Logistica del evento</div>
+      <div class="p-3 small">
+        <div class="row g-2 mb-2">
+          <div class="col-md-4"><span class="text-muted">Modalidad:</span> {{ hackathon.get_modalidad_display }}</div>
+          <div class="col-md-8"><span class="text-muted">Espacio:</span> {{ hackathon.lugar|default:"Por definir" }}</div>
+          <div class="col-12">
+            <span class="text-muted">Transmision:</span>
+            {% if hackathon.enlace_transmision %}<a href="{{ hackathon.enlace_transmision }}" target="_blank" rel="noopener">{{ hackathon.enlace_transmision }}</a>{% else %}No aplica{% endif %}
+          </div>
+          {% if hackathon.notas_logistica %}<div class="col-12 text-muted">{{ hackathon.notas_logistica|linebreaksbr }}</div>{% endif %}
+        </div>
+        {% if invitados %}
+        <table class="table table-sm mb-0">
+          <thead class="table-light"><tr><th>Invitado</th><th>Tipo</th><th>Organizacion</th><th class="text-center">Confirmado</th></tr></thead>
+          <tbody>
+            {% for i in invitados %}
+            <tr>
+              <td>{{ i.nombre }}</td><td>{{ i.get_tipo_display }}</td><td>{{ i.organizacion|default:"-" }}</td>
+              <td class="text-center">{% if i.confirmado %}<i class="bi bi-check-circle-fill text-success" title="Confirmado"></i>{% else %}<i class="bi bi-hourglass text-muted" title="Pendiente"></i>{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+      </div>
+    </div>
+
     <div class="card-panel mb-3">
       <div class="card-panel-header">Etapas</div>
       <div class="table-responsive">

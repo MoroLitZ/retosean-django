@@ -1,0 +1,34 @@
+{% extends 'dashboard/panel_base.html' %}
+
+{% block kpis %}
+<div class="row g-3 mb-4">
+  {% include 'dashboard/_kpi.html' with etiqueta="Hackathones asignados" valor=kpis.hackathones_asignados icono="lightning-charge" color="#2563eb" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="En curso" valor=kpis.hackathones_en_curso icono="play-circle" color="#16a34a" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Equipos por evaluar" valor=kpis.equipos_por_evaluar icono="hourglass-split" color="#f59e0b" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Votos emitidos" valor=kpis.votos_emitidos icono="check2-square" color="#7c3aed" %}
+</div>
+
+<div class="row g-3 mb-4">
+  {% include 'dashboard/_kpi.html' with etiqueta="Puntaje promedio" valor=kpis.puntaje_promedio|floatformat:2 icono="star-half" color="#65a30d" %}
+  {% include 'dashboard/_kpi.html' with etiqueta="Equipos academicos" valor=kpis.equipos_academicos icono="people" color="#0891b2" %}
+</div>
+{% endblock %}
+
+{% block graficas %}
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="card-panel h-100">
+      <div class="card-panel-header">Votos por hackathon</div>
+      <div class="p-3" style="height:300px;">
+        <canvas data-serie="votos_por_hackathon" data-tipo="bar" data-etiqueta="Votos"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="d-flex flex-wrap gap-2 mt-4">
+  <a href="{% url 'hackaton:lista' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-lightning-charge"></i> Mis hackathones
+  </a>
+</div>
+{% endblock %}

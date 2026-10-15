@@ -1,10 +1,12 @@
+from django import forms
+from django.core.exceptions import PermissionDenied
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from .models import Empresa, DocumentoEmpresa
+from .models import DocumentoEmpresa, Empresa, TipoDocumentoLegal
 from .forms import CargarDocumentoForm
 from apps.retos.models import Reto
 from apps.participaciones.models import Postulacion as PostulacionReto
@@ -15,12 +17,17 @@ from apps.usuarios.decorators import solo_admin, solo_empresa
 from apps.usuarios.roles import es_admin, url_dashboard_para
 from apps.usuarios.services import cambiar_estado_cuenta
 from apps.seguimiento.services import TransicionInvalida, cambiar_estado, historial_de
-from apps.participaciones.services import MAQUINA_POSTULACION
-from .forms import ConvenioForm
+from apps.participaciones.services import MAQUINA_POSTULACION, marcar_postulaciones_en_revision
+from .forms import BloqueoParticipacionForm, ConvenioForm, TipoDocumentoLegalForm
 from .services import (
+    historial_documentos,
     MAQUINA_CONVENIO,
     cambiar_estado_convenio,
     cargar_documento,
+    cambiar_bloqueo_participacion,
+    documentacion_completa,
+    estado_documental,
+    motivos_para_no_operar,
     puede_la_empresa_operar,
     rechazar_documentos_por_listas,
     revisar_documento,
@@ -75,38 +82,52 @@ def panel_documentos_empresa(request):
     else:
         form = CargarDocumentoForm()
 
-    documentos = (
-        DocumentoEmpresa.objects.filter(empresa=empresa)
-        if empresa
-        else DocumentoEmpresa.objects.none()
-    )
-    
-    estados_config = {
-        'CARGADO': ('En Revisión', 'bg-info text-dark'),
-        'VERIFICADO': ('Aprobado', 'bg-success text-white'),
-        'RECHAZADO': ('Rechazado', 'bg-danger text-white'),
-        'PENDIENTE': ('Pendiente', 'bg-warning text-dark')
-    }
-
+    filas = estado_documental(empresa) if empresa else []
     context = {
         'form': form,
-        'documentos_requeridos': len(DocumentoEmpresa.TIPO_DOCUMENTO_CHOICES),
-        'documentos': [
-            {
-                'tipo': doc.get_tipo_documento_display(),
-                'estado_texto': estados_config.get(doc.estado, (doc.estado, 'bg-secondary'))[0],
-                'estado_clase': estados_config.get(doc.estado, (doc.estado, 'bg-secondary'))[1],
-                'fecha_expedicion': doc.fecha_expedicion,
-                'url_archivo': doc.archivo.url if doc.archivo else None,
-                'motivo_rechazo': doc.motivo_rechazo
-            }
-            for doc in documentos
-        ],
-        'tiene_documentos': documentos.exists(),
-        'perfil': empresa
+        'documentos': [_fila_documento(fila) for fila in filas],
+        'tiene_documentos': bool(filas),
+        'documentos_cargados': sum(1 for fila in filas if fila['documento'] and fila['documento'].archivo),
+        'documentos_requeridos': sum(1 for fila in filas if fila['requerido']),
+        'requeridos_al_dia': sum(1 for fila in filas if fila['requerido'] and fila['al_dia']),
+        'motivos_no_operar': motivos_para_no_operar(empresa) if empresa else [],
+        'historial_documentos': historial_documentos(empresa) if empresa else [],
+        'perfil': empresa,
     }
-    
     return render(request, 'empresas/panel_documentos.html', context)
+
+
+ESTADOS_DOCUMENTO_UI = {
+    'PENDIENTE': ('Pendiente', 'bg-warning text-dark'),
+    'CARGADO': ('En revisión', 'bg-info text-dark'),
+    'VERIFICADO': ('Aprobado', 'bg-success text-white'),
+    'RECHAZADO': ('Rechazado', 'bg-danger text-white'),
+    'VENCIDO': ('Vencido', 'bg-danger text-white'),
+}
+
+
+def _fila_documento(fila):
+    """Renglon de la lista de control listo para las plantillas."""
+    documento = fila['documento']
+    estado = documento.estado if documento else 'PENDIENTE'
+    if documento and estado == 'VERIFICADO' and not documento.esta_vigente:
+        estado = 'VENCIDO'
+    texto, clase = ESTADOS_DOCUMENTO_UI.get(estado, (estado, 'bg-secondary'))
+    return {
+        'tipo': fila['tipo'].nombre,
+        'descripcion': fila['tipo'].descripcion,
+        'requerido': fila['requerido'],
+        'especial': fila['tipo'].requiere_permiso_especial,
+        'al_dia': fila['al_dia'],
+        'alerta': fila['alerta'],
+        'estado_texto': texto,
+        'estado_clase': clase,
+        'documento': documento,
+        'fecha_expedicion': documento.fecha_expedicion if documento else None,
+        'fecha_vencimiento': documento.fecha_vencimiento if documento else None,
+        'url_archivo': documento.archivo.url if documento and documento.archivo else None,
+        'motivo_rechazo': documento.motivo_rechazo if documento else '',
+    }
 
 
 @solo_empresa
@@ -119,7 +140,12 @@ def postulaciones_empresa(request):
     empresa = request.user.empresa_perfil
     retos_empresa = Reto.objects.filter(empresa=request.user)
     estado_filtro = request.GET.get('estado', '')
-    estados_validos = {'PENDIENTE', 'ACEPTADA', 'RECHAZADA', 'RETIRADA'}
+    estados_validos = set(dict(PostulacionReto.ESTADOS))
+
+    # Al abrir la lista, la empresa empieza a revisar lo que estaba pendiente (HU11).
+    marcar_postulaciones_en_revision(
+        PostulacionReto.objects.filter(reto__in=retos_empresa), request.user
+    )
 
     postulaciones = PostulacionReto.objects.filter(
         reto__in=retos_empresa
@@ -208,7 +234,7 @@ def _actualizar_estado_validacion(empresa):
     )
     if 'RECHAZADO' in estados:
         nuevo = 'RECHAZADA'
-    elif puede_la_empresa_operar(empresa):
+    elif documentacion_completa(empresa):
         nuevo = 'VERIFICADA'
     elif estados:
         nuevo = 'EN_REVISION'
@@ -263,7 +289,11 @@ def seguimiento_avance(request, reto_id=None):
         )
         ultimo = seguimientos.first()
         porcentaje = ultimo.porcentaje_avance if ultimo else 0
-        entregables = reto.entregables.select_related('estudiante', 'equipo').order_by('-fecha_entrega')
+        entregables = (
+            reto.entregables.select_related('estudiante', 'equipo')
+            .prefetch_related('historial_comentarios__autor')
+            .order_by('-fecha_entrega')
+        )
     return render(request, 'empresas/seguimiento_avance.html', {
         'retos': retos,
         'reto': reto,
@@ -287,7 +317,9 @@ def indicadores_empresa(request):
         'retos_finalizados': retos.filter(estado='finalizado').count(),
         'retos_en_revision': retos.filter(estado='en_revision').count(),
         'total_postulaciones': PostulacionReto.objects.filter(reto__in=retos).count(),
-        'postulaciones_pendientes': PostulacionReto.objects.filter(reto__in=retos, estado='PENDIENTE').count(),
+        'postulaciones_pendientes': PostulacionReto.objects.filter(
+            reto__in=retos, estado__in=PostulacionReto.ESTADOS_SIN_RESOLVER
+        ).count(),
         'postulaciones_aceptadas': PostulacionReto.objects.filter(reto__in=retos, estado='ACEPTADA').count(),
         'total_entregables': Entregable.objects.filter(reto__in=retos).count(),
         'entregables_pendientes': Entregable.objects.filter(reto__in=retos, estado='ENVIADO').count(),
@@ -312,12 +344,94 @@ def admin_revisar_documentacion(request, empresa_id):
     empresa = get_object_or_404(Empresa, id=empresa_id)
     pendientes = DocumentoEmpresa.objects.filter(empresa=empresa).exclude(estado__in=['VERIFICADO', 'RECHAZADO'])
 
+    puede_cargar_especiales = request.user.has_perm('empresas.cargar_listas_informa')
     return render(request, 'empresas/admin/revisar_documentos.html', {
         'empresa': empresa,
         'pendientes': pendientes,
+        'lista_control': [_fila_documento(fila) for fila in estado_documental(empresa)],
+        'motivos_no_operar': motivos_para_no_operar(empresa),
+        'historial_documentos': historial_documentos(empresa),
         'convenio_form': ConvenioForm(opciones=_opciones_convenio(empresa)),
         'historial_convenio': historial_de(empresa, campo='estado_convenio')[:10],
+        'bloqueo_form': BloqueoParticipacionForm(),
+        'puede_cargar_especiales': puede_cargar_especiales,
+        'especial_form': CargarDocumentoForm(solo_especiales=True) if puede_cargar_especiales else None,
     })
+
+
+@require_POST
+def cargar_documento_especial(request, empresa_id):
+    """Carga de documentos de permiso especial (Listas Informa) por la universidad (HU00/HU13)."""
+    if not request.user.is_authenticated or not request.user.has_perm('empresas.cargar_listas_informa'):
+        raise PermissionDenied('No tienes el permiso para cargar este documento.')
+    empresa = get_object_or_404(Empresa, id=empresa_id)
+    form = CargarDocumentoForm(request.POST, request.FILES, solo_especiales=True)
+    if not form.is_valid():
+        for errores in form.errors.values():
+            for error in errores:
+                messages.error(request, error)
+        return redirect('empresas:admin_revisar_documentacion', empresa_id=empresa.id)
+    try:
+        documento, _ = cargar_documento(
+            empresa, form.cleaned_data['tipo_documento'], form.cleaned_data['archivo'],
+            form.cleaned_data.get('fecha_expedicion'), request.user,
+        )
+    except TransicionInvalida as error:
+        messages.error(request, str(error))
+    else:
+        _actualizar_estado_validacion(empresa)
+        messages.success(request, f'{documento.get_tipo_documento_display()} cargado; queda pendiente de verificación.')
+    return redirect('empresas:admin_revisar_documentacion', empresa_id=empresa.id)
+
+
+@require_POST
+@solo_admin
+def cambiar_bloqueo(request, empresa_id):
+    """El administrador bloquea o habilita la participacion de la empresa (HU00)."""
+    empresa = get_object_or_404(Empresa, id=empresa_id)
+    bloquear = request.POST.get('accion') == 'bloquear'
+    form = BloqueoParticipacionForm(request.POST)
+    form.is_valid()
+    try:
+        cambio = cambiar_bloqueo_participacion(empresa, bloquear, request.user, form.cleaned_data.get('motivo', ''))
+    except TransicionInvalida as error:
+        messages.error(request, str(error))
+    else:
+        if cambio:
+            messages.success(request, 'Participación bloqueada.' if bloquear else 'Participación habilitada.')
+    return redirect('empresas:admin_revisar_documentacion', empresa_id=empresa.id)
+
+
+@solo_admin
+def tipos_documento(request):
+    """Catalogo de documentos legales que se exigen a las empresas (HU00)."""
+    return render(request, 'empresas/admin/tipos_documento.html', {
+        'tipos': TipoDocumentoLegal.objects.all(),
+    })
+
+
+@solo_admin
+def editar_tipo_documento(request, pk=None):
+    tipo = get_object_or_404(TipoDocumentoLegal, pk=pk) if pk else None
+    form = TipoDocumentoLegalForm(request.POST or None, instance=tipo)
+    if tipo is None:
+        form.fields['codigo'] = forms.SlugField(
+            label='Código', max_length=50,
+            help_text='Identificador interno en mayúsculas, p. ej. POLIZA_RESPONSABILIDAD.',
+            widget=forms.TextInput(attrs={'class': 'form-control'}),
+        )
+    if request.method == 'POST' and form.is_valid():
+        nuevo = form.save(commit=False)
+        if tipo is None:
+            codigo = form.cleaned_data['codigo'].upper().replace('-', '_')
+            if TipoDocumentoLegal.objects.filter(codigo=codigo).exists():
+                form.add_error('codigo', 'Ya existe un tipo con ese código.')
+                return render(request, 'empresas/admin/tipo_documento_form.html', {'form': form, 'tipo': tipo})
+            nuevo.codigo = codigo
+        nuevo.save()
+        messages.success(request, f'Tipo de documento "{nuevo.nombre}" guardado.')
+        return redirect('empresas:tipos_documento')
+    return render(request, 'empresas/admin/tipo_documento_form.html', {'form': form, 'tipo': tipo})
 
 
 def _opciones_convenio(empresa):
@@ -480,8 +594,17 @@ def elegir_modo_convenio(request):
         if opcion == 'no_convenio':
             empresa.renuncio_a_convenio = True
             empresa.save(update_fields=['renuncio_a_convenio'])
-            messages.success(request, 'Has seleccionado publicar de forma directa sin convenio.')
-            return redirect('retos:crear')
+            # Sin convenio no se exigen la minuta ni el convenio firmado, pero el
+            # resto de documentos si: ir a crear el reto devolveria aqui en bucle.
+            if puede_la_empresa_operar(empresa):
+                messages.success(request, 'Has seleccionado participar sin convenio.')
+                return redirect('retos:crear')
+            messages.info(
+                request,
+                'Participarás sin convenio: no necesitas la minuta ni el convenio firmado. '
+                'Carga el resto de documentos para poder publicar retos.',
+            )
+            return redirect('empresas:documentos')
         messages.error(request, 'Selecciona una de las dos opciones para continuar.')
 
     return render(request, 'empresas/elegir_convenio.html', {'empresa': empresa})

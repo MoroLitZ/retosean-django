@@ -77,33 +77,7 @@
         </div>
         {% endif %}
 
-        {% if integracion.cronograma_sesiones %}
-        <div class="mb-3">
-          <small class="text-muted d-block">Cronograma de sesiones</small>
-          <p class="mb-0">{{ integracion.cronograma_sesiones|linebreaks }}</p>
-        </div>
-        {% endif %}
-
-        {% if integracion.equipo_profesores %}
-        <div class="mb-3">
-          <small class="text-muted d-block">Equipo de profesores</small>
-          <p class="mb-0">{{ integracion.equipo_profesores|linebreaks }}</p>
-        </div>
-        {% endif %}
-
-        {% if integracion.equipo_estudiantes %}
-        <div class="mb-3">
-          <small class="text-muted d-block">Equipo de estudiantes</small>
-          <p class="mb-0">{{ integracion.equipo_estudiantes|linebreaks }}</p>
-        </div>
-        {% endif %}
-
-        {% if integracion.expertos_invitados %}
-        <div class="mb-3">
-          <small class="text-muted d-block">Expertos invitados</small>
-          <p class="mb-0">{{ integracion.expertos_invitados|linebreaks }}</p>
-        </div>
-        {% endif %}
+        {% include 'retos/_equipo_y_cronograma.html' %}
 
         {% if integracion.requerimientos_empresa %}
         <div class="mb-3">

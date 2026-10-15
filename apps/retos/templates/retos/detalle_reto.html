@@ -26,6 +26,9 @@
             {% if reto.codigo %}
               <span class="text-muted" style="font-size: 0.8rem;">{{ reto.codigo }}</span>
             {% endif %}
+            {% if reto.nombre_corto %}
+              <span class="badge bg-light text-dark border" style="font-size: 0.75rem;">{{ reto.nombre_corto }}</span>
+            {% endif %}
           </div>
           <h1 style="font-size: 1.6rem; font-weight: 800; color: #111827; margin: 0 0 0.4rem;">
             {{ reto.titulo|default:'Borrador sin título' }}
@@ -45,9 +48,12 @@
               <i class="bi bi-pencil me-1"></i>Editar
             </a>
             {% if reto.estado == 'borrador' %}
-            <a href="{% url 'retos:enviar_revision' reto.pk %}" class="btn btn-sm" style="background: var(--accent); color: #fff; border: none;">
-              <i class="bi bi-send me-1"></i>Enviar a Revisi&oacute;n
-            </a>
+            <form method="post" action="{% url 'retos:enviar_revision' reto.pk %}" class="d-inline">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm" style="background: var(--accent); color: #fff; border: none;">
+                <i class="bi bi-send me-1"></i>Enviar a Revisi&oacute;n
+              </button>
+            </form>
             {% endif %}
             {% if reto.puede_eliminar_empresa %}
             <a href="{% url 'retos:eliminar' reto.pk %}" class="btn btn-sm btn-outline-danger">
@@ -153,6 +159,28 @@
         </div>
       </div>
 
+      {% if reto.uso_esperado_resultados or reto.insumos_inicio or reto.insumos_cierre %}
+      <div class="card-panel mb-4">
+        <div class="card-panel-header">
+          <i class="bi bi-box-seam me-2 text-muted"></i>Aportes de la empresa
+        </div>
+        <div class="p-4">
+          {% if reto.uso_esperado_resultados %}
+            <h6 class="fw-bold small text-uppercase text-muted">Uso esperado de los resultados</h6>
+            <p style="white-space: pre-line;">{{ reto.uso_esperado_resultados }}</p>
+          {% endif %}
+          {% if reto.insumos_inicio %}
+            <h6 class="fw-bold small text-uppercase text-muted">Insumos al inicio</h6>
+            <p style="white-space: pre-line;">{{ reto.insumos_inicio }}</p>
+          {% endif %}
+          {% if reto.insumos_cierre %}
+            <h6 class="fw-bold small text-uppercase text-muted">Insumos al cierre</h6>
+            <p class="mb-0" style="white-space: pre-line;">{{ reto.insumos_cierre }}</p>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+
       <!-- Historial de estados -->
       <div class="card-panel">
         <div class="card-panel-header">
@@ -174,10 +202,10 @@
                 {% for item in reto.historial_estados.all %}
                 <tr>
                   <td class="ps-4 text-muted">{{ item.fecha|date:'d/m/Y H:i' }}</td>
-                  <td><span class="badge bg-secondary bg-opacity-25 text-secondary">{{ item.estado_anterior|default:'-' }}</span></td>
+                  <td><span class="badge bg-secondary bg-opacity-25 text-secondary">{{ item.etiqueta_anterior|default:'-' }}</span></td>
                   <td>
                     <span class="badge {% if item.estado_nuevo == 'aprobado' or item.estado_nuevo == 'abierto' %}bg-success{% elif item.estado_nuevo == 'rechazado' %}bg-danger{% elif item.estado_nuevo == 'en_revision' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
-                      {{ item.get_estado_nuevo_display }}
+                      {{ item.etiqueta_nueva }}
                     </span>
                   </td>
                   <td style="color: #374151;">{{ item.realizado_por|default:'-' }}</td>

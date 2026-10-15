@@ -51,6 +51,19 @@ python manage.py sembrar_catalogo --demo
 python manage.py sembrar_demo_completa
 ```
 
+### Con Docker
+
+```bash
+docker compose up --build
+docker compose exec web python manage.py sembrar_catalogo --demo
+docker compose exec web python manage.py sembrar_demo_completa
+```
+
+Levanta Django en http://localhost:8000, PostgreSQL 18 (puerto 5433 en el equipo,
+para no chocar con una instalación local) y Mailpit en http://localhost:8025, donde
+llegan todos los correos de la plataforma. El código se monta como volumen, así que
+los cambios se recargan sin reconstruir la imagen.
+
 ### Variables de entorno
 
 | Variable | Uso |
@@ -64,6 +77,9 @@ python manage.py sembrar_demo_completa
 En desarrollo los correos se imprimen en la consola: no hace falta configurar SMTP.
 
 ## Arquitectura
+
+Las decisiones tomadas sobre puntos ambiguos del brief (ciclos de vida, documentos
+de empresa, permisos, stack) están en [`docs/decisions.md`](docs/decisions.md).
 
 ```
 apps/
@@ -112,6 +128,15 @@ etapas de hackathon y vencimiento de documentos de empresa.
 `C:\ruta\al\proyecto\venv\Scripts\python.exe manage.py enviar_recordatorios`
 con el directorio de trabajo en la raíz del proyecto. En Linux, la línea de cron
 equivalente es `0 7 * * *`.
+
+Los hackathones avanzan solos según sus etapas (HU09): pasan a *En curso* al
+iniciar la etapa de desarrollo y, al llegar la premiación (o el fin de la última
+etapa con fecha), se finalizan y se publican resultados y ganadores. La vista de
+detalle lo aplica al abrirse; para que ocurra aunque nadie entre, programa cada hora:
+
+```bash
+python manage.py avanzar_hackathones
+```
 
 ## Rutas principales
 

@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+
+{% block title %}Logistica{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<form method="post">
+  {% csrf_token %}
+  <div class="card-panel mb-3">
+    <div class="card-panel-header">Espacio y transmision</div>
+    <div class="p-4 row g-3">
+      {% for campo in form %}
+      <div class="{% if campo.name == 'notas_logistica' %}col-12{% else %}col-md-4{% endif %}">
+        <label for="{{ campo.id_for_label }}" class="form-label small fw-semibold text-secondary">{{ campo.label }}</label>
+        {{ campo }}
+        {% for error in campo.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card-panel mb-3">
+    <div class="card-panel-header">Invitados</div>
+    <div class="p-3">
+      {{ invitados.management_form }}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-2" data-formset="invitados">
+          <thead class="table-light">
+            <tr><th>Tipo</th><th>Nombre</th><th>Organizacion</th><th>Correo</th><th class="text-center">Confirmado</th><th class="text-center">Quitar</th></tr>
+          </thead>
+          <tbody>
+            {% for f in invitados %}
+            <tr>
+              {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
+              <td>{{ f.tipo }}</td>
+              <td>{{ f.nombre }}{% for e in f.nombre.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</td>
+              <td>{{ f.organizacion }}</td>
+              <td>{{ f.email }}{% for e in f.email.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</td>
+              <td class="text-center">{{ f.confirmado }}</td>
+              <td class="text-center">{{ f.DELETE }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <template id="vacio-invitados">
+        <tr>
+          {% for hidden in invitados.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+          <td>{{ invitados.empty_form.tipo }}</td><td>{{ invitados.empty_form.nombre }}</td>
+          <td>{{ invitados.empty_form.organizacion }}</td><td>{{ invitados.empty_form.email }}</td>
+          <td class="text-center">{{ invitados.empty_form.confirmado }}</td><td class="text-center">{{ invitados.empty_form.DELETE }}</td>
+        </tr>
+      </template>
+      <button type="button" class="btn btn-outline-secondary btn-sm" data-agregar="invitados">
+        <i class="bi bi-plus-lg"></i> Agregar invitado
+      </button>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2">
+    <a href="{% url 'hackaton:detalle' hackathon.pk %}" class="btn btn-outline-secondary">Volver</a>
+    <button type="submit" class="btn btn-primary">Guardar logistica</button>
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.querySelectorAll('[data-agregar]').forEach(function (boton) {
+    boton.addEventListener('click', function () {
+      const prefijo = boton.dataset.agregar;
+      const total = document.getElementById('id_' + prefijo + '-TOTAL_FORMS');
+      const html = document.getElementById('vacio-' + prefijo).innerHTML.replace(/__prefix__/g, total.value);
+      document.querySelector('[data-formset="' + prefijo + '"] tbody').insertAdjacentHTML('beforeend', html);
+      total.value = Number(total.value) + 1;
+    });
+  });
+</script>
+{% endblock %}

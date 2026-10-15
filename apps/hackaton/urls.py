@@ -18,4 +18,6 @@ urlpatterns = [
     path('inscripcion/<int:pk>/gestionar/', views.gestionar_inscripcion, name='gestionar_inscripcion'),
     path('<int:pk>/votar/', views.votar, name='votar'),
     path('<int:pk>/ranking/', views.ranking, name='ranking'),
+    path('<int:pk>/logistica/', views.logistica, name='logistica'),
+    path('<int:pk>/informe-final/', views.informe_final, name='informe_final'),
 ]

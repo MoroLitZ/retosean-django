@@ -1,0 +1,50 @@
+{# HU03: equipo estructurado y cronograma de una integracion. Espera `integracion`. #}
+<div class="mb-3">
+  <small class="text-muted d-block mb-1">Equipo</small>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead class="table-light">
+        <tr><th>Rol</th><th>Nombre</th><th>Cedula / documento</th><th>Correo</th><th>Facultad / programa</th></tr>
+      </thead>
+      <tbody>
+        {% for p in integracion.participantes.all %}
+        <tr>
+          <td><span class="badge bg-light text-dark border">{{ p.get_rol_display }}</span></td>
+          <td>{{ p.nombre }}{% if p.usuario_id %} <i class="bi bi-person-check text-success" title="Tiene cuenta en la plataforma"></i>{% endif %}</td>
+          <td>{{ p.documento|default:'-' }}</td>
+          <td>{{ p.email|default:'-' }}</td>
+          <td>{% if p.rol == 'ESTUDIANTE' %}{{ p.programa|default:'-' }}{% else %}{{ p.facultad|default:'-' }}{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-muted text-center py-2">Sin integrantes registrados.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="mb-3">
+  <small class="text-muted d-block mb-1">Cronograma de sesiones</small>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead class="table-light">
+        <tr><th>Tipo</th><th>Fecha y hora</th><th>Enlace</th><th>Observaciones</th></tr>
+      </thead>
+      <tbody>
+        {% for sesion in integracion.sesiones.all %}
+        <tr>
+          <td><span class="badge bg-light text-dark border">{{ sesion.get_tipo_display }}</span></td>
+          <td>{{ sesion.fecha_hora|date:"d/m/Y H:i" }}</td>
+          <td>{% if sesion.enlace_reunion %}<a href="{{ sesion.enlace_reunion }}" target="_blank" rel="noopener">Abrir</a>{% else %}-{% endif %}</td>
+          <td>{{ sesion.observaciones|default:'-' }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="text-muted text-center py-2">Sin sesiones programadas.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if integracion.cronograma_sesiones %}
+  <p class="small text-muted mt-2 mb-0">{{ integracion.cronograma_sesiones|linebreaksbr }}</p>
+  {% endif %}
+</div>

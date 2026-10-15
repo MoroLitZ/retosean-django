@@ -1,6 +1,10 @@
+from decimal import Decimal
+
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.db.models import Prefetch
+from django.db.models import Case, DecimalField, Sum, When
+from django.db.models.functions import Coalesce
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -10,7 +14,7 @@ from apps.usuarios.roles import es_admin
 
 from .forms import GastoForm, PresupuestoForm
 from .models import Gasto, Presupuesto
-from .services import registrar_gasto, revisar_umbral
+from .services import ejecutar_gasto, exportar_excel, exportar_pdf, registrar_gasto, revisar_umbral
 
 
 def _puede_ver(user, reto):
@@ -21,22 +25,36 @@ def _puede_ver(user, reto):
 @solo_admin
 def panel(request):
     """Listado de presupuestos con su nivel de ejecucion."""
+    decimal_cero = Decimal("0.00")
     presupuestos = (
         Presupuesto.objects
         .select_related("reto", "reto__empresa")
-        .prefetch_related(Prefetch("gastos", queryset=Gasto.objects.only("id", "monto", "presupuesto_id")))
+        .annotate(
+            comprometido_anotado=Coalesce(
+                Sum(Case(When(gastos__estado=Gasto.COMPROMETIDO, then="gastos__monto")), output_field=DecimalField()),
+                decimal_cero,
+            ),
+            ejecutado_anotado=Coalesce(
+                Sum(Case(When(gastos__estado=Gasto.EJECUTADO, then="gastos__monto")), output_field=DecimalField()),
+                decimal_cero,
+            ),
+        )
         .order_by("-actualizado_en")
     )
     paginator = Paginator(presupuestos, 25)
     page_obj = paginator.get_page(request.GET.get("page"))
-    filas = [
-        {
+    filas = []
+    for p in page_obj:
+        asignado = p.comprometido_anotado + p.ejecutado_anotado
+        porcentaje = (asignado / p.monto_total * 100) if p.monto_total else decimal_cero
+        filas.append({
             "obj": p,
-            "porcentaje": p.porcentaje_ejecutado,
-            "en_alerta": p.porcentaje_ejecutado >= 80,
-        }
-        for p in page_obj
-    ]
+            "comprometido": p.comprometido_anotado,
+            "ejecutado": p.ejecutado_anotado,
+            "disponible": p.monto_total - asignado,
+            "porcentaje": porcentaje,
+            "en_alerta": porcentaje >= 80,
+        })
     retos_sin_presupuesto = Reto.objects.filter(
         presupuesto__isnull=True
     ).exclude(estado__in=["borrador", "cancelado"]).select_related("empresa")
@@ -128,3 +146,38 @@ def eliminar_gasto(request, pk):
     revisar_umbral(presupuesto)
     messages.success(request, "Gasto eliminado.")
     return redirect("presupuesto:detalle", reto_id=presupuesto.reto_id)
+
+
+@require_POST
+@solo_admin
+def marcar_ejecutado(request, pk):
+    """Pasa un gasto comprometido (reservado) a ejecutado (ya pagado)."""
+    gasto = get_object_or_404(Gasto.objects.select_related("presupuesto__reto"), pk=pk)
+    if gasto.estado != Gasto.COMPROMETIDO:
+        messages.info(request, "Ese gasto ya estaba ejecutado.")
+    else:
+        ejecutar_gasto(gasto)
+        messages.success(request, "Gasto marcado como ejecutado.")
+    return redirect("presupuesto:detalle", reto_id=gasto.presupuesto.reto_id)
+
+
+FORMATOS_EXPORTACION = {
+    "xlsx": (exportar_excel, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    "pdf": (exportar_pdf, "application/pdf"),
+}
+
+
+@rol_requerido("ADMIN", "EMPRESA")
+def exportar(request, reto_id, formato):
+    """Descarga el reporte de gastos del reto en Excel o PDF (HU07)."""
+    if formato not in FORMATOS_EXPORTACION:
+        raise Http404("Formato no soportado.")
+    reto = get_object_or_404(Reto.objects.select_related("empresa"), pk=reto_id)
+    if not _puede_ver(request.user, reto):
+        messages.error(request, "No tienes acceso al presupuesto de ese reto.")
+        return redirect("dashboard:panel")
+    presupuesto = get_object_or_404(Presupuesto, reto=reto)
+    generar, tipo = FORMATOS_EXPORTACION[formato]
+    respuesta = HttpResponse(generar(presupuesto), content_type=tipo)
+    respuesta["Content-Disposition"] = f'attachment; filename="presupuesto-reto-{reto.pk}.{formato}"'
+    return respuesta

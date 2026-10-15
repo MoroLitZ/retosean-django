@@ -14,7 +14,7 @@ from apps.retos.models import Reto
 from .catalogo import disponibles_para, obtener
 from .forms import ReporteForm
 from .models import ReporteGenerado
-from .services import construir_reporte
+from .services import construir_reporte, enviar_por_correo, vista_previa
 
 ROLES_CON_REPORTES = ("ADMIN", "PROFESOR")
 
@@ -39,6 +39,16 @@ def constructor(request):
             return redirect("reportes:constructor")
 
         columnas = definicion.columnas_por_clave(form.cleaned_data.get("columnas"))
+        accion = request.POST.get("accion", "descargar")
+        if accion == "previsualizar":
+            return render(request, "reportes/constructor.html", {
+                "titulo": "Generacion de Informes y Reportes",
+                "form": form,
+                "definiciones": disponibles_para(request.user),
+                "definicion_actual": definicion,
+                "vista_previa": vista_previa(definicion, columnas, form.filtros()),
+            })
+
         registro, contenido, nombre, tipo_mime = construir_reporte(
             usuario=request.user,
             definicion=definicion,
@@ -46,6 +56,18 @@ def constructor(request):
             formato=form.cleaned_data["formato"],
             filtros=form.filtros(),
         )
+        if accion == "enviar":
+            destinatarios = form.cleaned_data["destinatarios"] or [request.user.email]
+            if not any(destinatarios):
+                messages.error(request, "Indica a que correo enviarlo: tu cuenta no tiene correo registrado.")
+                return redirect("reportes:historial")
+            error = enviar_por_correo(registro, contenido, nombre, tipo_mime, destinatarios, definicion)
+            if error:
+                messages.error(request, f"El reporte se genero pero no se pudo enviar: {error}")
+            else:
+                messages.success(request, f"Reporte enviado a {', '.join(destinatarios)}.")
+            return redirect("reportes:historial")
+
         respuesta = HttpResponse(contenido, content_type=tipo_mime)
         respuesta["Content-Disposition"] = f'attachment; filename="{nombre}"'
         return respuesta

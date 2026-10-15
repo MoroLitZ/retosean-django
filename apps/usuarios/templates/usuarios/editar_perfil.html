@@ -101,6 +101,19 @@
               {{ form.sector_industrial }}
               {% for e in form.sector_industrial.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
             </div>
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Tipo de convocatoria</label>
+              {{ form.tipo_convocatoria }}
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Área responsable</label>
+              {{ form.area_responsable }}
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Sitio web</label>
+              {{ form.sitio_web }}
+              {% for e in form.sitio_web.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+            </div>
           </div>
         {% endif %}
 

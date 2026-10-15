@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}Permisos de {{ usuario_obj.username }}{% endblock %}
+{% block page_title %}Permisos especiales: {{ usuario_obj.get_full_name|default:usuario_obj.username }}{% endblock %}
+
+{% block content %}
+<div class="card-panel" style="max-width: 760px;">
+  <div class="card-panel-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-key me-2 text-muted"></i>{{ usuario_obj.username }} · {{ usuario_obj.get_rol_display }}</span>
+    <a href="{% url 'usuarios:lista_usuarios' %}" class="btn btn-sm btn-outline-secondary">Volver</a>
+  </div>
+  <div class="p-4">
+    <p class="small text-muted">
+      El rol define el acceso general. Estos permisos habilitan acciones puntuales adicionales
+      en un módulo y quedan registrados en el registro de actividad.
+    </p>
+    {% if usuario_obj.is_superuser %}
+      <div class="alert alert-info small">Es superusuario: ya tiene todos los permisos.</div>
+    {% endif %}
+    <form method="post">
+      {% csrf_token %}
+      {% for permiso in permisos %}
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" name="permisos" value="{{ permiso.codigo }}"
+               id="permiso-{{ forloop.counter }}" {% if permiso.asignado %}checked{% endif %}>
+        <label class="form-check-label" for="permiso-{{ forloop.counter }}">
+          <strong>{{ permiso.nombre }}</strong>
+          <div class="small text-muted">{{ permiso.descripcion }}</div>
+        </label>
+      </div>
+      {% endfor %}
+      <button class="btn btn-primary btn-sm">Guardar permisos</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

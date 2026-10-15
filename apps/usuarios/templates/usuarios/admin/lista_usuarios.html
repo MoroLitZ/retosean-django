@@ -96,6 +96,9 @@
               {% if u.pk == request.user.pk %}
                 <span class="badge bg-primary">Tu cuenta</span>
               {% else %}
+                <a href="{% url 'usuarios:permisos_usuario' u.pk %}" class="btn btn-sm btn-outline-secondary" title="Permisos especiales">
+                  <i class="bi bi-key"></i>
+                </a>
                 <form method="post" action="{% url 'usuarios:alternar_estado' u.pk %}" class="d-inline">
                   {% csrf_token %}
                   <button type="submit"

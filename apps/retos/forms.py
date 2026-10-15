@@ -1,7 +1,7 @@
 from django import forms
 
 from .models import Reto, EquipoRetoAcademico, SesionRetoAcademico
-from apps.seguimiento.models import IntegracionAcademica, SeguimientoReto
+from apps.seguimiento.models import IntegracionAcademica, ParticipanteIntegracion, SeguimientoReto
 from apps.unidades_estudio.models import UnidadEstudio
 from apps.usuarios.models import Usuario
 
@@ -60,6 +60,7 @@ class RetoForm(BootstrapModelForm):
         fields = [
             'tipo',
             'titulo',
+            'nombre_corto',
             'descripcion',
             'area',
             'nivel_academico',
@@ -71,16 +72,22 @@ class RetoForm(BootstrapModelForm):
             'fecha_limite_postulacion',
             'premios',
             'criterios_evaluacion',
+            'uso_esperado_resultados',
+            'insumos_inicio',
+            'insumos_cierre',
             'tiene_convenio_institucional',
             'archivos',
         ]
         widgets = {
-            'fecha_inicio_tentativa': forms.DateInput(attrs={'type': 'date'}),
-            'fecha_fin_tentativa': forms.DateInput(attrs={'type': 'date'}),
-            'fecha_limite_postulacion': forms.DateInput(attrs={'type': 'date'}),
+            'fecha_inicio_tentativa': forms.DateInput(attrs={'type': 'date'}, format="%Y-%m-%d"),
+            'fecha_fin_tentativa': forms.DateInput(attrs={'type': 'date'}, format="%Y-%m-%d"),
+            'fecha_limite_postulacion': forms.DateInput(attrs={'type': 'date'}, format="%Y-%m-%d"),
             'descripcion': forms.Textarea(attrs={'rows': 4}),
             'premios': forms.Textarea(attrs={'rows': 3}),
             'criterios_evaluacion': forms.Textarea(attrs={'rows': 4}),
+            'uso_esperado_resultados': forms.Textarea(attrs={'rows': 3}),
+            'insumos_inicio': forms.Textarea(attrs={'rows': 3}),
+            'insumos_cierre': forms.Textarea(attrs={'rows': 3}),
             'tiene_convenio_institucional': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
@@ -90,9 +97,10 @@ class RetoForm(BootstrapModelForm):
         if 'facultad' in self.fields:
             self.fields['facultad'].queryset = Facultad.objects.all().order_by('nombre')
         if 'programa' in self.fields:
-            self.fields['programa'].queryset = Programa.objects.filter(
-                facultad_id=self.instance.facultad_id
-            ).order_by('nombre') if self.instance and self.instance.facultad_id else Programa.objects.all().order_by('nombre')
+            programas = Programa.objects.select_related('facultad').order_by('nombre')
+            if self.instance and self.instance.facultad_id:
+                programas = programas.filter(facultad_id=self.instance.facultad_id)
+            self.fields['programa'].queryset = programas
         if 'ecosistema' in self.fields:
             self.fields['ecosistema'].queryset = Ecosistema.objects.all().order_by('nombre')
 
@@ -139,7 +147,7 @@ class SeguimientoRetoForm(BootstrapModelForm):
         model = SeguimientoReto
         fields = ['tipo_sesion', 'fecha_sesion', 'porcentaje_avance', 'avances', 'observaciones', 'acuerdos', 'archivos']
         widgets = {
-            'fecha_sesion': forms.DateInput(attrs={'type': 'date'}),
+            'fecha_sesion': forms.DateInput(attrs={'type': 'date'}, format="%Y-%m-%d"),
             'avances': forms.Textarea(attrs={'rows': 4}),
             'observaciones': forms.Textarea(attrs={'rows': 4}),
             'acuerdos': forms.Textarea(attrs={'rows': 4}),
@@ -190,9 +198,6 @@ class IntegracionAcademicaForm(BootstrapModelForm):
             'alcance',
             'entregable_esperado',
             'cronograma_sesiones',
-            'equipo_profesores',
-            'equipo_estudiantes',
-            'expertos_invitados',
             'requerimientos_empresa',
             'requerimientos_internos',
             'espacio_fisico',
@@ -200,10 +205,7 @@ class IntegracionAcademicaForm(BootstrapModelForm):
         widgets = {
             'descripcion': forms.Textarea(attrs={'rows': 4}),
             'alcance': forms.Textarea(attrs={'rows': 4}),
-            'cronograma_sesiones': forms.Textarea(attrs={'rows': 4}),
-            'equipo_profesores': forms.Textarea(attrs={'rows': 3}),
-            'equipo_estudiantes': forms.Textarea(attrs={'rows': 3}),
-            'expertos_invitados': forms.Textarea(attrs={'rows': 3}),
+            'cronograma_sesiones': forms.Textarea(attrs={'rows': 2}),
             'requerimientos_empresa': forms.Textarea(attrs={'rows': 3}),
             'requerimientos_internos': forms.Textarea(attrs={'rows': 3}),
         }
@@ -274,6 +276,61 @@ class IntegracionAcademicaForm(BootstrapModelForm):
             instance.save()
         return instance
 
+class ParticipanteIntegracionForm(forms.ModelForm):
+    """Fila del equipo (HU03). Los datos exigidos dependen del rol."""
+
+    class Meta:
+        model = ParticipanteIntegracion
+        fields = ['rol', 'nombre', 'documento', 'email', 'facultad', 'programa']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            css = 'form-select form-select-sm' if isinstance(field.widget, forms.Select) else 'form-control form-control-sm'
+            field.widget.attrs['class'] = css
+
+    def clean(self):
+        datos = super().clean()
+        rol = datos.get('rol')
+        faltan = {'documento': 'Indica la cedula o documento.', 'email': 'Indica el correo.'}
+        if rol == ParticipanteIntegracion.ESTUDIANTE:
+            faltan['programa'] = 'Indica el programa del estudiante.'
+        elif rol:
+            faltan['facultad'] = 'Indica la facultad u organizacion.'
+        for campo, mensaje in faltan.items():
+            if not (datos.get(campo) or '').strip():
+                self.add_error(campo, mensaje)
+        return datos
+
+
+class SesionIntegracionForm(forms.ModelForm):
+    """Fila del cronograma (HU03): inicio, seguimiento(s), preseleccion opcional y evaluacion."""
+
+    class Meta:
+        model = SesionRetoAcademico
+        fields = ['tipo', 'fecha_hora', 'enlace_reunion', 'observaciones']
+        widgets = {
+            'fecha_hora': forms.DateTimeInput(attrs={'type': 'datetime-local'}, format="%Y-%m-%dT%H:%M"),
+            'observaciones': forms.TextInput(),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            css = 'form-select form-select-sm' if isinstance(field.widget, forms.Select) else 'form-control form-control-sm'
+            field.widget.attrs['class'] = css
+
+
+ParticipantesFormSet = forms.inlineformset_factory(
+    IntegracionAcademica, ParticipanteIntegracion, form=ParticipanteIntegracionForm,
+    extra=1, can_delete=True,
+)
+SesionesFormSet = forms.inlineformset_factory(
+    IntegracionAcademica, SesionRetoAcademico, form=SesionIntegracionForm,
+    fk_name='integracion', extra=1, can_delete=True,
+)
+
+
 class RevisionIntegracionForm(forms.Form):
     accion = forms.ChoiceField(
         choices=[('aprobar', 'Aprobar'), ('rechazar', 'Rechazar')],
@@ -322,7 +379,7 @@ class SesionRetoAcademicoForm(BootstrapModelForm):
         model = SesionRetoAcademico
         fields = ['reto', 'tipo', 'fecha_hora', 'enlace_reunion', 'observaciones']
         widgets = {
-            'fecha_hora': forms.DateTimeInput(attrs={'type': 'datetime-local', 'class': 'form-control'}),
+            'fecha_hora': forms.DateTimeInput(attrs={'type': 'datetime-local', 'class': 'form-control'}, format="%Y-%m-%dT%H:%M"),
             'observaciones': forms.Textarea(attrs={'rows': 3, 'class': 'form-control'}),
         }
 
