@@ -543,14 +543,17 @@ class CicloDeVidaRetoTests(TestCase):
         self.assertEqual(reto.estado, "abierto")
         self.assertTrue(reto.historial_estados.filter(estado_anterior="aprobado", estado_nuevo="abierto").exists())
 
-    def test_explorador_solo_lista_retos_abiertos(self):
+    def test_explorador_lista_retos_aprobados_y_abiertos(self):
         aprobado = self._reto("aprobado", titulo="Solo aprobado")
         abierto = self._reto("abierto", titulo="Ya abierto")
         self.client.force_login(self.estudiante)
         response = self.client.get(reverse("academico:explorar_retos"))
         listados = {reto.pk for reto in response.context["retos"]}
         self.assertIn(abierto.pk, listados)
-        self.assertNotIn(aprobado.pk, listados)
+        self.assertIn(aprobado.pk, listados)
+
+        detalle = self.client.get(reverse("retos:detalle", args=[aprobado.pk]))
+        self.assertEqual(detalle.status_code, 200)
 
     def test_no_se_puede_postular_a_un_reto_que_no_esta_abierto(self):
         reto = self._reto("aprobado")

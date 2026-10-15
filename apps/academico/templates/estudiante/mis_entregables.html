@@ -41,6 +41,12 @@
                                     <span class="badge bg-dark mb-2">Entrega final</span>
                                 {% endif %}
 
+                                {% if entregable.equipo %}
+                                    <span class="badge bg-primary mb-2">Equipo: {{ entregable.equipo.nombre }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary mb-2">Entrega individual</span>
+                                {% endif %}
+
                                 {% if entregable.archivo %}
                                     <p class="mb-2 text-truncate">
                                         <a href="{{ entregable.archivo.url }}" target="_blank" class="text-primary small">

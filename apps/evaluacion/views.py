@@ -3,7 +3,7 @@ from decimal import Decimal, InvalidOperation
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.urls import reverse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -18,6 +18,7 @@ from apps.seguimiento.services import cambiar_estado
 from .services import MAQUINA_ENTREGABLE, marcar_en_revision
 
 from .models import CriterioRubrica, Entregable, Evaluacion, EvaluacionCriterio, Rubrica
+from apps.retos.models import Reto
 
 
 def _retos_profesor(usuario):
@@ -26,27 +27,42 @@ def _retos_profesor(usuario):
 
 @rol_requerido("PROFESOR", raise_exception=True)
 def panel_profesor(request):
-    # Al abrir el panel, el profesor "abre" sus entregables para revisarlos:
-    # los que siguen ENVIADO pasan a EN_REVISION. Es el único punto donde ese
-    # estado se alcanza; los KPIs y las plantillas ya lo contaban.
-    marcar_en_revision(
-        Entregable.objects.filter(reto_id__in=_retos_profesor(request.user)), request.user
-    )
+    retos = Reto.objects.filter(id__in=_retos_profesor(request.user)).select_related("empresa")
+    query = request.GET.get("q", "").strip()
+    estado = request.GET.get("estado", "")
+    if query:
+        retos = retos.filter(Q(titulo__icontains=query) | Q(empresa__username__icontains=query))
+    if estado:
+        retos = retos.filter(estado=estado)
+    retos = retos.annotate(
+        total_entregables=Count("entregables"),
+        pendientes=Count("entregables", filter=Q(entregables__estado__in=["ENVIADO", "EN_REVISION"])),
+        sin_publicar=Count("entregables", filter=Q(entregables__estado="CALIFICADO", entregables__calificacion_publicada=False)),
+    ).order_by("-actualizado_en")
+    return render(request, "evaluacion/panel_profesor.html", {
+        "retos": retos,
+        "query": query,
+        "estado": estado,
+        "estados": Reto.ESTADO_CHOICES,
+    })
 
-    entregables = Entregable.objects.filter(reto_id__in=_retos_profesor(request.user)).select_related(
+
+@rol_requerido("PROFESOR", raise_exception=True)
+def detalle_reto(request, reto_id):
+    if reto_id not in set(_retos_profesor(request.user)):
+        raise PermissionDenied("No integraste este reto.")
+    reto = get_object_or_404(Reto.objects.select_related("empresa"), pk=reto_id)
+    marcar_en_revision(Entregable.objects.filter(reto=reto), request.user)
+    entregables = Entregable.objects.filter(reto=reto).select_related(
         "reto", "estudiante", "equipo"
     ).prefetch_related("historial_comentarios__autor").order_by("estado", "-fecha_entrega")
-    rubricas = Rubrica.objects.filter(reto_id__in=_retos_profesor(request.user), activa=True).prefetch_related("criterios")
-    por_publicar = (
-        Entregable.objects.filter(
-            reto_id__in=_retos_profesor(request.user), estado="CALIFICADO", calificacion_publicada=False
-        )
-        .values("reto_id", "reto__titulo")
-        .annotate(total=Count("id"))
-        .order_by("reto__titulo")
-    )
-    return render(request, "evaluacion/panel_profesor.html", {
-        "entregables": entregables, "rubricas": rubricas, "por_publicar": por_publicar,
+    rubricas = Rubrica.objects.filter(reto=reto, activa=True).prefetch_related("criterios")
+    por_publicar = entregables.filter(estado="CALIFICADO", calificacion_publicada=False).count()
+    return render(request, "evaluacion/detalle_reto.html", {
+        "reto": reto,
+        "entregables": entregables,
+        "rubricas": rubricas,
+        "por_publicar": por_publicar,
     })
 
 
@@ -131,8 +147,9 @@ def publicar_calificaciones(request, reto_id):
         raise PermissionDenied("No integraste este reto.")
     pendientes = list(
         Entregable.objects.filter(reto_id=reto_id, estado="CALIFICADO", calificacion_publicada=False)
-        .select_related("reto", "estudiante")
+        .select_related("reto", "estudiante", "equipo")
     )
+    from apps.usuarios.models import Usuario
     ahora = timezone.now()
     for entregable in pendientes:
         entregable.calificacion_publicada = True
@@ -146,8 +163,14 @@ def publicar_calificaciones(request, reto_id):
         )
         if entregable.comentario_profesor:
             mensaje += chr(10) + f'Retroalimentacion: {entregable.comentario_profesor}'
-        notificar(
-            entregable.estudiante, 'ENTREGABLE_CALIFICADO',
+        destinatarios = [entregable.estudiante]
+        if entregable.equipo_id:
+            destinatarios.extend(
+                Usuario.objects.filter(equipos__equipo_id=entregable.equipo_id).distinct()
+            )
+        from apps.notificaciones.services import notificar_muchos
+        notificar_muchos(
+            destinatarios, 'ENTREGABLE_CALIFICADO',
             mensaje=mensaje,
             link=reverse('participaciones:mis_entregables_reto', kwargs={'reto_id': entregable.reto_id}),
             clave_dedupe=f'entregable:{entregable.pk}:publicado:{ahora:%Y%m%d%H%M%S}',
@@ -184,7 +207,13 @@ def comentario(request, pk):
     entregable = get_object_or_404(Entregable.objects.select_related("reto"), pk=pk)
     rol = request.user.rol
     autorizado = (
-        (rol == "ESTUDIANTE" and entregable.estudiante_id == request.user.pk)
+        (
+            rol == "ESTUDIANTE"
+            and (
+                entregable.estudiante_id == request.user.pk
+                or entregable.equipo_id in request.user.equipos.values_list("equipo_id", flat=True)
+            )
+        )
         or (
             rol == "PROFESOR"
             and IntegracionAcademica.objects.filter(reto_id=entregable.reto_id, profesor=request.user).exists()

@@ -125,6 +125,28 @@ class BandejaTests(TestCase):
         self.assertTrue(self.notificacion.leida)
         self.assertIsNotNone(self.notificacion.leida_en)
 
+    def test_postulacion_nueva_antigua_redirige_a_postulaciones_empresa(self):
+        empresa = Usuario.objects.create_user(
+            username="empresa-lectora", password="x", rol="EMPRESA"
+        )
+        notificacion = Notificacion.objects.create(
+            usuario=empresa,
+            evento="POSTULACION_NUEVA",
+            titulo="Nueva postulacion recibida",
+            mensaje="Un estudiante se postulo.",
+            link="/retos/23/",
+        )
+        self.client.force_login(empresa)
+
+        response = self.client.post(
+            reverse("notificaciones:marcar_leida", args=[notificacion.pk])
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], reverse("empresas:postulaciones"))
+        notificacion.refresh_from_db()
+        self.assertEqual(notificacion.link, reverse("empresas:postulaciones"))
+
     def test_no_se_puede_leer_la_notificacion_de_otro(self):
         otro = Usuario.objects.create_user(username="otro", password="x", rol="ESTUDIANTE")
         self.client.force_login(otro)

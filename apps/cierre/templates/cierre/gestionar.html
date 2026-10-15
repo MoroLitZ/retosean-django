@@ -4,18 +4,55 @@
 {% block page_title %}Cierre formal del reto{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h2 class="page-title">{{ reto.titulo }}</h2>
-        <p class="page-subtitle">Gestión de evidencias, documentación, reconocimientos y emisión de certificados.</p>
+<style>
+    .closure-page { --closure-ink:#123047; --closure-blue:#19466b; --closure-soft:#eef5fa; --closure-line:rgba(18,48,71,.12); }
+    .closure-hero { position:relative; overflow:hidden; padding:2rem 2.4rem; color:#fff; background:linear-gradient(120deg,#123047,#1d567b); border-radius:15px; box-shadow:0 16px 35px rgba(18,48,71,.16); }
+    .closure-hero::after { content:''; position:absolute; right:-45px; top:-120px; width:330px; height:330px; border:1px solid rgba(255,255,255,.18); border-radius:50%; box-shadow:0 0 0 25px rgba(255,255,255,.04),0 0 0 52px rgba(255,255,255,.03); }
+    .closure-hero-content { position:relative; z-index:1; }
+    .closure-kicker { color:#9ed5e8; font-size:.7rem; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
+    .closure-hero h1 { margin:.35rem 0 .45rem; color:#fff; font-family:'Poppins',sans-serif; font-size:clamp(1.6rem,3vw,2.35rem); letter-spacing:0; }
+    .closure-hero p { margin:0; color:rgba(255,255,255,.7); }
+    .closure-status { position:relative; z-index:1; display:inline-flex; align-items:center; gap:.4rem; padding:.55rem .9rem; color:#103b29; background:#bce9ce; border-radius:999px; font-size:.72rem; font-weight:800; }
+    .closure-metrics { display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; margin:1rem 0 1.3rem; }
+    .closure-metric { display:flex; align-items:center; gap:.8rem; padding:1rem 1.1rem; background:#fff; border:1px solid var(--closure-line); border-radius:11px; box-shadow:0 7px 18px rgba(18,48,71,.05); }
+    .closure-metric i { display:grid; width:36px; height:36px; place-items:center; color:#2170a0; background:var(--closure-soft); border-radius:10px; font-size:1.05rem; }
+    .closure-metric strong { display:block; color:var(--closure-ink); font-family:'Poppins',sans-serif; font-size:1.25rem; line-height:1; }
+    .closure-metric span { display:block; margin-top:.25rem; color:#718694; font-size:.72rem; }
+    .closure-page .card-panel { overflow:hidden; border:1px solid var(--closure-line); border-radius:12px; box-shadow:0 7px 20px rgba(18,48,71,.045); }
+    .closure-page .card-panel-header { color:var(--closure-ink); background:#fff; border-bottom:1px solid var(--closure-line); font-weight:700; }
+    .closure-page .card-panel-header i { color:#2475a4 !important; }
+    .closure-page .table { margin-bottom:0; }
+    .closure-page .table thead th { color:#718694; border-bottom-width:1px; font-size:.67rem; letter-spacing:.06em; text-transform:uppercase; }
+    .closure-page .table tbody tr:last-child td { border-bottom:0; }
+    .closure-page .form-control, .closure-page .form-select { border-color:#d7e1e7; border-radius:7px; }
+    .closure-page .form-control:focus, .closure-page .form-select:focus { border-color:#2475a4; box-shadow:0 0 0 .2rem rgba(36,117,164,.12); }
+    .closure-page .closure-form p { display:grid; grid-template-columns:145px minmax(0,1fr); align-items:start; gap:.7rem 1rem; margin:0 0 1rem; }
+    .closure-page .closure-form p > label { padding-top:.55rem; color:#526b79; font-size:.76rem; font-weight:700; }
+    .closure-page .closure-form p > input:not([type="checkbox"]), .closure-page .closure-form p > select, .closure-page .closure-form p > textarea { width:100%; min-width:0; padding:.65rem .75rem; color:#183544; background:#fff; border:1px solid #d7e1e7; border-radius:7px; font-size:.86rem; }
+    .closure-page .closure-form p > textarea { min-height:108px; resize:vertical; line-height:1.45; }
+    .closure-page .closure-form-main p > textarea { min-height:116px; }
+    .closure-page .closure-form p > input[type="file"] { padding:.45rem .55rem; font-size:.78rem; }
+    .closure-page .closure-form p > .helptext { grid-column:2; margin-top:-.5rem; color:#789096; font-size:.7rem; }
+    .closure-page .closure-form-compact p { grid-template-columns:1fr; gap:.35rem; }
+    .closure-page .closure-form-compact p > label { padding-top:0; }
+    .closure-page .closure-form-compact p > textarea { min-height:85px; }
+    .closure-page .closure-form .errorlist { grid-column:2; margin:.25rem 0 0; padding:0; color:#b42318; font-size:.72rem; list-style:none; }
+    .closure-page .formal-card { border:1px solid #2475a4; }
+    .closure-page .formal-card .card-panel-header { color:#fff; background:#1877da; border:0; }
+    @media (max-width:700px) { .closure-hero { padding:1.5rem; } .closure-metrics { grid-template-columns:1fr; } }
+</style>
+<div class="closure-page">
+<section class="closure-hero mb-3">
+    <div class="closure-hero-content d-flex flex-wrap justify-content-between align-items-end gap-3">
+        <div><div class="closure-kicker">Cierre y formalización</div><h1>{{ reto.titulo }}</h1><p>Evidencias, acta, reconocimientos y certificados en un solo espacio.</p></div>
+        <span class="closure-status"><i class="bi bi-flag-fill"></i>{{ reto.get_estado_display|upper }}</span>
     </div>
-    <div>
-        <span class="badge {% if reto.estado == 'finalizado' %}bg-success{% else %}bg-warning text-dark{% endif %} fs-6 px-3 py-2">
-            <i class="bi bi-flag-fill me-1"></i>{{ reto.get_estado_display|upper }}
-        </span>
-    </div>
+</section>
+<div class="closure-metrics">
+    <div class="closure-metric"><i class="bi bi-file-earmark-check"></i><div><strong>{{ entregables_estudiantes|length }}</strong><span>Entregables recibidos</span></div></div>
+    <div class="closure-metric"><i class="bi bi-award"></i><div><strong>{{ cierre.reconocimientos.all|length }}</strong><span>Reconocimientos</span></div></div>
+    <div class="closure-metric"><i class="bi bi-paperclip"></i><div><strong>{{ cierre.entregables_finales.all|length }}</strong><span>Anexos finales</span></div></div>
 </div>
-
 <div class="row g-4">
     <!-- Columna Izquierda: Entregables del Curso y Agenda -->
     <div class="col-lg-7">
@@ -85,7 +122,7 @@
                 <i class="bi bi-journal-text me-2 text-primary"></i>Logística y Acta de Cierre
             </div>
             <div class="p-4">
-                <form method="post" enctype="multipart/form-data">
+                <form method="post" enctype="multipart/form-data" class="closure-form closure-form-main">
                     {% csrf_token %}
                     <input type="hidden" name="accion" value="guardar">
                     <h6 class="fw-bold text-primary mb-3">1. Logística y Agenda de Cierre</h6>
@@ -110,7 +147,7 @@
                 <span><i class="bi bi-cloud-upload me-2 text-primary"></i>Archivos y Anexos Finales del Cierre</span>
             </div>
             <div class="p-4">
-                <form method="post" enctype="multipart/form-data" action="{% url 'cierre:agregar_entregable' reto.pk %}" class="mb-3">
+                <form method="post" enctype="multipart/form-data" action="{% url 'cierre:agregar_entregable' reto.pk %}" class="closure-form closure-form-compact mb-3">
                     {% csrf_token %}
                     {{ entregable_form.as_p }}
                     <button class="btn btn-outline-primary btn-sm mt-2" type="submit">
@@ -188,7 +225,7 @@
                 <i class="bi bi-trophy me-2 text-warning"></i>Premios y Reconocimientos
             </div>
             <div class="p-4">
-                <form method="post" action="{% url 'cierre:agregar_reconocimiento' reto.pk %}" class="mb-3">
+                <form method="post" action="{% url 'cierre:agregar_reconocimiento' reto.pk %}" class="closure-form closure-form-compact mb-3">
                     {% csrf_token %}
                     {{ reconocimiento_form.as_p }}
                     <button class="btn btn-outline-primary btn-sm mt-2" type="submit">
@@ -209,7 +246,7 @@
         </div>
 
         <!-- Formalización y Emisión de Certificados -->
-        <div class="card-panel border-primary">
+        <div class="card-panel formal-card">
             <div class="card-panel-header bg-primary text-white">
                 <i class="bi bi-patch-check me-2"></i>Formalización y Certificados
             </div>
@@ -254,5 +291,6 @@
         </div>
 
     </div>
+</div>
 </div>
 {% endblock %}
