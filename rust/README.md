@@ -167,6 +167,41 @@ rows or Django tables. The database role must have CREATE privilege on the Rust
 database. Tests use a deliberately low-cost password fixture only in their
 isolated schema; real account creation uses 1,000,000 PBKDF2 iterations.
 
+## Load test
+
+`examples/stress.rs` is a read-only load generator with no extra dependencies.
+Start a release server on a spare port, then ramp the concurrency:
+
+```text
+$env:RUST_BIND='127.0.0.1:8082'; cargo run --release -- serve
+cargo run --release --example stress -- 127.0.0.1:8082 15 1,10,50,100,250,500,1000,2000
+```
+
+It logs in once per demo role (each login counts toward the 10-attempts-per-10-minutes
+throttle), then each worker keeps a keep-alive connection and loops over the
+dashboard, record lists, a record detail, search, static assets and `/health`,
+skipping endpoints a role may not open. It reports throughput, latency
+percentiles and any non-2xx response by status and path.
+
+Reference run (release build, 24-core Windows desktop, PostgreSQL 18 on the same
+machine, demo data, pool of 10 connections):
+
+| Concurrent | req/s | p50 ms | p95 ms | p99 ms | errors |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 981 | 0.9 | 2.0 | 2.4 | 0 |
+| 10 | 8,501 | 1.0 | 2.7 | 3.4 | 0 |
+| 100 | 7,803 | 12.3 | 27.5 | 42.2 | 0 |
+| 500 | 7,067 | 67.1 | 144.9 | 231.3 | 0 |
+| 1000 | 7,069 | 135.6 | 285.0 | 457.8 | 0 |
+| 2000 | 6,730 | 284.5 | 589.7 | 970.3 | 150 connect errors |
+
+Throughput saturates near 8,500 req/s from about 10 concurrent requests; beyond
+that, latency grows with the queue while no request fails until 2,000
+connections. Server memory stays under 250 MB. A login takes about 100 ms
+(1,000,000 PBKDF2 iterations, 4 concurrent hashing slots), so logins top out
+around 40 per second. A 40-connection pool raised high-concurrency throughput
+by about 25%, so the database round trips per request are the main cost.
+
 ## Docker
 
 From `rust/`, using the separate Compose stack:
