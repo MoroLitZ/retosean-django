@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -26,6 +26,8 @@ from .forms import (
     RevisionRetoForm,
     SeguimientoRetoForm,
     EquipoRetoAcademicoForm, 
+    ParticipantesFormSet,
+    SesionesFormSet,
     SesionRetoAcademicoForm
 )
 from .models import EquipoRetoAcademico, HistorialEstadoReto, Reto, RetoArchivo
@@ -344,20 +346,80 @@ def mis_integraciones(request):
     return render(request, 'retos/mis_integraciones.html', {'integraciones': integraciones})
 
 
+def _formsets_integracion(request, integracion):
+    """Equipo y cronograma estructurados de la integracion (HU03)."""
+    datos = request.POST if request.method == 'POST' else None
+    return (
+        ParticipantesFormSet(datos, instance=integracion, prefix='participantes'),
+        SesionesFormSet(datos, instance=integracion, prefix='sesiones'),
+    )
+
+
+def _formsets_en_pantalla(participantes, sesiones):
+    return [
+        (participantes, '4. Equipo',
+         'Profesores (cedula, correo, facultad), estudiantes (documento, correo, programa) '
+         'y expertos invitados opcionales. Se requiere al menos un profesor.'),
+        (sesiones, '5. Cronograma de sesiones',
+         'Inicio, seguimiento(s), preseleccion opcional y evaluacion/reconocimiento, con fecha.'),
+    ]
+
+
+def _guardar_formsets(integracion, participantes, sesiones):
+    participantes.instance = integracion
+    participantes.save()
+    sesiones.instance = integracion
+    for sesion in sesiones.save(commit=False):
+        sesion.reto = integracion.reto
+        sesion.save()
+    for sesion in sesiones.deleted_objects:
+        sesion.delete()
+    if integracion.estado == 'publicada':
+        notificar_participantes_integracion(integracion)
+
+
+def notificar_participantes_integracion(integracion):
+    """Avisa una sola vez a cada estudiante con cuenta en la plataforma (HU03)."""
+    from apps.seguimiento.models import ParticipanteIntegracion
+
+    pendientes = list(integracion.participantes.filter(
+        rol=ParticipanteIntegracion.ESTUDIANTE, usuario__isnull=False, notificado_en__isnull=True,
+    ).select_related('usuario'))
+    if not pendientes:
+        return
+    notificar_muchos(
+        [p.usuario for p in pendientes], 'EQUIPO_ASIGNADO',
+        mensaje=(
+            f'Fuiste asignado al reto "{integracion.reto.titulo}" en el curso de '
+            f'{integracion.profesor.get_full_name() or integracion.profesor.username}. '
+            'Revisa el cronograma de sesiones.'
+        ),
+        link=reverse('retos:mis_equipos_estudiante'),
+        clave_dedupe=f'integracion:{integracion.pk}:asignado',
+    )
+    ParticipanteIntegracion.objects.filter(pk__in=[p.pk for p in pendientes]).update(notificado_en=timezone.now())
+
+
 @solo_profesor
 def crear_integracion(request):
     form = IntegracionAcademicaForm(request.POST or None)
-    if request.method == 'POST' and form.is_valid():
-        integracion = form.save(commit=False)
-        integracion.profesor = request.user
-        integracion.estado = 'borrador'
-        integracion.save()
-        registrar_estado_inicial(integracion, '', 'borrador', request.user, 'Integracion creada.')
+    participantes, sesiones = _formsets_integracion(request, IntegracionAcademica())
+    if request.method == 'POST' and form.is_valid() and participantes.is_valid() and sesiones.is_valid():
+        with transaction.atomic():
+            integracion = form.save(commit=False)
+            integracion.profesor = request.user
+            integracion.estado = 'borrador'
+            integracion.save()
+            _guardar_formsets(integracion, participantes, sesiones)
+            registrar_estado_inicial(integracion, '', 'borrador', request.user, 'Integracion creada.')
         messages.success(request, 'Integracion academica guardada como borrador.')
         if request.POST.get('accion') == 'enviar':
             return _enviar_integracion(request, integracion)
         return redirect('retos:mis_integraciones')
-    return render(request, 'retos/integracion_form.html', {'form': form, 'titulo': 'Crear integracion academica'})
+    return render(request, 'retos/integracion_form.html', {
+        'form': form, 'formsets': _formsets_en_pantalla(participantes, sesiones),
+        'titulo': 'Crear integracion academica',
+    })
 
 
 @solo_profesor
@@ -367,8 +429,11 @@ def editar_integracion(request, pk):
         messages.error(request, 'Esta integracion no puede editarse desde su estado actual.')
         return redirect('retos:detalle_integracion', pk=integracion.pk)
     form = IntegracionAcademicaForm(request.POST or None, instance=integracion)
-    if request.method == 'POST' and form.is_valid():
-        integracion = form.save()
+    participantes, sesiones = _formsets_integracion(request, integracion)
+    if request.method == 'POST' and form.is_valid() and participantes.is_valid() and sesiones.is_valid():
+        with transaction.atomic():
+            integracion = form.save()
+            _guardar_formsets(integracion, participantes, sesiones)
         if integracion.estado == 'rechazada':
             integracion.comentarios_revision = ''
             cambiar_estado_entidad(
@@ -382,6 +447,7 @@ def editar_integracion(request, pk):
         return redirect('retos:detalle_integracion', pk=integracion.pk)
     return render(request, 'retos/integracion_form.html', {
         'form': form,
+        'formsets': _formsets_en_pantalla(participantes, sesiones),
         'integracion': integracion,
         'titulo': 'Editar integracion academica',
     })
@@ -448,11 +514,11 @@ def detalle_integracion(request, pk):
     )
     if request.user.rol == 'PROFESOR' and integracion.profesor_id != request.user.pk:
         raise PermissionDenied('No tienes acceso a esta integracion.')
-    sesiones = integracion.reto.sesiones_academicas.all()
     equipos = integracion.reto.equipos_academicos.prefetch_related('estudiantes')
     return render(request, 'retos/detalle_integracion.html', {
         'integracion': integracion,
-        'sesiones': sesiones,
+        'sesiones': integracion.sesiones.all(),
+        'participantes': integracion.participantes.all(),
         'equipos': equipos,
     })
 
@@ -471,6 +537,7 @@ def publicar_integracion(request, pk):
             integracion, MAQUINA_INTEGRACION, 'publicada', request.user,
             'Integracion publicada para los estudiantes.',
         )
+        notificar_participantes_integracion(integracion)
         # Aprobado -> Abierto: con la configuracion academica aprobada y
         # publicada, el reto queda visible para los estudiantes (HU10).
         reto = integracion.reto
@@ -649,6 +716,7 @@ def registrar_sesion_academica(request, pk):
         if form.is_valid():
             sesion = form.save(commit=False)
             sesion.reto = integracion.reto
+            sesion.integracion = integracion
             sesion.save()
             messages.success(request, 'Sesión académica registrada en el cronograma con éxito.')
             return redirect('retos:detalle_integracion', pk=integracion.pk)
@@ -712,5 +780,12 @@ def eliminar_equipo_academico(request, pk):
 @rol_requerido('ESTUDIANTE')
 def mis_equipos_estudiante(request):
     """Muestra los equipos académicos y retos en los que el estudiante está inscrito."""
+    from apps.retos.models import SesionRetoAcademico
+
     equipos = EquipoRetoAcademico.objects.filter(estudiantes=request.user).select_related('reto')
-    return render(request, 'retos/mis_equipos_estudiante.html', {'equipos': equipos})
+    # HU03: el cronograma es visible para todas las partes, incluido el estudiante asignado.
+    sesiones = SesionRetoAcademico.objects.filter(
+        Q(integracion__participantes__usuario=request.user) | Q(reto__equipos_academicos__estudiantes=request.user),
+        integracion__estado='publicada',
+    ).select_related('reto').distinct().order_by('fecha_hora')
+    return render(request, 'retos/mis_equipos_estudiante.html', {'equipos': equipos, 'sesiones': sesiones})

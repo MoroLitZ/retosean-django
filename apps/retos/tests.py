@@ -192,7 +192,9 @@ class FlujoIntegracionAcademicaTests(TestCase):
             ciclo="Quinto",
         )
 
-    def _post_integracion(self):
+    def _post_integracion(self, **formsets):
+        from apps.seguimiento.testing import datos_formsets
+
         return self.client.post(
             reverse("retos:crear_integracion"),
             {
@@ -205,13 +207,11 @@ class FlujoIntegracionAcademicaTests(TestCase):
                 "alcance": "Dos unidades de estudio y una hackaton interna.",
                 "entregable_esperado": "Prototipo funcional",
                 "cronograma_sesiones": "Semana 1: kickoff; Semana 4: cierre.",
-                "equipo_profesores": "Profesor A, Profesor B",
-                "equipo_estudiantes": "10 estudiantes de quinto semestre",
-                "expertos_invitados": "Un mentor de la empresa",
                 "requerimientos_empresa": "Datos de mercado",
                 "requerimientos_internos": "Sala de computo",
                 "espacio_fisico": "Auditorio principal",
                 "accion": "guardar",
+                **datos_formsets(**formsets),
             },
         )
 
@@ -432,6 +432,9 @@ class NotificacionPostulacionDocenteTests(TestCase):
             entregable_esperado="Entregable",
             cronograma_sesiones="Cronograma",
         )
+        from apps.seguimiento.testing import completar_equipo_y_cronograma
+
+        completar_equipo_y_cronograma(self.integracion)
 
     def test_enviar_postulacion_docente_notifica_a_empresa_y_admin(self):
         self.client.force_login(self.profesor)
@@ -635,3 +638,108 @@ class FechasEnFormulariosTests(TestCase):
             reto=reto, fecha_hora=timezone.make_aware(datetime(2026, 10, 9, 8, 1)),
         )
         self.assertIn('value="2026-10-09T08:01"', str(AgendaCierreForm(instance=agenda)["fecha_hora"]))
+
+
+class EquipoYCronogramaHU03Tests(TestCase):
+    """HU03: equipo estructurado (cedula, correo, facultad/programa) y cronograma con fechas."""
+
+    def setUp(self):
+        from apps.academico.models import Ecosistema, Facultad, Programa
+        from apps.unidades_estudio.models import UnidadEstudio
+
+        self.empresa = Usuario.objects.create_user(username="emp-hu03", password="x", rol="EMPRESA")
+        self.profesor = Usuario.objects.create_user(username="prof-hu03", password="x", rol="PROFESOR")
+        self.estudiante = Usuario.objects.create_user(
+            username="est-hu03", password="x", rol="ESTUDIANTE", email="Est.HU03@ean.edu.co"
+        )
+        self.reto = Reto.objects.create(empresa=self.empresa, titulo="Reto HU03", estado="aprobado")
+        facultad = Facultad.objects.create(nombre="Ingenieria")
+        Ecosistema.objects.create(nombre="Eco")
+        self.unidad = UnidadEstudio.objects.create(
+            codigo="U1", nombre="Unidad", programa=Programa.objects.create(nombre="Sistemas", facultad=facultad),
+            periodo="2026-1", ciclo="1",
+        )
+        self.client.force_login(self.profesor)
+
+    def _crear(self, accion="guardar", **formsets):
+        from apps.seguimiento.testing import datos_formsets
+
+        return self.client.post(reverse("retos:crear_integracion"), {
+            "reto": self.reto.pk, "facultad": "Ingenieria", "nivel_formacion": "Pregrado",
+            "unidad_estudio": self.unidad.pk, "ecosistema": "Eco", "descripcion": "d", "alcance": "a",
+            "entregable_esperado": "Prototipo", "accion": accion, **datos_formsets(**formsets),
+        })
+
+    def test_guarda_equipo_y_cronograma_y_enlaza_cuentas_por_correo(self):
+        from apps.seguimiento.models import IntegracionAcademica
+
+        self._crear(participantes=[
+            {"rol": "PROFESOR", "nombre": "Prof", "documento": "1", "email": "p@ean.edu.co", "facultad": "Ing"},
+            {"rol": "ESTUDIANTE", "nombre": "Est", "documento": "2", "email": "est.hu03@ean.edu.co", "programa": "Sis"},
+            {"rol": "EXPERTO", "nombre": "Mentor", "documento": "3", "email": "m@acme.co", "facultad": "ACME"},
+        ])
+        integracion = IntegracionAcademica.objects.get(profesor=self.profesor)
+        self.assertEqual(integracion.participantes.count(), 3)
+        self.assertEqual(integracion.participantes.get(rol="ESTUDIANTE").usuario, self.estudiante)
+        self.assertIsNone(integracion.participantes.get(rol="EXPERTO").usuario)
+        self.assertEqual(sorted(integracion.sesiones.values_list("tipo", flat=True)), ["evaluacion", "inicio", "seguimiento"])
+        self.assertTrue(all(s.reto_id == self.reto.pk for s in integracion.sesiones.all()))
+
+    def test_cada_rol_exige_sus_datos(self):
+        from apps.seguimiento.models import IntegracionAcademica
+
+        respuesta = self._crear(participantes=[{"rol": "ESTUDIANTE", "nombre": "Sin datos"}])
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertFalse(IntegracionAcademica.objects.exists())
+        errores = respuesta.context["formsets"][0][0].forms[0].errors
+        self.assertIn("documento", errores)
+        self.assertIn("email", errores)
+        self.assertIn("programa", errores)
+
+    def test_no_se_envia_sin_profesor_ni_sesiones_obligatorias(self):
+        from apps.seguimiento.models import IntegracionAcademica
+
+        self._crear(accion="enviar", participantes=[], sesiones=[{"tipo": "inicio", "fecha_hora": "2026-12-01T10:00"}])
+        integracion = IntegracionAcademica.objects.get(profesor=self.profesor)
+        self.assertEqual(integracion.estado, "borrador")
+        faltantes = integracion.campos_faltantes_para_revision()
+        self.assertIn("al menos un profesor en el equipo", faltantes)
+        self.assertIn("al menos una sesion de seguimiento", faltantes)
+        self.assertIn("una sesion de evaluacion", faltantes)
+        self.assertNotIn("una sesion de inicio", faltantes)
+
+    def test_con_equipo_y_cronograma_completos_se_envia(self):
+        from apps.seguimiento.models import IntegracionAcademica
+
+        self._crear(accion="enviar")
+        self.assertEqual(IntegracionAcademica.objects.get(profesor=self.profesor).estado, "en_revision")
+
+    def test_publicar_notifica_una_vez_a_los_estudiantes_y_muestra_el_cronograma(self):
+        from apps.notificaciones.models import Notificacion
+        from apps.seguimiento.models import IntegracionAcademica, ParticipanteIntegracion
+        from apps.seguimiento.testing import completar_equipo_y_cronograma
+
+        integracion = IntegracionAcademica.objects.create(
+            reto=self.reto, profesor=self.profesor, estado="aprobada", facultad="F", programa_academico="P",
+            nivel_formacion="Pregrado", descripcion="d", alcance="a", entregable_esperado="e",
+        )
+        completar_equipo_y_cronograma(integracion)
+        ParticipanteIntegracion.objects.create(
+            integracion=integracion, rol="ESTUDIANTE", nombre="Est", documento="2",
+            email="est.hu03@ean.edu.co", programa="Sis",
+        )
+        self.client.post(reverse("retos:publicar_integracion", args=[integracion.pk]))
+        integracion.refresh_from_db()
+        self.assertEqual(integracion.estado, "publicada")
+        avisos = Notificacion.objects.filter(usuario=self.estudiante, evento="EQUIPO_ASIGNADO")
+        self.assertEqual(avisos.count(), 1)
+
+        # Editar de nuevo no vuelve a notificar al mismo estudiante.
+        from apps.retos.views import notificar_participantes_integracion
+
+        notificar_participantes_integracion(integracion)
+        self.assertEqual(avisos.count(), 1)
+
+        self.client.force_login(self.estudiante)
+        pagina = self.client.get(reverse("retos:mis_equipos_estudiante"))
+        self.assertEqual(len(pagina.context["sesiones"]), 3)

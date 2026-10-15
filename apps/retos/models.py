@@ -284,6 +284,11 @@ class SesionRetoAcademico(models.Model): # <--- Cambiamos el nombre para que no 
     ]
     
     reto = models.ForeignKey(Reto, on_delete=models.CASCADE, related_name='sesiones_academicas') # <--- related_name único
+    # HU03: el cronograma es de la integracion academica que lo define.
+    integracion = models.ForeignKey(
+        'seguimiento.IntegracionAcademica', on_delete=models.CASCADE,
+        null=True, blank=True, related_name='sesiones',
+    )
     tipo = models.CharField(max_length=20, choices=TIPO_SESION_CHOICES)
     fecha_hora = models.DateTimeField()
     enlace_reunion = models.URLField(blank=True, null=True)

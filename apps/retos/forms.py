@@ -1,7 +1,7 @@
 from django import forms
 
 from .models import Reto, EquipoRetoAcademico, SesionRetoAcademico
-from apps.seguimiento.models import IntegracionAcademica, SeguimientoReto
+from apps.seguimiento.models import IntegracionAcademica, ParticipanteIntegracion, SeguimientoReto
 from apps.unidades_estudio.models import UnidadEstudio
 from apps.usuarios.models import Usuario
 
@@ -198,9 +198,6 @@ class IntegracionAcademicaForm(BootstrapModelForm):
             'alcance',
             'entregable_esperado',
             'cronograma_sesiones',
-            'equipo_profesores',
-            'equipo_estudiantes',
-            'expertos_invitados',
             'requerimientos_empresa',
             'requerimientos_internos',
             'espacio_fisico',
@@ -208,10 +205,7 @@ class IntegracionAcademicaForm(BootstrapModelForm):
         widgets = {
             'descripcion': forms.Textarea(attrs={'rows': 4}),
             'alcance': forms.Textarea(attrs={'rows': 4}),
-            'cronograma_sesiones': forms.Textarea(attrs={'rows': 4}),
-            'equipo_profesores': forms.Textarea(attrs={'rows': 3}),
-            'equipo_estudiantes': forms.Textarea(attrs={'rows': 3}),
-            'expertos_invitados': forms.Textarea(attrs={'rows': 3}),
+            'cronograma_sesiones': forms.Textarea(attrs={'rows': 2}),
             'requerimientos_empresa': forms.Textarea(attrs={'rows': 3}),
             'requerimientos_internos': forms.Textarea(attrs={'rows': 3}),
         }
@@ -281,6 +275,61 @@ class IntegracionAcademicaForm(BootstrapModelForm):
         if commit:
             instance.save()
         return instance
+
+class ParticipanteIntegracionForm(forms.ModelForm):
+    """Fila del equipo (HU03). Los datos exigidos dependen del rol."""
+
+    class Meta:
+        model = ParticipanteIntegracion
+        fields = ['rol', 'nombre', 'documento', 'email', 'facultad', 'programa']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            css = 'form-select form-select-sm' if isinstance(field.widget, forms.Select) else 'form-control form-control-sm'
+            field.widget.attrs['class'] = css
+
+    def clean(self):
+        datos = super().clean()
+        rol = datos.get('rol')
+        faltan = {'documento': 'Indica la cedula o documento.', 'email': 'Indica el correo.'}
+        if rol == ParticipanteIntegracion.ESTUDIANTE:
+            faltan['programa'] = 'Indica el programa del estudiante.'
+        elif rol:
+            faltan['facultad'] = 'Indica la facultad u organizacion.'
+        for campo, mensaje in faltan.items():
+            if not (datos.get(campo) or '').strip():
+                self.add_error(campo, mensaje)
+        return datos
+
+
+class SesionIntegracionForm(forms.ModelForm):
+    """Fila del cronograma (HU03): inicio, seguimiento(s), preseleccion opcional y evaluacion."""
+
+    class Meta:
+        model = SesionRetoAcademico
+        fields = ['tipo', 'fecha_hora', 'enlace_reunion', 'observaciones']
+        widgets = {
+            'fecha_hora': forms.DateTimeInput(attrs={'type': 'datetime-local'}, format="%Y-%m-%dT%H:%M"),
+            'observaciones': forms.TextInput(),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            css = 'form-select form-select-sm' if isinstance(field.widget, forms.Select) else 'form-control form-control-sm'
+            field.widget.attrs['class'] = css
+
+
+ParticipantesFormSet = forms.inlineformset_factory(
+    IntegracionAcademica, ParticipanteIntegracion, form=ParticipanteIntegracionForm,
+    extra=1, can_delete=True,
+)
+SesionesFormSet = forms.inlineformset_factory(
+    IntegracionAcademica, SesionRetoAcademico, form=SesionIntegracionForm,
+    fk_name='integracion', extra=1, can_delete=True,
+)
+
 
 class RevisionIntegracionForm(forms.Form):
     accion = forms.ChoiceField(
