@@ -3,7 +3,7 @@ from django.forms import inlineformset_factory
 
 from apps.usuarios.models import Usuario
 
-from .models import EtapaHackaton, Hackathon, Jurado, VotacionHackaton
+from .models import EtapaHackaton, Hackathon, InvitadoHackathon, Jurado, VotacionHackaton
 
 CLASE_INPUT = "form-control form-control-sm"
 CLASE_SELECT = "form-select form-select-sm"
@@ -115,3 +115,44 @@ class InscripcionForm(forms.Form):
         self.fields["equipo"].queryset = Equipo.objects.filter(
             reto=hackathon.reto, miembros__estudiante=usuario
         ).exclude(pk__in=ya_inscritos).distinct()
+
+
+class LogisticaForm(forms.ModelForm):
+    """Logistica del evento (HU09): espacio, modalidad y transmision."""
+
+    class Meta:
+        model = Hackathon
+        fields = ["modalidad", "lugar", "enlace_transmision", "notas_logistica"]
+        widgets = {
+            "modalidad": forms.Select(attrs={"class": CLASE_SELECT}),
+            "lugar": forms.TextInput(attrs={"class": CLASE_INPUT, "placeholder": "Auditorio, sala, sede..."}),
+            "enlace_transmision": forms.URLInput(attrs={"class": CLASE_INPUT, "placeholder": "https://"}),
+            "notas_logistica": forms.Textarea(attrs={"class": CLASE_INPUT, "rows": 3}),
+        }
+
+    def clean(self):
+        datos = super().clean()
+        modalidad = datos.get("modalidad")
+        if modalidad in ("presencial", "hibrida") and not datos.get("lugar"):
+            self.add_error("lugar", "Un evento presencial o hibrido necesita un espacio fisico.")
+        if modalidad in ("virtual", "hibrida") and not datos.get("enlace_transmision"):
+            self.add_error("enlace_transmision", "Un evento virtual o hibrido necesita el enlace de transmision.")
+        return datos
+
+
+class InvitadoForm(forms.ModelForm):
+    class Meta:
+        model = InvitadoHackathon
+        fields = ["tipo", "nombre", "organizacion", "email", "confirmado"]
+        widgets = {
+            "tipo": forms.Select(attrs={"class": CLASE_SELECT}),
+            "nombre": forms.TextInput(attrs={"class": CLASE_INPUT}),
+            "organizacion": forms.TextInput(attrs={"class": CLASE_INPUT}),
+            "email": forms.EmailInput(attrs={"class": CLASE_INPUT}),
+            "confirmado": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+
+InvitadoFormSet = inlineformset_factory(
+    Hackathon, InvitadoHackathon, form=InvitadoForm, extra=1, can_delete=True
+)

@@ -254,3 +254,140 @@ class PublicacionTests(BaseHackathonTests):
         self.assertRedirects(response, reverse("hackaton:detalle", args=[self.hackathon.pk]))
         self.hackathon.refresh_from_db()
         self.assertEqual(self.hackathon.estado, "publicado")
+
+
+class CalendarioAutomaticoHU09Tests(BaseHackathonTests):
+    """HU09: avance por calendario y publicacion automatica de resultados al cierre."""
+
+    def _etapa(self, tipo, inicia, termina=None):
+        return EtapaHackaton.objects.create(
+            hackathon=self.hackathon, tipo=tipo, titulo=tipo, inicia_en=inicia, termina_en=termina
+        )
+
+    def test_pasa_a_en_curso_al_iniciar_el_desarrollo(self):
+        ahora = timezone.now()
+        self._etapa("desarrollo", ahora - timedelta(hours=1))
+        self._etapa("premiacion", ahora + timedelta(days=5))
+        self.assertEqual(services.avanzar_por_calendario(self.hackathon), ["en_curso"])
+        self.hackathon.refresh_from_db()
+        self.assertEqual(self.hackathon.estado, "en_curso")
+        self.assertFalse(self.hackathon.resultados_publicados)
+
+    def test_al_cierre_publica_resultados_y_ganador_y_deja_historial(self):
+        from apps.seguimiento.services import historial_de
+
+        ahora = timezone.now()
+        self._etapa("desarrollo", ahora - timedelta(days=3))
+        self._etapa("premiacion", ahora - timedelta(minutes=5))
+        estudiante = self._estudiante("est-cierre")
+        equipo = self._equipo("Equipo Cierre", estudiante)
+        self._inscribir(equipo)
+        VotacionHackaton.objects.create(hackathon=self.hackathon, jurado=self._jurado("jur-cierre"),
+                                        equipo=equipo, puntaje=Decimal("4.5"))
+
+        services.avanzar_por_calendario(self.hackathon)
+        self.hackathon.refresh_from_db()
+        self.assertEqual(self.hackathon.estado, "finalizado")
+        self.assertTrue(self.hackathon.resultados_publicados)
+        aviso = Notificacion.objects.get(usuario=estudiante, evento="HACKATON_RESULTADOS")
+        self.assertIn("Equipo Cierre", aviso.mensaje)
+        pasos = list(historial_de(self.hackathon).values_list("estado_nuevo", flat=True))
+        self.assertIn("finalizado", pasos)
+        # Idempotente: una segunda pasada no repite nada.
+        self.assertEqual(services.avanzar_por_calendario(self.hackathon), [])
+
+    def test_sin_fechas_no_cierra_solo(self):
+        self._etapa("premiacion", None)
+        self.assertEqual(services.avanzar_por_calendario(self.hackathon), [])
+
+    def test_sin_premiacion_cierra_al_terminar_la_ultima_etapa(self):
+        ahora = timezone.now()
+        self._etapa("presentacion", ahora - timedelta(days=2), ahora - timedelta(hours=1))
+        self.assertEqual(services.fecha_de_cierre(self.hackathon), ahora - timedelta(hours=1))
+        services.avanzar_por_calendario(self.hackathon)
+        self.hackathon.refresh_from_db()
+        self.assertTrue(self.hackathon.resultados_publicados)
+
+    def test_el_comando_programado_avanza_los_hackathones(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        self._etapa("premiacion", timezone.now() - timedelta(minutes=1))
+        salida = StringIO()
+        call_command("avanzar_hackathones", stdout=salida)
+        self.hackathon.refresh_from_db()
+        self.assertTrue(self.hackathon.resultados_publicados)
+        self.assertIn("1 hackathon(es) actualizados", salida.getvalue())
+
+    def test_abrir_el_detalle_aplica_el_calendario(self):
+        self._etapa("premiacion", timezone.now() - timedelta(minutes=1))
+        self.client.force_login(self.admin)
+        self.client.get(reverse("hackaton:detalle", args=[self.hackathon.pk]))
+        self.hackathon.refresh_from_db()
+        self.assertTrue(self.hackathon.resultados_publicados)
+
+
+class LogisticaEInformeHU09Tests(BaseHackathonTests):
+    def test_gestor_registra_logistica_e_invitados(self):
+        self.client.force_login(self.admin)
+        respuesta = self.client.post(reverse("hackaton:logistica", args=[self.hackathon.pk]), {
+            "modalidad": "hibrida", "lugar": "Auditorio EAN", "enlace_transmision": "https://youtube.com/live/x",
+            "notas_logistica": "Refrigerios a las 10",
+            "invitados-TOTAL_FORMS": "1", "invitados-INITIAL_FORMS": "0",
+            "invitados-MIN_NUM_FORMS": "0", "invitados-MAX_NUM_FORMS": "1000",
+            "invitados-0-tipo": "MENTOR", "invitados-0-nombre": "Ana Mentora",
+            "invitados-0-organizacion": "ACME", "invitados-0-email": "ana@acme.co", "invitados-0-confirmado": "on",
+        })
+        self.assertRedirects(respuesta, reverse("hackaton:detalle", args=[self.hackathon.pk]))
+        self.hackathon.refresh_from_db()
+        self.assertEqual(self.hackathon.lugar, "Auditorio EAN")
+        invitado = self.hackathon.invitados.get()
+        self.assertTrue(invitado.confirmado)
+        detalle = self.client.get(reverse("hackaton:detalle", args=[self.hackathon.pk]))
+        self.assertContains(detalle, "Ana Mentora")
+
+    def test_evento_virtual_exige_enlace_de_transmision(self):
+        from .forms import LogisticaForm
+
+        form = LogisticaForm({"modalidad": "virtual"}, instance=self.hackathon)
+        self.assertFalse(form.is_valid())
+        self.assertIn("enlace_transmision", form.errors)
+
+    def test_estudiante_no_gestiona_la_logistica(self):
+        estudiante = self._estudiante("est-log")
+        self.client.force_login(estudiante)
+        respuesta = self.client.get(reverse("hackaton:logistica", args=[self.hackathon.pk]))
+        self.assertEqual(respuesta.status_code, 302)
+
+    def test_informe_final_en_pdf_y_excel_con_el_ranking(self):
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        estudiante = self._estudiante("est-inf")
+        equipo = self._equipo("Equipo =SUMA(A1)", estudiante)
+        self._inscribir(equipo)
+        VotacionHackaton.objects.create(hackathon=self.hackathon, jurado=self._jurado("jur-inf"),
+                                        equipo=equipo, puntaje=Decimal("5"))
+        services.publicar_resultados(self.hackathon, self.admin)
+        url = reverse("hackaton:informe_final", args=[self.hackathon.pk])
+
+        # La empresa duena del reto tambien puede descargarlo.
+        self.client.force_login(self.empresa)
+        pdf = self.client.get(url + "?formato=pdf")
+        self.assertEqual(pdf["Content-Type"], "application/pdf")
+        self.assertTrue(pdf.content.startswith(b"%PDF"))
+
+        excel = self.client.get(url + "?formato=excel")
+        libro = load_workbook(BytesIO(excel.content))
+        self.assertIn("Ranking", libro.sheetnames)
+        valores = [c.value for fila in libro["Ranking"].iter_rows() for c in fila]
+        self.assertIn("Equipo =SUMA(A1)", valores)
+        self.assertEqual(libro["Ranking"].cell(row=5, column=2).data_type, "s")
+
+    def test_estudiante_no_descarga_el_informe(self):
+        estudiante = self._estudiante("est-noinf")
+        self.client.force_login(estudiante)
+        respuesta = self.client.get(reverse("hackaton:informe_final", args=[self.hackathon.pk]))
+        self.assertEqual(respuesta.status_code, 302)

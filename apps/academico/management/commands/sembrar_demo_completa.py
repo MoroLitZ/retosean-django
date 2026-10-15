@@ -542,6 +542,14 @@ class Command(BaseCommand):
             crear_etapas_por_defecto(hackathon)
 
             if estado in ("en_curso", "finalizado"):
+                # HU09: logistica del evento con un invitado confirmado y otro pendiente.
+                hackathon.modalidad, hackathon.lugar = "hibrida", "Auditorio Principal EAN, Sede Legacy"
+                hackathon.enlace_transmision = "https://www.youtube.com/@UniversidadEAN"
+                hackathon.save(update_fields=["modalidad", "lugar", "enlace_transmision"])
+                hackathon.invitados.get_or_create(nombre="Laura Mentora", defaults={
+                    "tipo": "MENTOR", "organizacion": "Innovacion SAS", "confirmado": True})
+                hackathon.invitados.get_or_create(nombre="Carlos Ponente", defaults={
+                    "tipo": "PONENTE", "organizacion": "Camara de Comercio"})
                 jurado, _ = Jurado.objects.get_or_create(
                     hackathon=hackathon, email="jurado.demo@externo.co",
                     defaults={"nombre": "Jurado Demo", "especialidad": "Innovacion"},
