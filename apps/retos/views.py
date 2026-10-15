@@ -30,7 +30,8 @@ from .forms import (
     SesionesFormSet,
     SesionRetoAcademicoForm
 )
-from .models import EquipoRetoAcademico, HistorialEstadoReto, Reto, RetoArchivo
+from .models import EquipoRetoAcademico, Reto, RetoArchivo
+from apps.seguimiento.models import HistorialEstado
 from apps.seguimiento.models import IntegracionAcademica, SeguimientoArchivo, SeguimientoReto
 from django.urls import reverse
 
@@ -227,7 +228,7 @@ def eliminar_reto(request, pk):
 def detalle_reto(request, pk):
     reto = get_object_or_404(
         Reto.objects.select_related('empresa').prefetch_related(
-            Prefetch('historial_estados', queryset=HistorialEstadoReto.objects.select_related('realizado_por'))
+            Prefetch('historial_estados', queryset=HistorialEstado.objects.select_related('realizado_por'))
         ),
         pk=pk,
     )

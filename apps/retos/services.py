@@ -4,8 +4,9 @@ from django.utils import timezone
 
 from apps.notificaciones.services import notificar, notificar_muchos
 from apps.seguimiento.services import MaquinaEstados, TransicionInvalida
+from apps.seguimiento.services import registrar_cambio_estado as registrar_en_bitacora
 
-from .models import HistorialEstadoReto, Reto
+from .models import Reto
 
 
 # Ciclo de vida unificado del reto/hackathon (brief, seccion 3).
@@ -31,13 +32,7 @@ ESTADOS_CAMBIO_MANUAL = {'en_curso', 'pausado', 'cancelado'}
 
 
 def registrar_cambio_estado(reto, estado_anterior, estado_nuevo, usuario, comentario=''):
-    HistorialEstadoReto.objects.create(
-        reto=reto,
-        estado_anterior=estado_anterior or '',
-        estado_nuevo=estado_nuevo,
-        realizado_por=usuario,
-        comentario=comentario,
-    )
+    registrar_en_bitacora(reto, estado_anterior, estado_nuevo, usuario, comentario)
 
 
 def _notificar_cambio_estado(reto, estado_anterior, estado_nuevo, comentario):

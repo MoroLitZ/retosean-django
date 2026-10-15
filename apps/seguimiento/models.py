@@ -189,8 +189,8 @@ class HistorialEstado(models.Model):
 
     Documentos de empresa, convenios, integraciones, postulaciones, entregables,
     inscripciones de hackathon y cuentas de usuario escriben aqui a traves de
-    `apps.seguimiento.services.cambiar_estado`. Los retos conservan su propio
-    `retos.HistorialEstadoReto`, que ya muestra la UI del detalle del reto.
+    `apps.seguimiento.services.cambiar_estado`; los retos tambien (antes tenian
+    su propia tabla `historial_estados_reto`, migrada aqui).
     """
 
     content_type = models.ForeignKey(
@@ -220,3 +220,22 @@ class HistorialEstado(models.Model):
 
     def __str__(self):
         return f"{self.content_type.model}#{self.object_id}: {self.estado_anterior} -> {self.estado_nuevo}"
+
+    def _etiqueta(self, valor):
+        """Etiqueta legible del valor segun los choices del campo en el modelo de origen."""
+        from django.contrib.contenttypes.models import ContentType
+
+        modelo = ContentType.objects.get_for_id(self.content_type_id).model_class()
+        try:
+            choices = dict(modelo._meta.get_field(self.campo).flatchoices)
+        except Exception:
+            choices = {}
+        return choices.get(valor, valor)
+
+    @property
+    def etiqueta_anterior(self):
+        return self._etiqueta(self.estado_anterior) if self.estado_anterior else ""
+
+    @property
+    def etiqueta_nueva(self):
+        return self._etiqueta(self.estado_nuevo)

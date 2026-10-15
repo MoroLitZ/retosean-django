@@ -202,10 +202,10 @@
                 {% for item in reto.historial_estados.all %}
                 <tr>
                   <td class="ps-4 text-muted">{{ item.fecha|date:'d/m/Y H:i' }}</td>
-                  <td><span class="badge bg-secondary bg-opacity-25 text-secondary">{{ item.estado_anterior|default:'-' }}</span></td>
+                  <td><span class="badge bg-secondary bg-opacity-25 text-secondary">{{ item.etiqueta_anterior|default:'-' }}</span></td>
                   <td>
                     <span class="badge {% if item.estado_nuevo == 'aprobado' or item.estado_nuevo == 'abierto' %}bg-success{% elif item.estado_nuevo == 'rechazado' %}bg-danger{% elif item.estado_nuevo == 'en_revision' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
-                      {{ item.get_estado_nuevo_display }}
+                      {{ item.etiqueta_nueva }}
                     </span>
                   </td>
                   <td style="color: #374151;">{{ item.realizado_por|default:'-' }}</td>

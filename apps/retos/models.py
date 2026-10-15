@@ -1,6 +1,7 @@
 import os
 
 from django.conf import settings
+from django.contrib.contenttypes.fields import GenericRelation
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, models, transaction
 from django.utils import timezone
@@ -66,6 +67,8 @@ class Reto(models.Model):
     PREFIJOS_CONSECUTIVO = {"reto": "RETO", "hackathon": "HACK"}
 
     objects = RetoManager()
+    # Bitacora unica (seguimiento.HistorialEstado), igual que el resto de entidades.
+    historial_estados = GenericRelation("seguimiento.HistorialEstado", related_query_name="reto")
     todos = models.Manager()
 
     empresa = models.ForeignKey(
@@ -201,30 +204,6 @@ class Reto(models.Model):
             except IntegrityError:
                 continue
         raise IntegrityError("No se pudo asignar un consecutivo unico al reto.")
-
-
-class HistorialEstadoReto(models.Model):
-    reto = models.ForeignKey('retos.Reto', on_delete=models.CASCADE, related_name="historial_estados")
-    estado_anterior = models.CharField(max_length=20, blank=True)
-    estado_nuevo = models.CharField(max_length=20, choices=Reto.ESTADO_CHOICES)
-    comentario = models.TextField(blank=True)
-    realizado_por = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="cambios_estado_retos",
-    )
-    fecha = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "historial_estados_reto"
-        ordering = ["-fecha"]
-        verbose_name = "Historial de Estado de Reto"
-        verbose_name_plural = "Historial de Estados de Reto"
-
-    def __str__(self):
-        return f"{self.reto} -> {self.estado_nuevo}"
 
 
 class RetoArchivo(models.Model):
