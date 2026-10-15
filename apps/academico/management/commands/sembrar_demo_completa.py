@@ -552,7 +552,8 @@ class Command(BaseCommand):
                     "tipo": "PONENTE", "organizacion": "Camara de Comercio"})
                 jurado, _ = Jurado.objects.get_or_create(
                     hackathon=hackathon, email="jurado.demo@externo.co",
-                    defaults={"nombre": "Jurado Demo", "especialidad": "Innovacion"},
+                    # El experto demo es el jurado: asi su panel y la votacion tienen datos.
+                    defaults={"nombre": "Jurado Demo", "especialidad": "Innovacion", "usuario": u["experto"]},
                 )
                 equipo, _ = Equipo.objects.get_or_create(reto=reto, nombre="Equipo Hackathon Demo")
                 for est in u["estudiantes"][:2]:

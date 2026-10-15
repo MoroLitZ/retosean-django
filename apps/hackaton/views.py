@@ -47,13 +47,15 @@ def _puede_ver(user, hackathon):
     El resto de roles conserva el acceso que ya tenia; solo el estudiante queda
     filtrado por estado, que es el agujero que cerraba C.5.4.
     """
+    if user.rol == "EXPERTO" and not es_admin(user):
+        return _jurado_de(hackathon, user) is not None
     if es_admin(user) or user.rol != "ESTUDIANTE":
         return True
     return hackathon.estado in ("publicado", "en_curso", "finalizado")
 
 
 # ------------------------------------------------------------- LISTADOS
-@rol_requerido("ADMIN", "PROFESOR", "EMPRESA", "ESTUDIANTE")
+@rol_requerido("ADMIN", "PROFESOR", "EMPRESA", "ESTUDIANTE", "EXPERTO")
 def lista(request):
     hackathones = Hackathon.objects.select_related("reto", "reto__empresa").prefetch_related("etapas", "inscripciones")
     if not es_admin(request.user):
@@ -62,6 +64,8 @@ def lista(request):
             hackathones = hackathones.filter(reto__empresa=request.user)
         elif rol == "PROFESOR":
             hackathones = hackathones.filter(reto__integraciones_seguimiento__profesor=request.user)
+        elif rol == "EXPERTO":
+            hackathones = hackathones.filter(jurados__usuario=request.user)
         else:
             hackathones = hackathones.filter(estado__in=["publicado", "en_curso", "finalizado"])
     return render(request, "hackaton/lista.html", {
@@ -71,7 +75,7 @@ def lista(request):
     })
 
 
-@rol_requerido("ADMIN", "PROFESOR", "EMPRESA", "ESTUDIANTE")
+@rol_requerido("ADMIN", "PROFESOR", "EMPRESA", "ESTUDIANTE", "EXPERTO")
 def detalle(request, pk):
     hackathon = get_object_or_404(
         Hackathon.objects.select_related("reto", "reto__empresa").prefetch_related("etapas", "jurados"),
@@ -288,7 +292,8 @@ def gestionar_inscripcion(request, pk):
 
 
 # --------------------------------------------------------------- JURADO
-@rol_requerido("ADMIN", "PROFESOR", "EMPRESA")
+# Un experto solo entra como jurado asignado; la vista lo comprueba con _jurado_de.
+@rol_requerido("ADMIN", "PROFESOR", "EMPRESA", "EXPERTO")
 def votar(request, pk):
     hackathon = get_object_or_404(Hackathon.objects.select_related("reto"), pk=pk)
     jurado = _jurado_de(hackathon, request.user)
@@ -343,7 +348,7 @@ def votar(request, pk):
 
 
 # -------------------------------------------------------------- RANKING
-@rol_requerido("ADMIN", "PROFESOR", "EMPRESA", "ESTUDIANTE")
+@rol_requerido("ADMIN", "PROFESOR", "EMPRESA", "ESTUDIANTE", "EXPERTO")
 def ranking(request, pk):
     hackathon = get_object_or_404(Hackathon.objects.select_related("reto"), pk=pk)
     services.avanzar_por_calendario(hackathon)
