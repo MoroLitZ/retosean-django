@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from apps.notificaciones.models import Notificacion
 from apps.participaciones.models import Postulacion
-from apps.retos.models import HistorialEstadoReto, Reto
+from apps.retos.models import Reto
 from apps.usuarios.models import Usuario
 
 from .models import AgendaCierre, CierreReto, EncuestaSatisfaccion, EntregableFinal
@@ -38,7 +38,7 @@ class CierreSprintTests(TestCase):
         self.assertEqual(self.reto.estado, "finalizado")
         self.assertEqual(EncuestaSatisfaccion.objects.filter(cierre=self.cierre).count(), 2)
         self.assertEqual(Notificacion.objects.filter(titulo=f"Reto finalizado: {self.reto.titulo}").count(), 2)
-        self.assertTrue(HistorialEstadoReto.objects.filter(reto=self.reto, estado_nuevo="finalizado").exists())
+        self.assertTrue(self.reto.historial_estados.filter(estado_nuevo="finalizado").exists())
 
     def test_empresa_no_puede_finalizar(self):
         self.client.force_login(self.empresa)

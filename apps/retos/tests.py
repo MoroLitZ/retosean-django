@@ -743,3 +743,27 @@ class EquipoYCronogramaHU03Tests(TestCase):
         self.client.force_login(self.estudiante)
         pagina = self.client.get(reverse("retos:mis_equipos_estudiante"))
         self.assertEqual(len(pagina.context["sesiones"]), 3)
+
+
+class BitacoraUnicaTests(TestCase):
+    """Los cambios de estado del reto van a la misma bitacora que el resto de entidades."""
+
+    def test_el_cambio_de_estado_del_reto_queda_en_historial_estados(self):
+        from apps.retos.services import cambiar_estado_reto
+        from apps.seguimiento.models import HistorialEstado
+        from apps.seguimiento.services import historial_de
+
+        admin = Usuario.objects.create_user(username="admin-bitacora", password="x", rol="ADMIN")
+        empresa = Usuario.objects.create_user(username="emp-bitacora", password="x", rol="EMPRESA")
+        reto = Reto.objects.create(empresa=empresa, titulo="Reto bitacora", estado="en_revision")
+        cambiar_estado_reto(reto, "aprobado", admin, "Listo")
+
+        registro = historial_de(reto).get()
+        self.assertEqual((registro.estado_anterior, registro.estado_nuevo), ("en_revision", "aprobado"))
+        self.assertEqual(registro.etiqueta_nueva, dict(Reto.ESTADO_CHOICES)["aprobado"])
+        self.assertEqual(list(reto.historial_estados.all()), [registro])
+        self.assertTrue(HistorialEstado.objects.filter(reto=reto).exists())
+
+        self.client.force_login(admin)
+        detalle = self.client.get(reverse("retos:detalle", args=[reto.pk]))
+        self.assertContains(detalle, dict(Reto.ESTADO_CHOICES)["aprobado"])
