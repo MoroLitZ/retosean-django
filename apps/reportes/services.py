@@ -239,6 +239,57 @@ def _filtros_serializables(filtros):
     return resultado
 
 
+FILAS_VISTA_PREVIA = 50
+
+
+def vista_previa(definicion, columnas, filtros):
+    """Primeras filas y total del reporte, sin generar archivo ni registro (HU06)."""
+    queryset = definicion.construir_queryset(filtros)
+    total = queryset.count()
+    filas = list(_filas(definicion, queryset[:FILAS_VISTA_PREVIA], columnas))
+    return {
+        "encabezados": [c.etiqueta for c in columnas],
+        "filas": filas,
+        "total": total,
+        "mostradas": len(filas),
+        "filtros": _describir_filtros(filtros),
+    }
+
+
+def enviar_por_correo(registro, contenido, nombre, tipo_mime, destinatarios, definicion):
+    """Envia el reporte como adjunto y deja constancia en el historial (HU06).
+
+    Devuelve None si se envio, o el mensaje de error; el reporte generado se
+    conserva en el historial aunque el envio falle.
+    """
+    from django.conf import settings
+    from django.core.mail import EmailMessage
+
+    autor = registro.usuario.get_full_name() or registro.usuario.username
+    correo = EmailMessage(
+        subject=f"[RetosEAN] {definicion.nombre}",
+        body=(
+            f"{autor} te envia el reporte \"{definicion.nombre}\" generado en RetosEAN "
+            f"el {timezone.localtime(registro.creado_en):%d/%m/%Y %H:%M}.\n\n"
+            f"Registros: {registro.filtros.get('total_registros', 0)}.\n"
+            "El archivo va adjunto."
+        ),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=destinatarios,
+    )
+    correo.attach(nombre, contenido, tipo_mime)
+    try:
+        correo.send(fail_silently=False)
+    except Exception as error:  # SMTP, DNS o credenciales: se informa sin perder el reporte.
+        registro.filtros = {**registro.filtros, "error_envio": str(error)[:300]}
+        registro.save(update_fields=["filtros"])
+        return str(error)
+    registro.enviado_por_email = True
+    registro.filtros = {**registro.filtros, "enviado_a": destinatarios}
+    registro.save(update_fields=["enviado_por_email", "filtros"])
+    return None
+
+
 def construir_reporte(usuario, definicion, columnas, formato, filtros):
     """Genera el archivo y lo deja registrado en ReporteGenerado."""
     queryset = definicion.construir_queryset(filtros)
