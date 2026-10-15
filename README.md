@@ -129,6 +129,15 @@ etapas de hackathon y vencimiento de documentos de empresa.
 con el directorio de trabajo en la raíz del proyecto. En Linux, la línea de cron
 equivalente es `0 7 * * *`.
 
+Los hackathones avanzan solos según sus etapas (HU09): pasan a *En curso* al
+iniciar la etapa de desarrollo y, al llegar la premiación (o el fin de la última
+etapa con fecha), se finalizan y se publican resultados y ganadores. La vista de
+detalle lo aplica al abrirse; para que ocurra aunque nadie entre, programa cada hora:
+
+```bash
+python manage.py avanzar_hackathones
+```
+
 ## Rutas principales
 
 | Ruta | Descripción |
