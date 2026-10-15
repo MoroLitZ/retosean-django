@@ -295,7 +295,9 @@ class Command(BaseCommand):
         from apps.participaciones.models import Equipo, MiembroEquipo, Postulacion, RetoFavorito
         from apps.presupuesto.models import Gasto, Presupuesto
         from apps.retos.models import EquipoRetoAcademico, SesionRetoAcademico
-        from apps.seguimiento.models import IntegracionAcademica, SeguimientoArchivo, SeguimientoReto
+        from apps.seguimiento.models import (
+            IntegracionAcademica, ParticipanteIntegracion, SeguimientoArchivo, SeguimientoReto,
+        )
 
         reto = self._reto_base(u, "verificada", "DEMO · Reto con flujo completo (finalizado)", "finalizado")
         admin = u["admin"]
@@ -316,7 +318,7 @@ class Command(BaseCommand):
 
         # Integracion academica del profesor con este reto (necesaria para
         # habilitar equipo/entregables en la practica), en estado 'publicada'.
-        IntegracionAcademica.objects.get_or_create(
+        integracion_publicada, _ = IntegracionAcademica.objects.get_or_create(
             reto=reto, profesor=profesor,
             defaults={
                 "facultad": "Ingenieria", "nivel_formacion": "Pregrado", "programa_academico": "Ingenieria de Sistemas",
@@ -356,11 +358,30 @@ class Command(BaseCommand):
         equipo_academico.estudiantes.add(*estudiantes[:2])
         equipo_academico.expertos_invitados.add(u["experto"])
 
-        # Sesiones del reto academico: una por cada tipo.
-        for tipo in ["inicio", "seguimiento", "preseleccion", "evaluacion"]:
+        # HU03: equipo estructurado de la integracion publicada (profesor, dos
+        # estudiantes con cuenta y un experto externo sin cuenta).
+        integrantes = [
+            (ParticipanteIntegracion.PROFESOR, profesor, "1020304050", {"facultad": "Ingenieria"}),
+            (ParticipanteIntegracion.ESTUDIANTE, estudiantes[0], "1098765432", {"programa": "Ingenieria de Sistemas"}),
+            (ParticipanteIntegracion.ESTUDIANTE, estudiantes[1], "1098765433", {"programa": "Ingenieria de Sistemas"}),
+        ]
+        for rol, usuario, documento, extra in integrantes:
+            ParticipanteIntegracion.objects.get_or_create(
+                integracion=integracion_publicada, rol=rol, documento=documento,
+                defaults={"nombre": usuario.get_full_name() or usuario.username, "email": usuario.email,
+                          "usuario": usuario, **extra},
+            )
+        ParticipanteIntegracion.objects.get_or_create(
+            integracion=integracion_publicada, rol=ParticipanteIntegracion.EXPERTO, documento="79111222",
+            defaults={"nombre": "Laura Mentora", "email": "mentora@innovacion.co", "facultad": "Innovacion SAS"},
+        )
+
+        # Sesiones del cronograma: una por cada tipo, escalonadas en el tiempo.
+        for dias, tipo in [(1, "inicio"), (15, "seguimiento"), (30, "preseleccion"), (45, "evaluacion")]:
             SesionRetoAcademico.objects.get_or_create(
                 reto=reto, tipo=tipo,
-                defaults={"fecha_hora": timezone.now() + timedelta(days=1), "observaciones": f"Sesion de {tipo}."},
+                defaults={"integracion": integracion_publicada, "fecha_hora": timezone.now() + timedelta(days=dias),
+                          "observaciones": f"Sesion de {tipo}."},
             )
 
         # Seguimiento: una sesion por cada tipo de sesion posible.
