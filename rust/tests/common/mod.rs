@@ -338,6 +338,28 @@ impl Ctx {
     }
 }
 
+pub type Outbox = std::sync::Arc<std::sync::Mutex<Vec<(String, String, String)>>>;
+/// The process-wide memory mailer: (to, subject, text). Filter by recipient,
+/// since tests in one binary share it.
+pub fn outbox() -> Outbox {
+    static OUTBOX: std::sync::OnceLock<Outbox> = std::sync::OnceLock::new();
+    OUTBOX
+        .get_or_init(|| {
+            let sent = Outbox::default();
+            retosean::mail::install(retosean::mail::Mailer::Memory(sent.clone()));
+            sent
+        })
+        .clone()
+}
+pub fn mails_to(address: &str) -> Vec<(String, String, String)> {
+    outbox()
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|m| m.0 == address)
+        .cloned()
+        .collect()
+}
 /// Runs a test body against a fresh schema and always cleans it up.
 pub async fn run<F, Fut>(body: F)
 where
@@ -345,6 +367,7 @@ where
     Fut: std::future::Future<Output = ()> + Send + 'static,
 {
     let _slot = SLOTS.acquire().await.unwrap();
+    outbox();
     let mut config = Config::load().unwrap();
     let admin = PgPoolOptions::new()
         .max_connections(1)

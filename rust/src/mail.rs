@@ -166,6 +166,10 @@ impl Mailer {
                 Ok(())
             }
             Mailer::Memory(sent) => {
+                // Like an SMTP server refusing it: the reserved .invalid TLD (RFC 2606) fails.
+                if let Some(bad) = to.iter().find(|a| a.ends_with(".invalid")) {
+                    return Err(format!("SMTP caido: {bad}"));
+                }
                 for address in to {
                     sent.lock().unwrap().push((
                         address.clone(),
