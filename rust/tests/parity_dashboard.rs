@@ -96,6 +96,7 @@ async fn urls(t: &Ctx, route: &str) -> Vec<String> {
             ("/api/presupuestos/", "presupuestos"),
             ("/api/usuarios/", "usuarios"),
             ("/api/certificados/", "certificados"),
+            ("/api/empresas/", "empresas"),
         ]
         .iter()
         .find(|(prefix, _)| route.starts_with(prefix))

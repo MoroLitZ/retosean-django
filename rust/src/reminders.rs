@@ -49,27 +49,39 @@ pub async fn run(pool: &PgPool, days: &[i64]) -> Result<usize> {
     .fetch_all(&mut *tx)
     .await?;
     for (id, from, owner, due, name) in expired {
-        let reason = format!("Documento vencido el {}.", due.format("%d/%m/%Y"));
-        sqlx::query("UPDATE documentos_empresas SET estado='VENCIDO' WHERE id=$1")
-            .bind(id)
-            .execute(&mut *tx)
-            .await?;
-        crate::workflows::history(
-            &mut tx,
-            ("empresas", "documentoempresa"),
-            id,
-            &from,
-            "VENCIDO",
-            0,
-            &reason,
-        )
-        .await?;
-        if let Some(owner) = owner {
-            notify(&mut tx, owner, "DOCUMENTO_REVISADO",
-                &format!("Tu documento \"{name}\" esta vencido. {reason} Cargalo de nuevo para seguir participando."),
-                &format!("documento:{id}:vencido:{due}")).await?;
+        // One failing document must not stop the rest of the sweep.
+        let mut savepoint = sqlx::Acquire::begin(&mut *tx).await?;
+        let outcome: Result<()> = async {
+            let reason = format!("Documento vencido el {}.", due.format("%d/%m/%Y"));
+            sqlx::query("UPDATE documentos_empresas SET estado='VENCIDO' WHERE id=$1")
+                .bind(id)
+                .execute(&mut *savepoint)
+                .await?;
+            crate::workflows::history(&mut savepoint, ("empresas", "documentoempresa"), id, &from, "VENCIDO", 0, &reason).await?;
+            if let Some(owner) = owner {
+                let key = format!("documento:{id}:vencido:{due}");
+                notify(&mut savepoint, owner, "DOCUMENTO_REVISADO",
+                    &format!("Tu documento \"{name}\" esta vencido. {reason} Cargalo de nuevo para seguir participando."),
+                    &key).await?;
+                sqlx::query("UPDATE notificaciones SET tipo='ADVERTENCIA' WHERE usuario_id=$1 AND clave_dedupe=$2")
+                    .bind(owner)
+                    .bind(&key)
+                    .execute(&mut *savepoint)
+                    .await?;
+            }
+            Ok(())
         }
-        total += 1;
+        .await;
+        match outcome {
+            Ok(()) => {
+                savepoint.commit().await?;
+                total += 1;
+            }
+            Err(error) => {
+                tracing::error!(document = id, error = %error.1, "expired document not marked");
+                savepoint.rollback().await?;
+            }
+        }
     }
 
     for &n in days {

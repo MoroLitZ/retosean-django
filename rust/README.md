@@ -177,18 +177,33 @@ From `rust/`:
 
 ```text
 cargo fmt --check
-cargo check --locked
-cargo test --locked --lib
-cargo test --locked --test end_to_end -- --ignored --nocapture
 node --check web/app.js
+cargo test --locked -- --include-ignored
 ```
 
-The end-to-end test exercises real Axum handlers and PostgreSQL. It creates a
-unique schema in the configured Rust database, initializes the schema and seed,
-then removes that schema after the assertions. It does not mutate demonstration
-rows or Django tables. The database role must have CREATE privilege on the Rust
-database. Tests use a deliberately low-cost password fixture only in their
-isolated schema; real account creation uses 1,000,000 PBKDF2 iterations.
+That runs three layers:
+
+- **Unit tests** (`src/`): parsing, money, PDF text, state machines.
+- **End-to-end** (`tests/end_to_end.rs`): one long walk through the whole
+  platform over real Axum handlers and PostgreSQL.
+- **Django parity** (`tests/parity_<app>.rs`): every one of Django's 271 tests
+  (`apps/<app>/tests.py`) recreated against the Rust API, one Rust test per
+  Django test with the same name, grouped by the Django test class. A few
+  adapt where the two stacks differ by design (the API returns 404 instead of
+  redirecting, the single-page app replaces server-rendered pages); each such
+  test says so in a comment. The route walk in `parity_dashboard.rs` reads the
+  GET routes from `src/lib.rs`, so a new route is visited by every role
+  automatically.
+
+Every database test creates its own schema in the configured Rust database
+with the demo data, and drops it afterwards; nothing touches demonstration
+rows or Django tables. The database role needs CREATE on the Rust database.
+Tests use a low-cost password hash only inside those schemas; real accounts use
+1,000,000 PBKDF2 iterations. To run one app's suite:
+`cargo test --test parity_empresas -- --include-ignored`.
+
+GitHub Actions runs all of it on every change under `rust/`
+(`.github/workflows/rust.yml`), next to Django's own `tests.yml`.
 
 ## Load test
 

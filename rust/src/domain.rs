@@ -91,7 +91,11 @@ mod tests {
     }
     #[test]
     fn all_exported_machines_have_known_targets() {
-        assert_eq!(machines().len(), 7);
+        assert_eq!(
+            machines().len(),
+            8,
+            "seven from services.py plus logistics from cierre/views.py"
+        );
         for machine in machines().values() {
             for targets in machine.values() {
                 for target in targets {

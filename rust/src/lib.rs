@@ -148,6 +148,20 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/empresas/{id}/bloqueo", post(permissions::block))
         .route(
+            "/api/empresas/{id}/historial-documental",
+            get(companies::document_history),
+        )
+        .route(
+            "/api/tipos-documento",
+            post(companies::create_document_type),
+        )
+        .route(
+            "/api/tipos-documento/{id}",
+            post(companies::edit_document_type),
+        )
+        .route("/api/retos/{id}/avance", get(companies::progress_panel))
+        .route("/api/entregables/{id}/comentario", post(companies::comment))
+        .route(
             "/api/empresa/modo-convenio",
             post(permissions::agreement_choice),
         )

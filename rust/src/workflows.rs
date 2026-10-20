@@ -232,6 +232,22 @@ pub async fn challenge_state(
         return Err(AppError::bad("Indica el motivo del rechazo"));
     }
     if input.estado == "aprobado" {
+        // admin_revisar: only companies that may operate get approved.
+        let company: Option<i64> =
+            sqlx::query_scalar("SELECT id FROM empresas WHERE usuario_id=$1")
+                .bind(owner)
+                .fetch_optional(&mut *tx)
+                .await?;
+        let reasons = match company {
+            Some(company) => crate::permissions::operating_reasons(&mut tx, company).await?,
+            None => vec!["La empresa no tiene perfil registrado.".to_string()],
+        };
+        if !reasons.is_empty() {
+            return Err(AppError::bad(format!(
+                "No se puede aprobar: {}",
+                reasons.join(" ")
+            )));
+        }
         // Serialize number allocation across every native approval, not only this row.
         sqlx::query("SELECT pg_advisory_xact_lock(714032026)")
             .execute(&mut *tx)

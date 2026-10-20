@@ -76,6 +76,7 @@ the session cookie and an `X-CSRF-Token` header; the web app sends both.
 - `POST /api/usuarios/importar`, `GET /api/usuarios/plantilla`
 - `POST /api/usuarios/{id}/estado`, `POST /api/usuarios/{id}/rol`
 - `GET`/`POST /api/usuarios/{id}/permisos`
+- `GET /api/log-actividad`: activity log with filters
 
 **Browsing and exports**
 - `GET /api/resources`
@@ -90,22 +91,26 @@ the session cookie and an `X-CSRF-Token` header; the web app sends both.
 **Companies**
 - `POST /api/empresas/{id}/revisar`, `/convenio`, `/bloqueo`
 - `POST /api/empresas/{id}/documentos/{kind}/cargar`
-- `POST /api/empresa/modo-convenio`
+- `POST /api/empresa/modo-convenio`, `POST /api/empresa/documentos/{kind}/cargar`
+- `GET /api/empresas/{id}/historial-documental`
+- `POST /api/tipos-documento`, `POST /api/tipos-documento/{id}`: document catalog (admin)
 - `POST /api/documentos/{id}/revisar`, `POST /api/documentos/{id}/cargar`
 
 **Retos**
 - `POST /api/retos`, `POST /api/retos/{id}`
-- `POST /api/retos/{id}/estado`, `/favorito`, `/postular`, `/entregar`, `/seguimiento`, `/presupuesto`, `/integrar`
+- `POST /api/retos/{id}/estado`, `/favorito`, `/postular`, `/entregar`, `/seguimiento`, `/presupuesto`, `/integrar`, `/archivos`, `/eliminar`
+- `GET /api/retos/{id}/avance`: the company's progress view
 - `POST /api/postulaciones/{id}/estado`
 
 **Academic work and teams**
+- `GET /api/integraciones/opciones`, `POST /api/integraciones/{id}`
 - `POST /api/integraciones/{id}/estado`, `GET`/`POST /api/integraciones/{id}/equipo`
 - `POST /api/retos/{id}/equipo`, `GET /api/retos/{id}/opciones`
 - `GET`/`POST /api/equipos-academicos/{id}`, `POST /api/equipos-academicos/{id}/eliminar`
 
 **Grading**
 - `POST /api/retos/{id}/rubrica`, `POST /api/retos/{id}/publicar-calificaciones`
-- `GET /api/entregables/{id}/rubricas`, `POST /api/entregables/{id}/calificar`
+- `GET /api/entregables/{id}/rubricas`, `POST /api/entregables/{id}/calificar`, `POST /api/entregables/{id}/comentario`
 
 **Closure**
 - `POST /api/retos/{id}/cerrar`
@@ -113,7 +118,7 @@ the session cookie and an `X-CSRF-Token` header; the web app sends both.
 - `POST /api/retos/{id}/cierre/entregables`, `POST /api/retos/{id}/cierre/reconocimientos`
 - `POST /api/retos/{id}/solicitudes-logistica`, `POST /api/solicitudes-logistica/{id}/estado`
 - `POST /api/encuestas/{id}`
-- `GET /api/certificados/{id}/pdf`
+- `GET /api/certificados/{id}/pdf`, `GET /api/portafolio`
 
 **Hackathons**
 - `POST /api/retos/{id}/hackathon`
@@ -124,6 +129,8 @@ the session cookie and an `X-CSRF-Token` header; the web app sends both.
 
 **Budget**
 - `POST /api/presupuestos/{id}/gastos`, `GET /api/presupuestos/{id}/resumen`
+- `POST /api/gastos/{id}/ejecutar`, `POST /api/gastos/{id}/eliminar`
+- `GET /api/retos/{id}/presupuesto/{xlsx|pdf}`
 
 **Dashboard and reports**
 - `GET /api/dashboard`
@@ -132,3 +139,4 @@ the session cookie and an `X-CSRF-Token` header; the web app sends both.
 
 **Notifications**
 - `POST /api/notificaciones/{id}/leer`, `POST /api/preferencias`
+- `GET /api/notificaciones/registro`: delivery log (admin)

@@ -293,7 +293,7 @@ impl Ctx {
     }
     /// Every required catalog document verified and in force (the HU00 gate opens).
     pub async fn verify_documents(&self, company: i64) {
-        self.exec(&format!("INSERT INTO documentos_empresas(empresa_id,tipo_documento,archivo,estado,fecha_expedicion,fecha_vencimiento,fecha_carga,motivo_rechazo) SELECT {company},codigo,'','VERIFICADO',CURRENT_DATE,NULL,now(),'' FROM tipos_documento_legal WHERE activo AND obligatorio ON CONFLICT (empresa_id,tipo_documento) DO UPDATE SET estado='VERIFICADO',fecha_vencimiento=NULL")).await;
+        self.exec(&format!("INSERT INTO documentos_empresas(empresa_id,tipo_documento,archivo,estado,fecha_expedicion,fecha_vencimiento,fecha_carga,motivo_rechazo) SELECT {company},codigo,'documento.pdf','VERIFICADO',CURRENT_DATE,NULL,now(),'' FROM tipos_documento_legal WHERE activo AND obligatorio ON CONFLICT (empresa_id,tipo_documento) DO UPDATE SET estado='VERIFICADO',fecha_vencimiento=NULL,archivo='documento.pdf'")).await;
         self.exec(&format!("UPDATE documentos_empresas SET estado='VERIFICADO' WHERE empresa_id={company}; UPDATE empresas SET estado_validacion='VERIFICADA',estado_listas_restrictivas='APROBADO' WHERE id={company}")).await;
     }
     /// A reto in the given state owned by the company user; returns its id.

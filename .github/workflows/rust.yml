@@ -1,0 +1,58 @@
+name: Rust
+
+on:
+  push:
+    paths: ["rust/**", ".github/workflows/rust.yml"]
+  pull_request:
+    paths: ["rust/**", ".github/workflows/rust.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: retosean
+          POSTGRES_PASSWORD: retosean-ci
+          POSTGRES_DB: retosean_rust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U retosean"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    # Each test creates and drops its own schema inside this database.
+    env:
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_USER: retosean
+      DB_PASSWORD: retosean-ci
+      RUST_DB_NAME: retosean_rust
+
+    defaults:
+      run:
+        working-directory: rust
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Formato
+        run: cargo fmt --check
+
+      - name: Sintaxis del frontend
+        run: node --check web/app.js
+
+      - name: Pruebas (unitarias, extremo a extremo y paridad con Django)
+        run: cargo test --locked -- --include-ignored

@@ -68,24 +68,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .execute(&mut *tx)
         .await?;
-        // The demo company can publish retos at once: every required document
-        // verified and in force (Django's full demo seeds them the same way).
-        let kinds: Vec<(String, Option<i16>)> = sqlx::query_as("SELECT codigo,vigencia_dias FROM tipos_documento_legal WHERE activo AND obligatorio ORDER BY orden")
-            .fetch_all(&mut *tx).await?;
-        std::fs::create_dir_all(&config.media_root)?;
-        let placeholder = retosean::reports::pdf_lines(
-            "Documento de demostración",
-            &["Archivo de ejemplo generado por seed-demo.".into()],
-        );
-        let mut written = Vec::new();
-        for (kind, days) in kinds {
-            let key = format!("{}.pdf", uuid::Uuid::new_v4().simple());
-            let path = config.media_root.join(&key);
-            std::fs::write(&path, &placeholder)?;
-            written.push(path);
-            sqlx::query("INSERT INTO documentos_empresas(empresa_id,tipo_documento,archivo,estado,fecha_expedicion,fecha_vencimiento,fecha_carga,motivo_rechazo) VALUES(1,$1,$2,'VERIFICADO',CURRENT_DATE,CURRENT_DATE+$3::int,now(),'')")
-                .bind(&kind).bind(&key).bind(days.map(i32::from)).execute(&mut *tx).await?;
-        }
+        // The demo company can publish retos at once (Django's full demo does the same).
+        let written = retosean::migrate::demo_documents(&mut tx, &config.media_root, 1).await?;
         if let Err(error) = tx.commit().await {
             for path in written {
                 let _ = std::fs::remove_file(path);

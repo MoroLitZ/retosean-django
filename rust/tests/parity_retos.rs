@@ -922,7 +922,8 @@ parity!(
 parity!(
     test_el_cambio_de_estado_del_reto_queda_en_historial_estados,
     |t| {
-        let (company, _) = t.company_user("emp-bitacora", "900600300").await;
+        let (company, empresa) = t.company_user("emp-bitacora", "900600300").await;
+        t.verify_documents(empresa).await;
         let reto = t.reto(company, "en_revision", "reto").await;
         t.ok(
             &t.admin,

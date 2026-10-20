@@ -54,6 +54,8 @@ const MENU = {
     ["dashboard", "Dashboard", "speedometer2"],
     ["usuarios", "Usuarios", "people"],
     ["empresas", "Empresas", "building"],
+    ["tipos_documento_legal", "Tipos de documento", "file-earmark-ruled"],
+    ["notificaciones", "Registro de notificaciones", "envelope-paper"],
     ["retos", "Retos", "trophy"],
     ["integraciones_academicas", "Vinculaciones", "link-45deg"],
     ["cierres_reto", "Cierre de Retos", "flag"],
@@ -647,6 +649,8 @@ async function loadRecords() {
     `/api/records/${selected}?page=${page}&q=${encodeURIComponent(query)}${inactive}`,
   );
   $("extra-panel").replaceChildren();
+  if (selected === "tipos_documento_legal" && admin())
+    action($("extra-panel"), "Nuevo tipo de documento", () => documentTypeForm(null));
   if (selected === "log_actividad" && admin())
     action($("extra-panel"), "Filtrar bitácora", () => activityLog({}));
   if (selected === "notificaciones" && admin())
@@ -902,6 +906,9 @@ async function openRecord(id) {
     // _puede_ver_seguimiento: admin, the owning company or the integrated professor.
     if (admin() || user.rol === "PROFESOR" || (user.rol === "EMPRESA" && record.empresa_id === user.id))
       action(actions, "Registrar seguimiento", () => progressForm(id));
+    // HU14: the company's read-only progress view, with comments on deliverables.
+    if (user.rol === "EMPRESA" && record.empresa_id === user.id && ["aprobado", "abierto", "en_curso", "pausado", "finalizado"].includes(record.estado))
+      action(actions, "Ver avance", () => progressPanel(id));
     if (user.rol === "EMPRESA" && record.empresa_id === user.id && record.estado === "borrador")
       action(actions, "Eliminar reto", async () => {
         if (confirm("¿Eliminar este reto en borrador?")) await mutate(`/api/retos/${id}/eliminar`, {});
@@ -1194,6 +1201,10 @@ async function openRecord(id) {
       ),
     );
   }
+  if (selected === "empresas" && (admin() || user.rol === "EMPRESA"))
+    action(actions, "Historial documental", () => documentHistory(id));
+  if (selected === "tipos_documento_legal" && admin())
+    action(actions, "Editar tipo de documento", () => documentTypeForm(record));
   if (selected === "empresas" && admin())
     action(
       actions,
@@ -2410,6 +2421,92 @@ async function permissionsForm(id) {
     await mutate(`/api/usuarios/${id}/permisos`, { codigos });
   };
   parent.append(form);
+}
+// HU00: state changes of the company's documents; automatic ones show as "Sistema".
+async function documentHistory(company) {
+  const data = await api(`/api/empresas/${company}/historial-documental`);
+  const parent = modal("Historial documental");
+  parent.append(table(["Fecha", "Documento", "De", "A", "Por", "Comentario"], data.historial.map((h) => [
+    fecha(h.fecha, true), h.documento, choiceLabel(h.estado_anterior), choiceLabel(h.estado_nuevo), h.realizado_por, h.comentario,
+  ])));
+}
+// editar_tipo_documento: the legal-document catalog.
+function documentTypeForm(record) {
+  const parent = modal(record ? "Editar tipo de documento" : "Nuevo tipo de documento");
+  const form = el("form", "form-grid");
+  if (!record) input(form, "codigo", "Código (p. ej. POLIZA_RESPONSABILIDAD)", "", "text", true);
+  input(form, "nombre", "Nombre", record?.nombre || "", "text", true);
+  input(form, "descripcion", "Descripción", record?.descripcion || "", "textarea");
+  const days = input(form, "vigencia_dias", "Vigencia máxima (días desde la expedición)", record?.vigencia_dias ?? "", "number");
+  days.min = 0;
+  input(form, "orden", "Orden", record?.orden ?? 0, "number");
+  const boxes = [
+    ["obligatorio", "Obligatorio"],
+    ["aplica_sin_convenio", "Se exige también a empresas sin convenio"],
+    ["requiere_permiso_especial", "Solo lo carga un usuario con permiso especial"],
+    ["activo", "Activo"],
+  ];
+  for (const [name, text] of boxes) {
+    const wrap = el("div", "form-check full");
+    const box = el("input", "form-check-input");
+    box.type = "checkbox";
+    box.name = name;
+    box.id = "field-" + name;
+    box.checked = record ? !!record[name] : name !== "requiere_permiso_especial";
+    const l = el("label", "form-check-label", text);
+    l.htmlFor = box.id;
+    wrap.append(box, l);
+    form.append(wrap);
+  }
+  form.append(el("button", "primary full", "Guardar"));
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(form));
+    for (const [name] of boxes) data[name] = form.elements[name].checked;
+    data.vigencia_dias = data.vigencia_dias === "" ? null : Number(data.vigencia_dias);
+    data.orden = Number(data.orden || 0);
+    try {
+      await mutate(record ? `/api/tipos-documento/${record.id}` : "/api/tipos-documento", data);
+    } catch (error) {
+      toast(error.message);
+    }
+  };
+  parent.append(form);
+}
+// seguimiento_avance (HU14).
+async function progressPanel(reto) {
+  const data = await api(`/api/retos/${reto}/avance`);
+  const parent = modal("Avance del reto");
+  parent.append(el("p", "fw-bold", `Avance según el último seguimiento: ${data.porcentaje}%`));
+  parent.append(el("h6", "fw-bold mt-2", "Bitácora de sesiones"));
+  parent.append(table(["Fecha", "Sesión", "Avance", "Avances", "Acuerdos"], data.seguimientos.map((s) => [
+    fecha(s.fecha_sesion), choiceLabel(s.tipo_sesion), `${s.porcentaje_avance}%`, s.avances, s.acuerdos,
+  ])));
+  parent.append(el("h6", "fw-bold mt-3", "Entregables de los equipos"));
+  for (const e of data.entregables) {
+    const box = el("div", "mb-3");
+    box.append(el("p", "mb-1", `${e.titulo} · ${e.estudiante} · ${choiceLabel(e.estado)}`));
+    for (const c of e.comentarios) box.append(el("p", "small text-muted mb-1", `${c.autor}: ${c.comentario}`));
+    const form = el("form", "d-flex gap-2");
+    const text = el("input", "form-control form-control-sm");
+    text.name = "comentario";
+    text.required = true;
+    text.placeholder = "Comentario para el equipo";
+    form.append(text, el("button", "secondary", "Comentar"));
+    form.onsubmit = async (ev) => {
+      ev.preventDefault();
+      try {
+        await api(`/api/entregables/${e.id}/comentario`, { comentario: text.value });
+        toast("Comentario agregado al historial.");
+        await progressPanel(reto);
+      } catch (error) {
+        toast(error.message);
+      }
+    };
+    box.append(form);
+    parent.append(box);
+  }
+  if (!data.entregables.length) parent.append(el("p", "small text-muted", "Aún no hay entregables."));
 }
 // HU13: the activity log filtered by action, user and dates.
 async function activityLog(filters) {

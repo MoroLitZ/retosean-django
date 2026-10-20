@@ -162,3 +162,36 @@ async fn copy_files(
     }
     Ok(())
 }
+
+/// seed-demo: every required document of the company verified and in force,
+/// each with a placeholder PDF. Idempotent: existing documents are kept.
+pub async fn demo_documents(
+    tx: &mut Transaction<'_, Postgres>,
+    media_root: &Path,
+    company: i64,
+) -> Result<Vec<PathBuf>, Error> {
+    let kinds: Vec<(String, Option<i16>)> = sqlx::query_as("SELECT t.codigo,t.vigencia_dias FROM tipos_documento_legal t WHERE t.activo AND t.obligatorio AND NOT EXISTS(SELECT 1 FROM documentos_empresas d WHERE d.empresa_id=$1 AND d.tipo_documento=t.codigo) ORDER BY t.orden")
+        .bind(company)
+        .fetch_all(&mut **tx)
+        .await?;
+    std::fs::create_dir_all(media_root)?;
+    let placeholder = crate::reports::pdf_lines(
+        "Documento de demostración",
+        &["Archivo de ejemplo generado por seed-demo.".into()],
+    );
+    let mut written = Vec::new();
+    for (kind, days) in kinds {
+        let key = format!("{}.pdf", uuid::Uuid::new_v4().simple());
+        let path = media_root.join(&key);
+        if let Err(error) = std::fs::write(&path, &placeholder) {
+            for path in written {
+                let _ = std::fs::remove_file(path);
+            }
+            return Err(error.into());
+        }
+        written.push(path);
+        sqlx::query("INSERT INTO documentos_empresas(empresa_id,tipo_documento,archivo,estado,fecha_expedicion,fecha_vencimiento,fecha_carga,motivo_rechazo) VALUES($1,$2,$3,'VERIFICADO',CURRENT_DATE,CURRENT_DATE+$4::int,now(),'')")
+            .bind(company).bind(&kind).bind(&key).bind(days.map(i32::from)).execute(&mut **tx).await?;
+    }
+    Ok(written)
+}

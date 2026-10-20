@@ -119,7 +119,9 @@ parity!(test_notificar_admins_incluye_admin_por_rol, |t| {
 
 // NotificacionesDeDominioTests
 async fn in_review(t: &Ctx) -> (i64, i64) {
-    let (company, _) = t.company_user("empresa-notif", "900400100").await;
+    let (company, empresa) = t.company_user("empresa-notif", "900400100").await;
+    // The admin's approval checks the HU00 gate (admin_revisar).
+    t.verify_documents(empresa).await;
     (t.reto(company, "en_revision", "reto").await, company)
 }
 parity!(test_aprobar_reto_notifica_a_la_empresa, |t| {

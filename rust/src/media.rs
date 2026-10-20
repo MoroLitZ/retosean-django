@@ -366,20 +366,31 @@ async fn store_document(
     )
     .await?;
     crate::companies::recompute_validation(&mut tx, company).await?;
-    let admins: Vec<i64> = sqlx::query_scalar(
-        "SELECT id FROM usuarios WHERE is_active AND (is_superuser OR rol='ADMIN')",
-    )
-    .fetch_all(&mut *tx)
-    .await?;
-    for admin in admins {
-        notify(
-            &mut tx,
-            admin,
-            "DOCUMENTO_CARGADO_ADMIN",
-            &format!("Documento {kind} pendiente de revisión"),
-            &format!("documento:{id}:{}", uuid::Uuid::new_v4().simple()),
+    // The company's own upload tells the admins (empresas:documentos); the
+    // special upload by the university does not.
+    if user.rol == "EMPRESA" {
+        let company_name: String =
+            sqlx::query_scalar("SELECT razon_social FROM empresas WHERE id=$1")
+                .bind(company)
+                .fetch_one(&mut *tx)
+                .await?;
+        let message = format!(
+            "La empresa {company_name} {} el documento \"{name}\" para revision.",
+            if from.is_empty() {
+                "cargo"
+            } else {
+                "actualizo"
+            }
+        );
+        let admins: Vec<i64> = sqlx::query_scalar(
+            "SELECT id FROM usuarios WHERE is_active AND (is_superuser OR rol='ADMIN') AND id<>$1",
         )
+        .bind(user.id)
+        .fetch_all(&mut *tx)
         .await?;
+        for admin in admins {
+            notify(&mut tx, admin, "DOCUMENTO_CARGADO_ADMIN", &message, "").await?;
+        }
     }
     tokio::fs::create_dir_all(&state.config.media_root)
         .await
