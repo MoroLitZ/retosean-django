@@ -20,13 +20,14 @@ const PERIODOS: [(&str, &str); 5] = [
     ("custom", "Rango personalizado"),
 ];
 // Every query shares these parameters; Django filters on the local (Bogota) date.
-const PARAMS: &str = "WITH p AS (SELECT $1::bigint uid, $2::date desde, $3::date hasta, $4::bigint fac, $5::bigint prog)";
+const PARAMS: &str = "WITH p AS (SELECT $1::bigint uid, $2::date desde, $3::date hasta, $4::bigint fac, $5::bigint prog, $6::bigint eco)";
 const EN_RANGO: &str = "(p.desde IS NULL OR (t.{c} AT TIME ZONE 'America/Bogota')::date >= p.desde) AND (p.hasta IS NULL OR (t.{c} AT TIME ZONE 'America/Bogota')::date <= p.hasta)";
 
 type Params = (
     i64,
     Option<NaiveDate>,
     Option<NaiveDate>,
+    Option<i64>,
     Option<i64>,
     Option<i64>,
 );
@@ -38,6 +39,7 @@ pub struct Filtro {
     hasta: Option<String>,
     facultad: Option<String>,
     programa: Option<String>,
+    ecosistema: Option<String>,
 }
 
 /// Same rules as apps/dashboard/filters.py::rango_de_fechas.
@@ -110,14 +112,18 @@ pub async fn panel(
         user.rol.as_str()
     };
     let id = |v: &Option<String>| v.as_deref().and_then(|s| s.parse::<i64>().ok());
-    let (fac, prog) = if rol == "ADMIN" {
-        (id(&filtro.facultad), id(&filtro.programa))
+    let (fac, prog, eco) = if rol == "ADMIN" {
+        (
+            id(&filtro.facultad),
+            id(&filtro.programa),
+            id(&filtro.ecosistema),
+        )
     } else {
-        (None, None)
+        (None, None, None)
     };
     let retos = |extra: &str| {
         format!(
-            "{PARAMS}, r AS (SELECT t.* FROM retos t, p WHERE t.eliminado_en IS NULL AND {} AND (p.fac IS NULL OR t.facultad_id = p.fac) AND (p.prog IS NULL OR t.programa_id = p.prog) AND {extra})",
+            "{PARAMS}, r AS (SELECT t.* FROM retos t, p WHERE t.eliminado_en IS NULL AND {} AND (p.fac IS NULL OR t.facultad_id = p.fac) AND (p.prog IS NULL OR t.programa_id = p.prog) AND (p.eco IS NULL OR t.ecosistema_id = p.eco) AND {extra})",
             EN_RANGO.replace("{c}", "creado_en")
         )
     };
@@ -128,6 +134,9 @@ pub async fn panel(
         "ADMIN" => (
             retos("TRUE"),
             "SELECT jsonb_build_object(
+                'impacto_si', (SELECT count(*) FROM cierres_reto WHERE reto_id IN (SELECT id FROM r) AND impacto = 'SI'),
+                'impacto_no', (SELECT count(*) FROM cierres_reto WHERE reto_id IN (SELECT id FROM r) AND impacto = 'NO'),
+                'impacto_evaluacion', (SELECT count(*) FROM cierres_reto WHERE reto_id IN (SELECT id FROM r) AND impacto = 'EN_EVALUACION'),
                 'retos_total', (SELECT count(*) FROM r),
                 'retos_activos', (SELECT count(*) FROM r WHERE estado IN ('aprobado','abierto','en_curso','pausado')),
                 'retos_finalizados', (SELECT count(*) FROM r WHERE estado = 'finalizado'),
@@ -145,6 +154,11 @@ pub async fn panel(
                 ("retos_por_facultad", "SELECT coalesce(f.nombre, 'Sin facultad'), count(*)::float8 FROM r LEFT JOIN facultades f ON f.id = r.facultad_id GROUP BY 1 ORDER BY 2 DESC LIMIT 8", None),
                 ("retos_por_mes", por_mes, None),
                 ("integraciones_por_estado", "SELECT estado, count(*)::float8 FROM integraciones_academicas WHERE reto_id IN (SELECT id FROM r) GROUP BY estado ORDER BY 2 DESC", Some(("integraciones_academicas", "estado"))),
+                (
+                    "impacto",
+                    "SELECT impacto, count(*)::float8 FROM cierres_reto WHERE reto_id IN (SELECT id FROM r) GROUP BY impacto ORDER BY 2 DESC",
+                    Some(("cierres_reto", "impacto")),
+                ),
             ],
         ),
         "EMPRESA" => (
@@ -201,7 +215,27 @@ pub async fn panel(
                 ("notas_recientes", "SELECT k, v FROM (SELECT left(titulo, 24) k, nota::float8 v, fecha_entrega FROM e WHERE nota IS NOT NULL ORDER BY fecha_entrega DESC LIMIT 8) x ORDER BY fecha_entrega", None),
             ],
         ),
-        // Like Django, a user without one of the four panel roles sees the "sin rol" notice.
+        // Django kpis_experto / series_experto: the expert as hackathon juror.
+        "EXPERTO" => (
+            format!(
+                "{PARAMS}, j AS (SELECT * FROM jurados_hackaton, p WHERE usuario_id = p.uid), v AS (SELECT t.* FROM votaciones_hackaton t, p WHERE t.jurado_id IN (SELECT id FROM j) AND {})",
+                EN_RANGO.replace("{c}", "fecha")
+            ),
+            "SELECT jsonb_build_object(
+                'hackathones_asignados', (SELECT count(DISTINCT hackathon_id) FROM j),
+                'hackathones_en_curso', (SELECT count(*) FROM j JOIN hackathons h ON h.id = j.hackathon_id WHERE h.estado = 'en_curso'),
+                'equipos_por_evaluar', (SELECT count(*) FROM inscripciones_hackaton i WHERE i.estado = 'ACEPTADA' AND i.hackathon_id IN (SELECT hackathon_id FROM j)
+                    AND NOT EXISTS (SELECT 1 FROM votaciones_hackaton x WHERE x.jurado_id IN (SELECT id FROM j) AND x.hackathon_id = i.hackathon_id AND x.equipo_id = i.equipo_id)),
+                'votos_emitidos', (SELECT count(*) FROM v),
+                'puntaje_promedio', (SELECT avg(puntaje)::float8 FROM v),
+                'equipos_academicos', (SELECT count(*) FROM equipos_reto_academico_expertos_invitados e, p WHERE e.usuario_id = p.uid))",
+            vec![(
+                "votos_por_hackathon",
+                "SELECT coalesce(r.titulo, 'Sin titulo'), count(*)::float8 FROM v JOIN hackathons h ON h.id = v.hackathon_id JOIN retos r ON r.id = h.reto_id GROUP BY 1 ORDER BY 2 DESC LIMIT 8",
+                None,
+            )],
+        ),
+        // Like Django, a user without one of the panel roles sees the "sin rol" notice.
         _ => (String::new(), "", vec![]),
     };
     let mut cuerpo = json!({
@@ -211,7 +245,7 @@ pub async fn panel(
     if cte.is_empty() {
         return Ok(Json(cuerpo));
     }
-    let params = (user.id, desde, hasta, fac, prog);
+    let params = (user.id, desde, hasta, fac, prog, eco);
     fn bind(
         sql: &str,
         p: Params,
@@ -222,6 +256,7 @@ pub async fn panel(
             .bind(p.2)
             .bind(p.3)
             .bind(p.4)
+            .bind(p.5)
     }
     use sqlx::Row;
     let sql = format!("{cte} {kpis}");
@@ -251,6 +286,11 @@ pub async fn panel(
     if rol == "ADMIN" {
         cuerpo["facultades"] = sqlx::query_scalar(
             "SELECT coalesce(jsonb_agg(jsonb_build_object('id', id, 'nombre', nombre) ORDER BY nombre), '[]') FROM facultades",
+        )
+        .fetch_one(&state.pool)
+        .await?;
+        cuerpo["ecosistemas"] = sqlx::query_scalar(
+            "SELECT coalesce(jsonb_agg(jsonb_build_object('id', id, 'nombre', nombre) ORDER BY nombre), '[]') FROM ecosistemas",
         )
         .fetch_one(&state.pool)
         .await?;

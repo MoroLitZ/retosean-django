@@ -88,8 +88,9 @@ pub async fn create(
         }
         "EMPRESA" => {
             let company:i64=sqlx::query_scalar("INSERT INTO empresas(usuario_id,nit,razon_social,sector_industrial,fecha_creacion,estado_validacion,estado_listas_restrictivas,fecha_ultima_actualizacion,renuncio_a_convenio,estado_convenio) VALUES($1,$2,$3,'',(now() at time zone 'America/Bogota')::date,'PENDIENTE','PENDIENTE',now(),false,'NO_RADICADO') RETURNING id").bind(id).bind(&input.nit).bind(&input.razon_social).fetch_one(&mut *tx).await?;
-            for kind in ["CAMARA_COMERCIO", "RUT", "CEDULA_REPRESENTANTE", "CONVENIO"] {
-                sqlx::query("INSERT INTO documentos_empresas(empresa_id,tipo_documento,estado,fecha_carga) VALUES($1,$2,'PENDIENTE',now())").bind(company).bind(kind).execute(&mut *tx).await?;
+            // One pending row per active catalog type (HU00), so the company can upload each.
+            {
+                sqlx::query("INSERT INTO documentos_empresas(empresa_id,tipo_documento,estado,fecha_carga) SELECT $1,codigo,'PENDIENTE',now() FROM tipos_documento_legal WHERE activo ORDER BY orden").bind(company).execute(&mut *tx).await?;
             }
         }
         _ => {}

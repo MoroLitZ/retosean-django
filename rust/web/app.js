@@ -86,6 +86,10 @@ const MENU = {
     ["cierre_encuestasatisfaccion", "Mis Encuestas", "chat-square-text"],
     ["unidades_estudio", "Unidades de Estudio", "journal-bookmark-fill"],
   ],
+  EXPERTO: [
+    ["Jurado"],
+    ["dashboard", "Dashboard", "speedometer2"],
+  ],
   ESTUDIANTE: [
     ["Mi Espacio"],
     ["dashboard", "Dashboard", "speedometer2"],
@@ -330,6 +334,9 @@ const KPIS = {
     ["Estudiantes", "estudiantes_total", "mortarboard", "#65a30d"],
     ["Docentes", "profesores_total", "person-video3", "#db2777"],
     ["Postulaciones", "postulaciones_total", "send", "#dc2626", (k) => `${k.postulaciones_aceptadas} aceptadas`],
+    ["Solución aplicada", "impacto_si", "check2-circle", "#16a34a", () => "la empresa la aplicó"],
+    ["No aplicada", "impacto_no", "x-circle", "#dc2626"],
+    ["Impacto en evaluación", "impacto_evaluacion", "hourglass", "#f59e0b"],
   ],
   EMPRESA: [
     ["Mis retos", "retos_total", "trophy", "#2563eb"],
@@ -359,6 +366,14 @@ const KPIS = {
     ["Sin calificar", "entregables_pendientes", "hourglass-split", "#dc2626"],
     ["Nota promedio", "nota_promedio", "star-half", "#65a30d"],
   ],
+  EXPERTO: [
+    ["Hackathones asignados", "hackathones_asignados", "lightning-charge", "#2563eb"],
+    ["En curso", "hackathones_en_curso", "play-circle", "#16a34a"],
+    ["Equipos por evaluar", "equipos_por_evaluar", "hourglass-split", "#f59e0b"],
+    ["Votos emitidos", "votos_emitidos", "check2-square", "#7c3aed"],
+    ["Puntaje promedio", "puntaje_promedio", "star-half", "#65a30d"],
+    ["Equipos academicos", "equipos_academicos", "people", "#0891b2"],
+  ],
 };
 // [title, serie, chart type, dataset label, column class]
 const GRAFICAS = {
@@ -367,6 +382,7 @@ const GRAFICAS = {
     ["Retos por facultad", "retos_por_facultad", "bar", "Retos", "col-lg-7"],
     ["Retos creados por mes", "retos_por_mes", "line", "Retos creados", "col-lg-7"],
     ["Integraciones académicas", "integraciones_por_estado", "doughnut", "Total", "col-lg-5"],
+    ["Impacto: ¿la empresa aplicó la solución?", "impacto", "doughnut", "Total", "col-lg-5"],
   ],
   EMPRESA: [
     ["Mis retos por estado", "retos_por_estado", "doughnut", "Total", "col-lg-5"],
@@ -380,6 +396,7 @@ const GRAFICAS = {
     ["Mis postulaciones", "postulaciones_por_estado", "doughnut", "Total", "col-lg-5"],
     ["Mis notas recientes", "notas_recientes", "bar", "Nota", "col-lg-7"],
   ],
+  EXPERTO: [["Votos por hackathon", "votos_por_hackathon", "bar", "Votos", "col-lg-7"]],
 };
 const ACCESOS = {
   ADMIN: [
@@ -406,6 +423,7 @@ const ACCESOS = {
     ["postulaciones", "Mis postulaciones", "send"],
     ["certificados", "Mis certificados", "award"],
   ],
+  EXPERTO: [["hackathons", "Mis hackathones", "lightning-charge"]],
 };
 let dashboardQuery = "";
 async function loadDashboard() {
@@ -432,12 +450,14 @@ async function loadDashboard() {
     };
     fill("facultad", "Todas", data.facultades);
     fill("programa", "Todos", data.programas);
+    fill("ecosistema", "Todos", data.ecosistemas);
   }
   const kpis = $("kpis");
   kpis.replaceChildren();
   for (const [text, key, iconName, color, note] of data.sin_rol ? [] : KPIS[data.rol]) {
     let value = data.kpis[key];
-    if (key === "nota_promedio") value = value == null ? "" : Number(value).toFixed(2);
+    if (key === "nota_promedio" || key === "puntaje_promedio")
+      value = value == null ? "" : Number(value).toFixed(2);
     const col = el("div", "col-6 col-lg-3");
     const card = el("div", "card border-0 shadow-sm h-100");
     const body = el("div", "card-body d-flex align-items-center gap-3");
@@ -560,6 +580,11 @@ const COLUMNS = {
   hackathons: [["reto", "Reto"], ["estado", "Estado"], ["resultados_publicados", "Resultados publicados"], ["creado_en", "Creado"]],
   cierre_encuestasatisfaccion: [["participante", "Participante"], ["calificacion", "Calificación"], ["respondida_en", "Respondida"]],
   evaluaciones: [["entregable", "Entregable"], ["profesor", "Profesor"], ["nota", "Nota"], ["fecha", "Fecha"]],
+  participantes_integracion: [["integracion", "Integración"], ["rol", "Rol"], ["nombre", "Nombre"], ["documento", "Cédula / documento"], ["email", "Correo"]],
+  sesiones_reto_academico: [["reto", "Reto"], ["tipo", "Tipo"], ["fecha_hora", "Fecha y hora"], ["enlace_reunion", "Enlace"]],
+  invitados_hackaton: [["hackathon", "Hackathon"], ["tipo", "Tipo"], ["nombre", "Nombre"], ["organizacion", "Organización"], ["confirmado", "Confirmado"]],
+  tipos_documento_legal: [["orden", "Orden"], ["nombre", "Documento"], ["obligatorio", "Obligatorio"], ["vigencia_dias", "Vigencia (días)"], ["activo", "Activo"]],
+  cierre_solicitudlogistica: [["reto", "Reto"], ["evento", "Evento"], ["tipo", "Tipo"], ["estado", "Estado"], ["creada_en", "Solicitada"]],
 };
 let columnHeaders = {};
 function columns(records) {
@@ -608,6 +633,9 @@ async function loadRecords() {
   const data = await api(
     `/api/records/${selected}?page=${page}&q=${encodeURIComponent(query)}`,
   );
+  $("extra-panel").replaceChildren();
+  if (selected === "equipos_reto_academico" && user.rol === "ESTUDIANTE")
+    scheduleForStudent().catch(showError);
   total = data.total;
   $("record-count").textContent = `${total} registro${total === 1 ? "" : "s"}`;
   // Exports are an admin feature in Django (apps/reportes).
@@ -740,6 +768,7 @@ async function openRecord(id) {
     record.titulo ||
       record.razon_social ||
       record.nombre ||
+      (record.reto && `${capfirst(meta(selected)?.verbose_name || selected)}: ${record.reto}`) ||
       `${capfirst(meta(selected)?.verbose_name || selected)} #${id}`,
   );
   const dl = document.createElement("dl");
@@ -844,17 +873,7 @@ async function openRecord(id) {
       user.rol === "PROFESOR" &&
       ["aprobado", "abierto", "en_curso", "pausado"].includes(record.estado)
     )
-      action(actions, "Integrar a mi curso", () =>
-        simpleForm("Integración académica", `/api/retos/${id}/integrar`, [
-          ["facultad", "Facultad"],
-          ["nivel_formacion", "Nivel de formación", "text", "Pregrado"],
-          ["programa_academico", "Programa"],
-          ["descripcion", "Descripción", "textarea"],
-          ["alcance", "Alcance", "textarea"],
-          ["entregable_esperado", "Entregable esperado"],
-          ["cronograma_sesiones", "Cronograma", "textarea"],
-        ]),
-      );
+      action(actions, "Integrar a mi curso", () => integrationForm(id));
     if (
       (admin() || user.rol === "PROFESOR") &&
       ["abierto", "en_curso", "pausado"].includes(record.estado)
@@ -958,6 +977,13 @@ async function openRecord(id) {
     actions.append(a);
   }
   if (selected === "integraciones_academicas") {
+    const team = await api(`/api/integraciones/${id}/equipo`);
+    parent.insertBefore(teamTables(team), actions);
+    const editable =
+      ["borrador", "rechazada"].includes(record.estado) ||
+      ["abierto", "en_curso"].includes(record.reto_estado);
+    if (user.rol === "PROFESOR" && record.profesor_id === user.id && editable)
+      action(actions, "Editar equipo y cronograma", () => teamForm(id, team));
     if (user.rol === "PROFESOR" && record.profesor_id === user.id) {
       if (record.estado === "borrador")
         action(
@@ -1137,6 +1163,34 @@ async function openRecord(id) {
   if (selected === "documentos_empresas" && user.rol === "EMPRESA")
     action(actions, "Cargar documento", () => documentForm(id));
   if (selected === "hackathons") {
+    // HU09: logistics, guests, automatic close and the final report.
+    const event = await api(`/api/hackathons/${id}/logistica`);
+    const info = el("div", "mb-3");
+    info.append(
+      el("h6", "fw-bold mt-2", "Logística del evento"),
+      el("p", "small mb-1", `Modalidad: ${label(MODALIDADES, event.modalidad)} · Espacio: ${event.lugar || "Por definir"}`),
+    );
+    if (event.enlace_transmision) {
+      const link = el("a", "small", event.enlace_transmision);
+      link.href = event.enlace_transmision;
+      link.target = "_blank";
+      link.rel = "noopener";
+      info.append(link);
+    }
+    if (event.cierre && !record.resultados_publicados)
+      info.append(el("p", "small text-muted mt-2 mb-1", `Los resultados se publican automáticamente el ${fecha(event.cierre, true)}.`));
+    if (event.invitados.length)
+      info.append(table(["Invitado", "Tipo", "Organización", "Confirmado"],
+        event.invitados.map((g) => [g.nombre, label(TIPOS_INVITADO, g.tipo), g.organizacion, g.confirmado ? "Sí" : "Pendiente"])));
+    parent.insertBefore(info, actions);
+    if (event.puede_gestionar && !["finalizado", "cancelado"].includes(record.estado))
+      action(actions, "Logística e invitados", () => logisticsForm(id, event));
+    if (event.puede_exportar)
+      for (const [format, text] of [["pdf", "Informe final PDF"], ["xlsx", "Informe final Excel"]]) {
+        const a = el("a", "secondary", text);
+        a.href = `/api/hackathons/${id}/informe/${format}`;
+        actions.append(a);
+      }
     if (admin() || user.rol === "PROFESOR") {
       const targets =
         {
@@ -1245,6 +1299,219 @@ async function openRecord(id) {
           mutate(`/api/inscripciones/${id}/estado`, { estado }),
         );
 }
+// ── HU03: structured team and dated schedule (Django ParticipanteIntegracion) ──
+const ROLES_EQUIPO = [["PROFESOR", "Profesor"], ["ESTUDIANTE", "Estudiante"], ["EXPERTO", "Experto invitado"]];
+const TIPOS_SESION = [["inicio", "Inicio"], ["seguimiento", "Seguimiento"], ["preseleccion", "Preselección"], ["evaluacion", "Evaluación"]];
+function cell(tag, text) {
+  return el(tag, "", text);
+}
+function table(headers, rows) {
+  const t = el("table", "table table-sm align-middle mb-2");
+  const head = el("tr");
+  headers.forEach((h) => head.append(cell("th", h)));
+  const thead = el("thead", "table-light");
+  thead.append(head);
+  const body = el("tbody");
+  rows.forEach((r) => {
+    const tr = el("tr");
+    r.forEach((v) => tr.append(cell("td", v === "" || v == null ? "-" : String(v))));
+    body.append(tr);
+  });
+  if (!rows.length) {
+    const tr = el("tr");
+    const td = cell("td", "Sin registros.");
+    td.colSpan = headers.length;
+    td.className = "text-muted text-center";
+    tr.append(td);
+    body.append(tr);
+  }
+  t.append(thead, body);
+  const wrap = el("div", "table-responsive");
+  wrap.append(t);
+  return wrap;
+}
+function label(list, value) {
+  return (list.find((x) => x[0] === value) || [value, value])[1];
+}
+function teamTables(team) {
+  const box = el("div", "mb-3");
+  box.append(
+    el("h6", "fw-bold mt-2", "Equipo"),
+    table(["Rol", "Nombre", "Cédula / documento", "Correo", "Facultad / programa"],
+      team.participantes.map((p) => [label(ROLES_EQUIPO, p.rol), p.nombre + (p.cuenta ? " ✓" : ""), p.documento, p.email,
+        p.rol === "ESTUDIANTE" ? p.programa : p.facultad])),
+    el("h6", "fw-bold mt-3", "Cronograma de sesiones"),
+    table(["Tipo", "Fecha y hora", "Enlace", "Observaciones"],
+      team.sesiones.map((s) => [label(TIPOS_SESION, s.tipo), fecha(s.fecha_hora, true), s.enlace_reunion, s.observaciones])),
+  );
+  return box;
+}
+function editableRows(parent, title, columns, rows) {
+  parent.append(el("h6", "fw-bold mt-3 mb-1", title));
+  const t = el("table", "table table-sm align-middle mb-1");
+  const head = el("tr");
+  [...columns.map((c) => c.label), "Quitar"].forEach((h) => head.append(cell("th", h)));
+  const thead = el("thead", "table-light");
+  thead.append(head);
+  const body = el("tbody");
+  t.append(thead, body);
+  const addRow = (values = {}) => {
+    const tr = el("tr");
+    for (const c of columns) {
+      const td = el("td");
+      let field;
+      if (c.options) {
+        field = el("select", "form-select form-select-sm");
+        c.options.forEach(([v, l]) => field.append(new Option(l, v)));
+      } else {
+        field = el("input", "form-control form-control-sm");
+        field.type = c.type || "text";
+      }
+      field.name = c.name;
+      field.setAttribute("aria-label", c.label);
+      let value = values[c.name] ?? "";
+      if (c.type === "datetime-local" && value) value = new Date(value).toLocaleString("sv-SE").slice(0, 16).replace(" ", "T");
+      field.value = value;
+      td.append(field);
+      tr.append(td);
+    }
+    const remove = el("button", "btn btn-sm btn-outline-danger", "✕");
+    remove.type = "button";
+    remove.setAttribute("aria-label", "Quitar fila");
+    remove.onclick = () => tr.remove();
+    const td = el("td");
+    td.append(remove);
+    tr.append(td);
+    body.append(tr);
+  };
+  rows.forEach(addRow);
+  const wrap = el("div", "table-responsive");
+  wrap.append(t);
+  const add = el("button", "secondary", "+ Agregar fila");
+  add.type = "button";
+  add.onclick = () => addRow();
+  parent.append(wrap, add);
+  return () =>
+    [...body.querySelectorAll("tr")].map((tr) =>
+      Object.fromEntries([...tr.querySelectorAll("input,select")].map((f) => [f.name, f.value.trim()])),
+    );
+}
+function teamEditor(parent, team = { participantes: [], sesiones: [] }) {
+  const participants = editableRows(parent, "Equipo (al menos un profesor)", [
+    { name: "rol", label: "Rol", options: ROLES_EQUIPO },
+    { name: "nombre", label: "Nombre" },
+    { name: "documento", label: "Cédula / documento" },
+    { name: "email", label: "Correo", type: "email" },
+    { name: "facultad", label: "Facultad u organización" },
+    { name: "programa", label: "Programa" },
+  ], team.participantes.length ? team.participantes : [{ rol: "PROFESOR" }]);
+  const sessions = editableRows(parent, "Cronograma (inicio, seguimiento y evaluación)", [
+    { name: "tipo", label: "Tipo", options: TIPOS_SESION },
+    { name: "fecha_hora", label: "Fecha y hora", type: "datetime-local" },
+    { name: "enlace_reunion", label: "Enlace", type: "url" },
+    { name: "observaciones", label: "Observaciones" },
+  ], team.sesiones.length ? team.sesiones : [{ tipo: "inicio" }, { tipo: "seguimiento" }, { tipo: "evaluacion" }]);
+  return () => ({
+    participantes: participants(),
+    sesiones: sessions()
+      .filter((s) => s.fecha_hora)
+      .map((s) => ({ ...s, fecha_hora: new Date(s.fecha_hora).toISOString() })),
+  });
+}
+function submitForm(form, button, path, collect, done) {
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    button.disabled = true;
+    try {
+      await mutate(path, collect());
+      if (done) done();
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  };
+}
+function integrationForm(retoId) {
+  const parent = modal("Integración académica");
+  const form = el("form");
+  const grid = el("div", "form-grid");
+  input(grid, "facultad", "Facultad", "", "text", true);
+  input(grid, "nivel_formacion", "Nivel de formación", "Pregrado", "text", true);
+  input(grid, "programa_academico", "Programa", "", "text", true);
+  input(grid, "ecosistema", "Ecosistema");
+  input(grid, "descripcion", "Descripción", "", "textarea", true);
+  input(grid, "alcance", "Alcance", "", "textarea", true);
+  input(grid, "entregable_esperado", "Entregable esperado", "", "text", true);
+  input(grid, "cronograma_sesiones", "Notas del cronograma", "", "textarea");
+  form.append(grid);
+  const collectTeam = teamEditor(form);
+  const button = el("button", "primary", "Guardar borrador");
+  form.append(el("div", "mt-3"), button);
+  submitForm(form, button, `/api/retos/${retoId}/integrar`, () => ({
+    ...Object.fromEntries([...grid.querySelectorAll("input,textarea")].map((f) => [f.name, f.value])),
+    ...collectTeam(),
+  }));
+  parent.append(form);
+}
+function teamForm(integrationId, team) {
+  const parent = modal("Equipo y cronograma");
+  const form = el("form");
+  const collectTeam = teamEditor(form, team);
+  const button = el("button", "primary", "Guardar equipo y cronograma");
+  form.append(el("div", "mt-3"), button);
+  submitForm(form, button, `/api/integraciones/${integrationId}/equipo`, collectTeam);
+  parent.append(form);
+}
+async function scheduleForStudent() {
+  const data = await api("/api/records/sesiones_reto_academico?page=1&q=&limit=100");
+  const panel = el("div", "card-panel mt-4");
+  panel.append(el("div", "card-panel-header", "Cronograma de sesiones"));
+  const rows = data.records
+    .sort((a, b) => String(a.fecha_hora).localeCompare(String(b.fecha_hora)))
+    .map((s) => [s.reto, label(TIPOS_SESION, s.tipo), fecha(s.fecha_hora, true), s.enlace_reunion || ""]);
+  const box = el("div", "p-3");
+  box.append(table(["Reto", "Sesión", "Fecha y hora", "Enlace"], rows));
+  panel.append(box);
+  $("extra-panel").append(panel);
+}
+
+// ── HU09: event logistics (Django LogisticaForm + InvitadoFormSet) ──
+const MODALIDADES = [["presencial", "Presencial"], ["virtual", "Virtual"], ["hibrida", "Híbrida"]];
+const TIPOS_INVITADO = [["INVITADO", "Invitado"], ["MENTOR", "Mentor"], ["PONENTE", "Ponente"], ["PATROCINADOR", "Patrocinador"]];
+function logisticsForm(id, event) {
+  const parent = modal("Logística e invitados");
+  const form = el("form");
+  const grid = el("div", "form-grid");
+  const wrap = el("div");
+  const l = el("label", "", "Modalidad");
+  l.htmlFor = "field-modalidad";
+  const select = el("select");
+  select.id = "field-modalidad";
+  select.name = "modalidad";
+  MODALIDADES.forEach(([v, t]) => select.append(new Option(t, v, false, v === event.modalidad)));
+  wrap.append(l, select);
+  grid.append(wrap);
+  input(grid, "lugar", "Espacio físico", event.lugar);
+  input(grid, "enlace_transmision", "Enlace de transmisión", event.enlace_transmision, "url");
+  input(grid, "notas_logistica", "Notas de logística", event.notas_logistica, "textarea");
+  form.append(grid);
+  const guests = editableRows(form, "Invitados", [
+    { name: "tipo", label: "Tipo", options: TIPOS_INVITADO },
+    { name: "nombre", label: "Nombre" },
+    { name: "organizacion", label: "Organización" },
+    { name: "email", label: "Correo", type: "email" },
+    { name: "confirmado", label: "Confirmado", options: [["false", "Pendiente"], ["true", "Confirmado"]] },
+  ], event.invitados.map((g) => ({ ...g, confirmado: String(g.confirmado) })));
+  const button = el("button", "primary", "Guardar logística");
+  form.append(el("div", "mt-3"), button);
+  submitForm(form, button, `/api/hackathons/${id}/logistica`, () => ({
+    ...Object.fromEntries([...grid.querySelectorAll("input,textarea,select")].map((f) => [f.name, f.value])),
+    invitados: guests().filter((g) => g.nombre).map((g) => ({ ...g, confirmado: g.confirmado === "true" })),
+  }));
+  parent.append(form);
+}
+
 function simpleForm(title, path, fields, transform = (data) => data) {
   const parent = modal(title),
     form = document.createElement("form");

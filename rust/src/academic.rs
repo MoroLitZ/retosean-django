@@ -22,7 +22,11 @@ pub struct IntegrationInput {
     descripcion: String,
     alcance: String,
     entregable_esperado: String,
+    // Free schedule notes; the dated sessions travel in `team` (HU03).
+    #[serde(default)]
     cronograma_sesiones: String,
+    #[serde(flatten)]
+    team: crate::team::TeamInput,
 }
 pub async fn integrate(
     State(state): State<AppState>,
@@ -41,10 +45,13 @@ pub async fn integrate(
         (&input.descripcion, 10000, "Descripción"),
         (&input.alcance, 10000, "Alcance"),
         (&input.entregable_esperado, 180, "Entregable"),
-        (&input.cronograma_sesiones, 10000, "Cronograma"),
     ] {
         domain::validate_text(text, max, label)?;
     }
+    if input.cronograma_sesiones.chars().count() > 10000 {
+        return Err(AppError::bad("Notas del cronograma demasiado largas"));
+    }
+    crate::team::validate(&input.team)?;
     if input.ecosistema.chars().count() > 140 {
         return Err(AppError::bad("Ecosistema demasiado largo"));
     }
@@ -63,8 +70,9 @@ pub async fn integrate(
     if duplicate {
         return Err(AppError::bad("Ya tienes una integración para este reto"));
     }
-    let id:i64=sqlx::query_scalar("INSERT INTO integraciones_academicas(reto_id,profesor_id,facultad,nivel_formacion,programa_academico,ecosistema,descripcion,alcance,entregable_esperado,cronograma_sesiones,equipo_profesores,equipo_estudiantes,expertos_invitados,requerimientos_empresa,requerimientos_internos,espacio_fisico,estado,comentarios_revision,creado_en,actualizado_en) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'','','','','','','borrador','',now(),now()) RETURNING id")
+    let id:i64=sqlx::query_scalar("INSERT INTO integraciones_academicas(reto_id,profesor_id,facultad,nivel_formacion,programa_academico,ecosistema,descripcion,alcance,entregable_esperado,cronograma_sesiones,requerimientos_empresa,requerimientos_internos,espacio_fisico,estado,comentarios_revision,creado_en,actualizado_en) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'','','','borrador','',now(),now()) RETURNING id")
         .bind(reto).bind(user.id).bind(&input.facultad).bind(&input.nivel_formacion).bind(&input.programa_academico).bind(&input.ecosistema).bind(&input.descripcion).bind(&input.alcance).bind(&input.entregable_esperado).bind(&input.cronograma_sesiones).fetch_one(&mut *tx).await?;
+    crate::team::save(&mut tx, id, reto, &input.team).await?;
     history(
         &mut tx,
         ("seguimiento", "integracionacademica"),
@@ -122,18 +130,25 @@ pub async fn integration_state(
     }
     domain::transition("MAQUINA_INTEGRACION", from, &input.estado)?;
     if input.estado == "en_revision" {
-        for field in [
-            "facultad",
-            "programa_academico",
-            "nivel_formacion",
-            "descripcion",
-            "alcance",
-            "entregable_esperado",
-            "cronograma_sesiones",
-        ] {
-            if row[field].as_str().unwrap_or("").trim().is_empty() {
-                return Err(AppError::bad(format!("Completa {field}")));
-            }
+        // Same rule as IntegracionAcademica.campos_faltantes_para_revision.
+        let mut faltantes: Vec<&str> = [
+            ("facultad", "Facultad"),
+            ("programa_academico", "Programa academico"),
+            ("nivel_formacion", "Nivel de formacion"),
+            ("descripcion", "Descripcion"),
+            ("alcance", "Alcance"),
+            ("entregable_esperado", "Entregable esperado"),
+        ]
+        .into_iter()
+        .filter(|(field, _)| row[*field].as_str().unwrap_or("").trim().is_empty())
+        .map(|(_, label)| label)
+        .collect();
+        faltantes.extend(crate::team::missing(&mut tx, id).await?);
+        if !faltantes.is_empty() {
+            return Err(AppError::bad(format!(
+                "Completa estos campos antes de enviar: {}.",
+                faltantes.join(", ")
+            )));
         }
     }
     if input.estado == "rechazada" && input.comentario.trim().is_empty() {
@@ -149,8 +164,21 @@ pub async fn integration_state(
                 .bind(reto)
                 .execute(&mut *tx)
                 .await?;
-            sqlx::query("INSERT INTO historial_estados_reto(reto_id,estado_anterior,estado_nuevo,realizado_por_id,comentario,fecha) VALUES($1,'aprobado','abierto',$2,'Integración publicada',now())").bind(reto).bind(user.id).execute(&mut *tx).await?;
+            crate::workflows::challenge_history(
+                &mut tx,
+                reto,
+                "aprobado",
+                "abierto",
+                user.id,
+                "Integración publicada",
+            )
+            .await?;
         }
+        let title: String = sqlx::query_scalar("SELECT titulo FROM retos WHERE id=$1")
+            .bind(reto)
+            .fetch_one(&mut *tx)
+            .await?;
+        crate::team::notify_students(&mut tx, id, &title).await?;
     }
     sqlx::query("UPDATE integraciones_academicas SET estado=$2,comentarios_revision=$3,fecha_envio_revision=CASE WHEN $2='en_revision' THEN now() ELSE fecha_envio_revision END,fecha_aprobacion=CASE WHEN $2='aprobada' THEN now() ELSE fecha_aprobacion END,actualizado_en=now() WHERE id=$1")
         .bind(id).bind(&input.estado).bind(&input.comentario).execute(&mut *tx).await?;

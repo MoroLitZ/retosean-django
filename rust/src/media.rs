@@ -251,18 +251,26 @@ pub async fn company_document(
     }
     let data = data.ok_or_else(|| AppError::bad("Adjunta un archivo"))?;
     let ext = extension(&data)?;
-    if ext == "txt" {
-        return Err(AppError::bad(
-            "Los documentos legales deben ser PDF, PNG o JPG",
-        ));
+    // DocumentoEmpresa.EXTENSIONES_PERMITIDAS: legal documents are PDF only.
+    if ext != "pdf" {
+        return Err(AppError::bad("Los documentos legales deben ser PDF"));
     }
     let mut tx = state.pool.begin().await?;
-    let row:Option<(String,String)>=sqlx::query_as("SELECT d.estado,d.tipo_documento FROM documentos_empresas d JOIN empresas e ON e.id=d.empresa_id WHERE d.id=$1 AND e.usuario_id=$2 FOR UPDATE OF d").bind(id).bind(user.id).fetch_optional(&mut *tx).await?;
-    let (from, kind) = row.ok_or_else(AppError::not_found)?;
-    if kind == "CAMARA_COMERCIO" && issued.is_none() {
-        return Err(AppError::bad(
-            "La Cámara de Comercio necesita fecha de expedición",
-        ));
+    let row:Option<(String,String,i64,Option<i16>,Option<String>)>=sqlx::query_as("SELECT d.estado,d.tipo_documento,e.id,t.vigencia_dias,t.nombre FROM documentos_empresas d JOIN empresas e ON e.id=d.empresa_id LEFT JOIN tipos_documento_legal t ON t.codigo=d.tipo_documento WHERE d.id=$1 AND e.usuario_id=$2 FOR UPDATE OF d").bind(id).bind(user.id).fetch_optional(&mut *tx).await?;
+    let (from, kind, company, validity, name) = row.ok_or_else(AppError::not_found)?;
+    // Catalog validity (e.g. Cámara de Comercio, 30 days): the issue date is
+    // required, must be recent enough, and fixes the expiry (fecha_vencimiento_para).
+    if let Some(days) = validity.filter(|d| *d > 0) {
+        let name = name.unwrap_or_default();
+        let issued_on = issued
+            .ok_or_else(|| AppError::bad(format!("{name}: indica la fecha de expedición")))?;
+        let today = (chrono::Utc::now() - chrono::Duration::hours(5)).date_naive(); // Bogota, no DST
+        if issued_on > today || (today - issued_on).num_days() > days as i64 {
+            return Err(AppError::bad(format!(
+                "{name}: debe tener menos de {days} días de expedida"
+            )));
+        }
+        expires = Some(issued_on + chrono::Duration::days(days as i64));
     }
     if issued.zip(expires).is_some_and(|(a, b)| a > b) {
         return Err(AppError::bad(
@@ -282,6 +290,7 @@ pub async fn company_document(
         "Documento legal cargado",
     )
     .await?;
+    crate::companies::recompute_validation(&mut tx, company).await?;
     let admins: Vec<i64> = sqlx::query_scalar(
         "SELECT id FROM usuarios WHERE is_active AND (is_superuser OR rol='ADMIN')",
     )

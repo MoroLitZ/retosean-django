@@ -28,7 +28,7 @@ def export():
     with connection.schema_editor(collect_sql=True, atomic=False) as editor:
         for model in apps.get_models():
             editor.create_model(model)
-    (OUT / "sql/schema.sql").write_text("\n".join(editor.collected_sql), encoding="utf-8")
+    (OUT / "sql/schema.sql").write_text("\n".join(editor.collected_sql + column_defaults()), encoding="utf-8")
     types = {"BooleanField": "bool", "DateField": "chrono::NaiveDate", "DateTimeField": "chrono::DateTime<chrono::Utc>",
              "TimeField": "chrono::NaiveTime", "DecimalField": "rust_decimal::Decimal", "UUIDField": "uuid::Uuid",
              "JSONField": "serde_json::Value", "FloatField": "f64", "DurationField": "i64"}
@@ -60,6 +60,39 @@ def export():
     (OUT / "states.json").write_text(json.dumps(machines, ensure_ascii=False, indent=2), encoding="utf-8")
     export_seed()
     print(f"Exported {len(MODELS)} models and {len(machines)} state machines; no database writes.")
+
+def column_defaults():
+    """Django keeps most defaults in Python, so raw SQL inserts from Rust would
+    fail on every NOT NULL column added later. Mirror them as database defaults."""
+    sql = []
+    for model in MODELS:
+        for f in model._meta.local_fields:
+            if f.null or f.primary_key or f.is_relation:
+                continue
+            kind = f.get_internal_type()
+            if getattr(f, "auto_now", False) or getattr(f, "auto_now_add", False):
+                literal = "now()" if kind == "DateTimeField" else "CURRENT_DATE"
+            elif f.has_default() and not callable(f.default):
+                value = f.default
+                if isinstance(value, bool):
+                    literal = "true" if value else "false"
+                elif isinstance(value, (int, float, decimal.Decimal)):
+                    literal = str(value)
+                elif isinstance(value, str):
+                    literal = "'" + value.replace("'", "''") + "'"
+                else:
+                    continue
+            elif f.has_default() and kind == "JSONField":
+                literal = "'" + json.dumps(f.get_default()).replace("'", "''") + "'::jsonb"
+            elif f.has_default() and kind == "DateTimeField":
+                literal = "now()"
+            elif kind in ("CharField", "TextField", "EmailField", "URLField", "SlugField", "FileField", "ImageField") and f.blank:
+                literal = "''"
+            else:
+                continue
+            sql.append(f'ALTER TABLE "{model._meta.db_table}" ALTER COLUMN "{f.column}" SET DEFAULT {literal};')
+    return sql
+
 
 def export_seed():
     statements = []
@@ -98,16 +131,24 @@ def export_seed():
     row("academico.Profesor", id=1, usuario_id=3, facultad_id=1, especialidad="Software")
     row("academico.Estudiante", id=1, usuario_id=4, programa_id=1, semestre=6)
     row("empresas.Empresa", id=1, nit="900000001", razon_social="Empresa Demo S.A.S.", sector_industrial="Tecnología", usuario_id=2, estado_validacion="VERIFICADA", estado_listas_restrictivas="APROBADO", estado_convenio="FIRMADO")
+    statements.append("INSERT INTO \"django_content_type\" (\"id\", \"app_label\", \"model\") VALUES (1, 'retos', 'reto');")
+    # HU00 legal-document catalog: Django seeds it in a data migration, which init-db does not run.
+    import importlib
+    tipos = importlib.import_module("apps.empresas.migrations.0005_sembrar_tipos_documento").TIPOS
+    for orden, (codigo, nombre, obligatorio, sin_convenio, vigencia, especial, descripcion) in enumerate(tipos, 1):
+        row("empresas.TipoDocumentoLegal", id=orden, codigo=codigo, nombre=nombre, obligatorio=obligatorio,
+            aplica_sin_convenio=sin_convenio, vigencia_dias=vigencia, requiere_permiso_especial=especial,
+            descripcion=descripcion, orden=orden, activo=True)
     for i, state in enumerate(["borrador", "en_revision", "aprobado", "abierto", "en_curso", "pausado", "finalizado", "rechazado", "cancelado"], 1):
         row("retos.Reto", id=i, empresa_id=2, titulo=f"DEMO · Transformación digital ({state})", descripcion="Diseñar una solución sostenible para mejorar la operación de una empresa.", tipo="reto", area="Tecnología", nivel_academico="Pregrado", facultad_id=1, programa_id=1, ecosistema_id=1, estado=state, consecutivo=i if state not in ("borrador", "en_revision", "rechazado", "cancelado") else None, anio_consecutivo=2026 if state not in ("borrador", "en_revision", "rechazado", "cancelado") else None)
-        row("retos.HistorialEstadoReto", id=i, reto_id=i, estado_anterior="", estado_nuevo=state, realizado_por_id=1, comentario="Registro de demostración Rust")
+        row("seguimiento.HistorialEstado", id=i, content_type_id=1, object_id=i, campo="estado", estado_anterior="", estado_nuevo=state, realizado_por_id=1, comentario="Registro de demostración Rust")
     row("seguimiento.IntegracionAcademica", id=1, reto_id=4, profesor_id=3, estado="publicada", facultad="Ingeniería", programa_academico="Ingeniería de Sistemas", nivel_formacion="Pregrado", descripcion="Proyecto aplicado", alcance="Prototipo funcional", entregable_esperado="Informe y prototipo", cronograma_sesiones="Semanal")
     row("participaciones.Postulacion", id=1, reto_id=5, estudiante_id=4, estado="ACEPTADA", motivacion="Aplicar mis conocimientos", semestre=6, programa="Ingeniería de Sistemas")
     row("presupuesto.Presupuesto", id=1, reto_id=5, monto_total=10000000)
     row("presupuesto.Gasto", id=1, presupuesto_id=1, categoria="MATERIALES", monto=8500000, descripcion="Materiales del prototipo", registrado_por_id=3)
     row("notificaciones.Notificacion", id=1, usuario_id=4, tipo="EXITO", evento="POSTULACION_ACEPTADA", titulo="Postulación aceptada", mensaje="Ya puedes participar en el reto.", link="/", clave_dedupe="rust-demo:postulacion")
     row("academico.Certificado", id=1, reto_id=7, usuario_id=4, rol_participacion="ESTUDIANTE", codigo_verificacion=uuid.UUID("09df6e91-3494-4ef8-9f4a-f98922ae8322"), horas=40, emitido_por_id=1)
-    for model in MODELS:
+    for model in MODELS + [apps.get_model("contenttypes.ContentType")]:
         table = model._meta.db_table
         statements.append(f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), COALESCE(MAX(id), 1), MAX(id) IS NOT NULL) FROM \"{table}\";")
     (OUT / "sql/demo.sql").write_text("\n".join(statements), encoding="utf-8")

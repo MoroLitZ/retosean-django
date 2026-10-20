@@ -7,6 +7,7 @@ pub mod config;
 pub mod dashboard;
 pub mod domain;
 pub mod error;
+pub mod event;
 pub mod finance;
 pub mod hackathon;
 pub mod lifecycle;
@@ -14,6 +15,7 @@ pub mod media;
 pub mod models;
 pub mod reports;
 pub mod resources;
+pub mod team;
 pub mod workflows;
 
 use axum::{
@@ -106,6 +108,10 @@ pub fn router(state: AppState) -> Router {
             "/api/integraciones/{id}/estado",
             post(academic::integration_state),
         )
+        .route(
+            "/api/integraciones/{id}/equipo",
+            get(team::show).post(team::update),
+        )
         .route("/api/entregables/{id}/calificar", post(academic::grade))
         .route(
             "/api/retos/{id}/entregar",
@@ -140,6 +146,11 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/hackathons/{id}/votar", post(hackathon::vote))
         .route("/api/hackathons/{id}/ranking", get(hackathon::ranking))
+        .route(
+            "/api/hackathons/{id}/logistica",
+            get(event::show_logistics).post(event::logistics),
+        )
+        .route("/api/hackathons/{id}/informe/{format}", get(event::report))
         .route("/api/verificar/{code}", get(resources::verify_certificate))
         .fallback(|| async {
             (

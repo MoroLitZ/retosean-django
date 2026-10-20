@@ -23,7 +23,8 @@ pub async fn notify(
         .bind(user).bind(event).bind(message).bind(key).execute(&mut **tx).await?;
     Ok(())
 }
-async fn challenge_history(
+/// Reto state changes go to the shared audit table, like every other entity (Django).
+pub async fn challenge_history(
     tx: &mut Transaction<'_, Postgres>,
     id: i64,
     from: &str,
@@ -31,7 +32,7 @@ async fn challenge_history(
     user: i64,
     comment: &str,
 ) -> Result<()> {
-    sqlx::query("INSERT INTO historial_estados_reto(reto_id,estado_anterior,estado_nuevo,realizado_por_id,comentario,fecha) VALUES($1,$2,$3,$4,$5,now())").bind(id).bind(from).bind(to).bind(user).bind(comment).execute(&mut **tx).await?;
+    history(tx, ("retos", "reto"), id, from, to, user, comment).await?;
     Ok(())
 }
 pub async fn history(
@@ -45,7 +46,7 @@ pub async fn history(
 ) -> Result<i64> {
     let (app, model) = entity;
     let ct: i32 = sqlx::query_scalar("INSERT INTO django_content_type(app_label,model) VALUES($1,$2) ON CONFLICT(app_label,model) DO UPDATE SET model=excluded.model RETURNING id").bind(app).bind(model).fetch_one(&mut **tx).await?;
-    let audit = sqlx::query_scalar("INSERT INTO historial_estados(content_type_id,object_id,campo,estado_anterior,estado_nuevo,realizado_por_id,comentario,fecha) VALUES($1,$2,'estado',$3,$4,$5,$6,now()) RETURNING id").bind(ct).bind(id).bind(from).bind(to).bind(user).bind(comment).fetch_one(&mut **tx).await?;
+    let audit = sqlx::query_scalar("INSERT INTO historial_estados(content_type_id,object_id,campo,estado_anterior,estado_nuevo,realizado_por_id,comentario,fecha) VALUES($1,$2,'estado',$3,$4,$5,$6,now()) RETURNING id").bind(ct).bind(id).bind(from).bind(to).bind((user > 0).then_some(user)).bind(comment).fetch_one(&mut **tx).await?;
     Ok(audit)
 }
 #[derive(Deserialize)]

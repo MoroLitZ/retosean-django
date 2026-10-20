@@ -110,7 +110,15 @@ pub async fn close(
         .execute(&mut *tx)
         .await?;
     if from != "finalizado" {
-        sqlx::query("INSERT INTO historial_estados_reto(reto_id,estado_anterior,estado_nuevo,realizado_por_id,comentario,fecha) VALUES($1,$2,'finalizado',$3,$4,now())").bind(reto).bind(&from).bind(user.id).bind(&input.notas).execute(&mut *tx).await?;
+        crate::workflows::challenge_history(
+            &mut tx,
+            reto,
+            &from,
+            "finalizado",
+            user.id,
+            &input.notas,
+        )
+        .await?;
     }
     // Teacher roles take precedence when one participant appears through multiple paths.
     let mut participants: std::collections::BTreeMap<i64, String> =

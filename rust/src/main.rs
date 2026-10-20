@@ -73,8 +73,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         return Ok(());
     }
+    if command == "advance-hackathons" {
+        // Schedule hourly, like Django's avanzar_hackathones (HU09).
+        let changed = retosean::event::advance_all(&pool)
+            .await
+            .map_err(|e| format!("advance-hackathons failed: {}", e.1))?;
+        println!("{changed} hackathon(s) updated");
+        return Ok(());
+    }
     if command != "serve" {
-        return Err("Commands: serve | init-db | seed-demo".into());
+        return Err("Commands: serve | init-db | seed-demo | advance-hackathons".into());
     }
     retosean::auth::init(&pool).await?;
     let listener = tokio::net::TcpListener::bind(config.bind).await?;

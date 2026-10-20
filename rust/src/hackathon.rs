@@ -437,6 +437,7 @@ pub async fn ranking(
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, false).await?;
     crate::resources::visible_record(&state, &user, "hackathons", id).await?;
+    crate::event::advance(&state.pool, id).await?;
     let published: bool =
         sqlx::query_scalar("SELECT resultados_publicados FROM hackathons WHERE id=$1")
             .bind(id)

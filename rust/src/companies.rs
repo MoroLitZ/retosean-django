@@ -38,16 +38,20 @@ pub async fn review(
     }
     let mut tx = state.pool.begin().await?;
     let row:Option<(Option<i64>,String,String,bool)>=sqlx::query_as("SELECT usuario_id,estado_validacion,estado_listas_restrictivas,renuncio_a_convenio FROM empresas WHERE id=$1 FOR UPDATE").bind(id).fetch_optional(&mut *tx).await?;
-    let (owner, from, lists, waived) = row.ok_or_else(AppError::not_found)?;
+    let (owner, from, lists, _waived) = row.ok_or_else(AppError::not_found)?;
     if input.estado_validacion == "VERIFICADA" {
         if input.estado_listas_restrictivas != "APROBADO" {
             return Err(AppError::bad("Verifica primero las listas restrictivas"));
         }
-        let verified:i64=sqlx::query_scalar("SELECT count(DISTINCT tipo_documento) FROM documentos_empresas WHERE empresa_id=$1 AND tipo_documento IN ('RUT','CAMARA_COMERCIO') AND estado='VERIFICADO' AND (fecha_vencimiento IS NULL OR fecha_vencimiento>=(now() at time zone 'America/Bogota')::date)").bind(id).fetch_one(&mut *tx).await?;
-        if !waived && verified != 2 {
-            return Err(AppError::bad(
-                "Verifica el RUT y la Cámara de Comercio vigentes",
-            ));
+        let missing: Vec<String> = sqlx::query_scalar(MISSING_DOCUMENTS)
+            .bind(id)
+            .fetch_all(&mut *tx)
+            .await?;
+        if !missing.is_empty() {
+            return Err(AppError::bad(format!(
+                "Faltan documentos obligatorios verificados y vigentes: {}",
+                missing.join(", ")
+            )));
         }
     }
     if input.estado_listas_restrictivas == "RECHAZADO" {
@@ -190,8 +194,8 @@ pub async fn document(
         return Err(AppError::bad("Indica una decisión y el motivo del rechazo"));
     }
     let mut tx = state.pool.begin().await?;
-    let row:Option<(String,Option<String>,Option<i64>,bool)>=sqlx::query_as("SELECT d.estado,d.archivo,e.usuario_id,(d.fecha_vencimiento IS NOT NULL AND d.fecha_vencimiento<(now() at time zone 'America/Bogota')::date) FROM documentos_empresas d JOIN empresas e ON e.id=d.empresa_id WHERE d.id=$1 FOR UPDATE OF d").bind(id).fetch_optional(&mut *tx).await?;
-    let (from, file, owner, expired) = row.ok_or_else(AppError::not_found)?;
+    let row:Option<(String,Option<String>,Option<i64>,bool,i64)>=sqlx::query_as("SELECT d.estado,d.archivo,e.usuario_id,(d.fecha_vencimiento IS NOT NULL AND d.fecha_vencimiento<(now() at time zone 'America/Bogota')::date),e.id FROM documentos_empresas d JOIN empresas e ON e.id=d.empresa_id WHERE d.id=$1 FOR UPDATE OF d").bind(id).fetch_optional(&mut *tx).await?;
+    let (from, file, owner, expired, company) = row.ok_or_else(AppError::not_found)?;
     domain::transition("MAQUINA_DOCUMENTO", &from, &input.estado)?;
     if input.estado == "VERIFICADO" && (expired || file.as_deref().unwrap_or("").is_empty()) {
         return Err(AppError::bad(
@@ -218,6 +222,7 @@ pub async fn document(
         &input.comentario,
     )
     .await?;
+    recompute_validation(&mut tx, company).await?;
     if let Some(owner) = owner {
         notify(
             &mut tx,
@@ -230,4 +235,24 @@ pub async fn document(
     }
     tx.commit().await?;
     Ok(Json(json!({"estado":input.estado})))
+}
+
+/// Required catalog documents not yet verified and valid (Django documentacion_completa):
+/// a type applies when active, mandatory, and either it applies without an agreement
+/// or the company did not waive the agreement.
+pub const MISSING_DOCUMENTS: &str = "SELECT t.nombre FROM tipos_documento_legal t JOIN empresas e ON e.id=$1 WHERE t.activo AND t.obligatorio AND (t.aplica_sin_convenio OR NOT e.renuncio_a_convenio) AND NOT EXISTS(SELECT 1 FROM documentos_empresas d WHERE d.empresa_id=e.id AND d.tipo_documento=t.codigo AND d.estado='VERIFICADO' AND (d.fecha_vencimiento IS NULL OR d.fecha_vencimiento>=(now() at time zone 'America/Bogota')::date)) ORDER BY t.orden";
+
+/// Keeps estado_validacion consistent with the documents, as Django's
+/// _actualizar_estado_validacion: any rejected -> RECHAZADA, all required
+/// verified -> VERIFICADA, something uploaded -> EN_REVISION, else PENDIENTE.
+/// Rust pre-creates PENDIENTE rows, so those do not count as uploaded.
+pub async fn recompute_validation(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    company: i64,
+) -> Result<()> {
+    sqlx::query(&format!("UPDATE empresas e SET estado_validacion=CASE WHEN EXISTS(SELECT 1 FROM documentos_empresas d WHERE d.empresa_id=e.id AND d.estado='RECHAZADO') THEN 'RECHAZADA' WHEN NOT EXISTS({}) THEN 'VERIFICADA' WHEN EXISTS(SELECT 1 FROM documentos_empresas d WHERE d.empresa_id=e.id AND d.estado<>'PENDIENTE') THEN 'EN_REVISION' ELSE 'PENDIENTE' END WHERE e.id=$1 AND e.estado_listas_restrictivas<>'RECHAZADO'", MISSING_DOCUMENTS))
+        .bind(company)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
 }

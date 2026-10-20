@@ -152,7 +152,8 @@ pub async fn export(
         };
         let heading = rust_xlsxwriter::Format::new()
             .set_bold()
-            .set_background_color("A8D43A");
+            .set_font_color("FFFFFF")
+            .set_background_color("3BAC52");
         for (col, field) in fields.iter().enumerate() {
             sheet
                 .write_string_with_format(0, col as u16, field, &heading)

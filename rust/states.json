@@ -118,6 +118,12 @@
   "MAQUINA_POSTULACION": {
     "PENDIENTE": [
       "ACEPTADA",
+      "EN_REVISION",
+      "RECHAZADA",
+      "RETIRADA"
+    ],
+    "EN_REVISION": [
+      "ACEPTADA",
       "RECHAZADA",
       "RETIRADA"
     ],

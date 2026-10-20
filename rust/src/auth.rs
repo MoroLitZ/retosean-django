@@ -150,7 +150,7 @@ pub async fn login(
         .await?;
     tx.commit().await?;
     let record: Option<(i64, String)> = sqlx::query_as(
-        "SELECT id,password FROM usuarios WHERE username=$1 AND is_active AND activo",
+        "SELECT id,password FROM usuarios WHERE is_active AND activo AND (username=$1 OR (strpos($1,'@')>0 AND lower(email)=lower($1) AND (SELECT count(*) FROM usuarios WHERE lower(email)=lower($1))=1)) ORDER BY username=$1 DESC LIMIT 1",
     )
     .bind(&input.username)
     .fetch_optional(&state.pool)

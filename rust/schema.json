@@ -438,6 +438,32 @@
         "choices": []
       },
       {
+        "name": "impacto",
+        "verbose_name": "¿La empresa aplicó la solución?",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": [
+          [
+            "",
+            "Sin registrar"
+          ],
+          [
+            "SI",
+            "Sí, la aplicó"
+          ],
+          [
+            "NO",
+            "No la aplicó"
+          ],
+          [
+            "EN_EVALUACION",
+            "En evaluación"
+          ]
+        ]
+      },
+      {
         "name": "encuesta_enviada",
         "verbose_name": "encuesta enviada",
         "type": "BooleanField",
@@ -674,6 +700,143 @@
     ]
   },
   {
+    "name": "SolicitudLogistica",
+    "app": "cierre",
+    "table": "cierre_solicitudlogistica",
+    "verbose_name": "Solicitud de logística",
+    "verbose_name_plural": "Solicitudes de logística",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "reto_id",
+        "verbose_name": "reto",
+        "type": "ForeignKey",
+        "related_table": "retos",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "evento",
+        "verbose_name": "evento",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 10,
+        "choices": [
+          [
+            "INICIO",
+            "Evento de inicio"
+          ],
+          [
+            "CIERRE",
+            "Evento de cierre"
+          ]
+        ]
+      },
+      {
+        "name": "tipo",
+        "verbose_name": "tipo",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": [
+          [
+            "ESPACIO",
+            "Espacio físico"
+          ],
+          [
+            "COMUNICACIONES",
+            "Apoyo del área de comunicaciones"
+          ],
+          [
+            "REFRIGERIOS",
+            "Refrigerios / catering"
+          ],
+          [
+            "EQUIPOS_AV",
+            "Equipos audiovisuales"
+          ],
+          [
+            "INVITADOS",
+            "Invitados"
+          ],
+          [
+            "OTRO",
+            "Otro"
+          ]
+        ]
+      },
+      {
+        "name": "descripcion",
+        "verbose_name": "descripcion",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "estado",
+        "verbose_name": "estado",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 12,
+        "choices": [
+          [
+            "SOLICITADA",
+            "Solicitada"
+          ],
+          [
+            "CONFIRMADA",
+            "Confirmada"
+          ],
+          [
+            "DESCARTADA",
+            "Descartada"
+          ]
+        ]
+      },
+      {
+        "name": "solicitada_por_id",
+        "verbose_name": "solicitada por",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "creada_en",
+        "verbose_name": "creada en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "actualizado_en",
+        "verbose_name": "actualizado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
     "name": "Empresa",
     "app": "empresas",
     "table": "empresas",
@@ -714,6 +877,46 @@
         "related_table": null,
         "null": false,
         "max_length": 100,
+        "choices": []
+      },
+      {
+        "name": "tipo_convocatoria",
+        "verbose_name": "tipo convocatoria",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 20,
+        "choices": [
+          [
+            "RETO",
+            "Reto"
+          ],
+          [
+            "HACKATHON",
+            "Hackathon"
+          ],
+          [
+            "AMBOS",
+            "Reto y hackathon"
+          ]
+        ]
+      },
+      {
+        "name": "area_responsable",
+        "verbose_name": "area responsable",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 150,
+        "choices": []
+      },
+      {
+        "name": "sitio_web",
+        "verbose_name": "sitio web",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 200,
         "choices": []
       },
       {
@@ -845,6 +1048,24 @@
         "choices": []
       },
       {
+        "name": "participacion_bloqueada",
+        "verbose_name": "participacion bloqueada",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "motivo_bloqueo",
+        "verbose_name": "motivo bloqueo",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
         "name": "usuario_id",
         "verbose_name": "usuario",
         "type": "OneToOneField",
@@ -928,6 +1149,105 @@
     ]
   },
   {
+    "name": "TipoDocumentoLegal",
+    "app": "empresas",
+    "table": "tipos_documento_legal",
+    "verbose_name": "Tipo de documento legal",
+    "verbose_name_plural": "Tipos de documento legal",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "codigo",
+        "verbose_name": "codigo",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 50,
+        "choices": []
+      },
+      {
+        "name": "nombre",
+        "verbose_name": "nombre",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 150,
+        "choices": []
+      },
+      {
+        "name": "descripcion",
+        "verbose_name": "descripcion",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "obligatorio",
+        "verbose_name": "obligatorio",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "aplica_sin_convenio",
+        "verbose_name": "aplica sin convenio",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "vigencia_dias",
+        "verbose_name": "vigencia dias",
+        "type": "PositiveSmallIntegerField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "requiere_permiso_especial",
+        "verbose_name": "requiere permiso especial",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "activo",
+        "verbose_name": "activo",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "orden",
+        "verbose_name": "orden",
+        "type": "PositiveSmallIntegerField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
     "name": "DocumentoEmpresa",
     "app": "empresas",
     "table": "documentos_empresas",
@@ -959,24 +1279,7 @@
         "related_table": null,
         "null": false,
         "max_length": 50,
-        "choices": [
-          [
-            "CAMARA_COMERCIO",
-            "Camara de Comercio"
-          ],
-          [
-            "RUT",
-            "Registro Unico Tributario (RUT)"
-          ],
-          [
-            "CEDULA_REPRESENTANTE",
-            "Cedula del Representante Legal"
-          ],
-          [
-            "CONVENIO",
-            "Convenio Institucional"
-          ]
-        ]
+        "choices": []
       },
       {
         "name": "archivo",
@@ -1156,6 +1459,24 @@
         "name": "nota",
         "verbose_name": "nota",
         "type": "DecimalField",
+        "related_table": null,
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "calificacion_publicada",
+        "verbose_name": "calificacion publicada",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "calificacion_publicada_en",
+        "verbose_name": "calificacion publicada en",
+        "type": "DateTimeField",
         "related_table": null,
         "null": true,
         "max_length": null,
@@ -1592,6 +1913,55 @@
         "choices": []
       },
       {
+        "name": "modalidad",
+        "verbose_name": "modalidad",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 12,
+        "choices": [
+          [
+            "presencial",
+            "Presencial"
+          ],
+          [
+            "virtual",
+            "Virtual"
+          ],
+          [
+            "hibrida",
+            "Hibrida"
+          ]
+        ]
+      },
+      {
+        "name": "lugar",
+        "verbose_name": "Espacio fisico",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 180,
+        "choices": []
+      },
+      {
+        "name": "enlace_transmision",
+        "verbose_name": "Enlace de transmision",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 200,
+        "choices": []
+      },
+      {
+        "name": "notas_logistica",
+        "verbose_name": "Notas de logistica",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
         "name": "creado_en",
         "verbose_name": "creado en",
         "type": "DateTimeField",
@@ -1604,6 +1974,95 @@
         "name": "actualizado_en",
         "verbose_name": "actualizado en",
         "type": "DateTimeField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "InvitadoHackathon",
+    "app": "hackaton",
+    "table": "invitados_hackaton",
+    "verbose_name": "Invitado de hackathon",
+    "verbose_name_plural": "Invitados de hackathon",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "hackathon_id",
+        "verbose_name": "hackathon",
+        "type": "ForeignKey",
+        "related_table": "hackathons",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "tipo",
+        "verbose_name": "tipo",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 15,
+        "choices": [
+          [
+            "INVITADO",
+            "Invitado"
+          ],
+          [
+            "MENTOR",
+            "Mentor"
+          ],
+          [
+            "PONENTE",
+            "Ponente"
+          ],
+          [
+            "PATROCINADOR",
+            "Patrocinador"
+          ]
+        ]
+      },
+      {
+        "name": "nombre",
+        "verbose_name": "nombre",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 150,
+        "choices": []
+      },
+      {
+        "name": "organizacion",
+        "verbose_name": "organizacion",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 150,
+        "choices": []
+      },
+      {
+        "name": "email",
+        "verbose_name": "email",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 254,
+        "choices": []
+      },
+      {
+        "name": "confirmado",
+        "verbose_name": "confirmado",
+        "type": "BooleanField",
         "related_table": null,
         "null": false,
         "max_length": null,
@@ -2173,6 +2632,10 @@
             "Pendiente de Aprobacion"
           ],
           [
+            "EN_REVISION",
+            "En revision"
+          ],
+          [
             "ACEPTADA",
             "Aceptada"
           ],
@@ -2220,6 +2683,24 @@
         "related_table": null,
         "null": false,
         "max_length": 150,
+        "choices": []
+      },
+      {
+        "name": "hoja_de_vida",
+        "verbose_name": "hoja de vida",
+        "type": "FileField",
+        "related_table": null,
+        "null": true,
+        "max_length": 100,
+        "choices": []
+      },
+      {
+        "name": "acepta_terminos",
+        "verbose_name": "acepta terminos",
+        "type": "BooleanField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
         "choices": []
       }
     ]
@@ -2505,6 +2986,24 @@
         "choices": []
       },
       {
+        "name": "estado",
+        "verbose_name": "estado",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 15,
+        "choices": [
+          [
+            "COMPROMETIDO",
+            "Comprometido"
+          ],
+          [
+            "EJECUTADO",
+            "Ejecutado"
+          ]
+        ]
+      },
+      {
         "name": "descripcion",
         "verbose_name": "descripcion",
         "type": "TextField",
@@ -2537,6 +3036,15 @@
         "type": "DateTimeField",
         "related_table": null,
         "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "ejecutado_en",
+        "verbose_name": "ejecutado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": true,
         "max_length": null,
         "choices": []
       }
@@ -2673,6 +3181,15 @@
         "related_table": null,
         "null": false,
         "max_length": 180,
+        "choices": []
+      },
+      {
+        "name": "nombre_corto",
+        "verbose_name": "nombre corto",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 60,
         "choices": []
       },
       {
@@ -2850,6 +3367,33 @@
         "choices": []
       },
       {
+        "name": "uso_esperado_resultados",
+        "verbose_name": "uso esperado resultados",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "insumos_inicio",
+        "verbose_name": "insumos inicio",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "insumos_cierre",
+        "verbose_name": "insumos cierre",
+        "type": "TextField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
         "name": "estado",
         "verbose_name": "estado",
         "type": "CharField",
@@ -2973,115 +3517,6 @@
         "type": "DateTimeField",
         "related_table": null,
         "null": true,
-        "max_length": null,
-        "choices": []
-      }
-    ]
-  },
-  {
-    "name": "HistorialEstadoReto",
-    "app": "retos",
-    "table": "historial_estados_reto",
-    "verbose_name": "Historial de Estado de Reto",
-    "verbose_name_plural": "Historial de Estados de Reto",
-    "fields": [
-      {
-        "name": "id",
-        "verbose_name": "ID",
-        "type": "BigAutoField",
-        "related_table": null,
-        "null": false,
-        "max_length": null,
-        "choices": []
-      },
-      {
-        "name": "reto_id",
-        "verbose_name": "reto",
-        "type": "ForeignKey",
-        "related_table": "retos",
-        "null": false,
-        "max_length": null,
-        "choices": []
-      },
-      {
-        "name": "estado_anterior",
-        "verbose_name": "estado anterior",
-        "type": "CharField",
-        "related_table": null,
-        "null": false,
-        "max_length": 20,
-        "choices": []
-      },
-      {
-        "name": "estado_nuevo",
-        "verbose_name": "estado nuevo",
-        "type": "CharField",
-        "related_table": null,
-        "null": false,
-        "max_length": 20,
-        "choices": [
-          [
-            "borrador",
-            "Borrador"
-          ],
-          [
-            "en_revision",
-            "En Revision"
-          ],
-          [
-            "aprobado",
-            "Aprobado"
-          ],
-          [
-            "abierto",
-            "Abierto"
-          ],
-          [
-            "rechazado",
-            "Rechazado"
-          ],
-          [
-            "en_curso",
-            "En Curso"
-          ],
-          [
-            "pausado",
-            "Pausado"
-          ],
-          [
-            "finalizado",
-            "Finalizado"
-          ],
-          [
-            "cancelado",
-            "Cancelado"
-          ]
-        ]
-      },
-      {
-        "name": "comentario",
-        "verbose_name": "comentario",
-        "type": "TextField",
-        "related_table": null,
-        "null": false,
-        "max_length": null,
-        "choices": []
-      },
-      {
-        "name": "realizado_por_id",
-        "verbose_name": "realizado por",
-        "type": "ForeignKey",
-        "related_table": "usuarios",
-        "null": true,
-        "max_length": null,
-        "choices": []
-      },
-      {
-        "name": "fecha",
-        "verbose_name": "fecha",
-        "type": "DateTimeField",
-        "related_table": null,
-        "null": false,
         "max_length": null,
         "choices": []
       }
@@ -3217,6 +3652,15 @@
         "type": "ForeignKey",
         "related_table": "retos",
         "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "integracion_id",
+        "verbose_name": "integracion",
+        "type": "ForeignKey",
+        "related_table": "integraciones_academicas",
+        "null": true,
         "max_length": null,
         "choices": []
       },
@@ -3374,34 +3818,7 @@
       },
       {
         "name": "cronograma_sesiones",
-        "verbose_name": "cronograma sesiones",
-        "type": "TextField",
-        "related_table": null,
-        "null": false,
-        "max_length": null,
-        "choices": []
-      },
-      {
-        "name": "equipo_profesores",
-        "verbose_name": "equipo profesores",
-        "type": "TextField",
-        "related_table": null,
-        "null": false,
-        "max_length": null,
-        "choices": []
-      },
-      {
-        "name": "equipo_estudiantes",
-        "verbose_name": "equipo estudiantes",
-        "type": "TextField",
-        "related_table": null,
-        "null": false,
-        "max_length": null,
-        "choices": []
-      },
-      {
-        "name": "expertos_invitados",
-        "verbose_name": "expertos invitados",
+        "verbose_name": "Notas del cronograma",
         "type": "TextField",
         "related_table": null,
         "null": false,
@@ -3507,6 +3924,118 @@
         "type": "DateTimeField",
         "related_table": null,
         "null": false,
+        "max_length": null,
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "ParticipanteIntegracion",
+    "app": "seguimiento",
+    "table": "participantes_integracion",
+    "verbose_name": "Participante de integracion",
+    "verbose_name_plural": "Participantes de integracion",
+    "fields": [
+      {
+        "name": "id",
+        "verbose_name": "ID",
+        "type": "BigAutoField",
+        "related_table": null,
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "integracion_id",
+        "verbose_name": "integracion",
+        "type": "ForeignKey",
+        "related_table": "integraciones_academicas",
+        "null": false,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "rol",
+        "verbose_name": "rol",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 12,
+        "choices": [
+          [
+            "PROFESOR",
+            "Profesor"
+          ],
+          [
+            "ESTUDIANTE",
+            "Estudiante"
+          ],
+          [
+            "EXPERTO",
+            "Experto invitado"
+          ]
+        ]
+      },
+      {
+        "name": "nombre",
+        "verbose_name": "nombre",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 150,
+        "choices": []
+      },
+      {
+        "name": "documento",
+        "verbose_name": "Cedula / documento",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 30,
+        "choices": []
+      },
+      {
+        "name": "email",
+        "verbose_name": "Correo",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 254,
+        "choices": []
+      },
+      {
+        "name": "facultad",
+        "verbose_name": "Facultad u organizacion",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 150,
+        "choices": []
+      },
+      {
+        "name": "programa",
+        "verbose_name": "programa",
+        "type": "CharField",
+        "related_table": null,
+        "null": false,
+        "max_length": 160,
+        "choices": []
+      },
+      {
+        "name": "usuario_id",
+        "verbose_name": "usuario",
+        "type": "ForeignKey",
+        "related_table": "usuarios",
+        "null": true,
+        "max_length": null,
+        "choices": []
+      },
+      {
+        "name": "notificado_en",
+        "verbose_name": "notificado en",
+        "type": "DateTimeField",
+        "related_table": null,
+        "null": true,
         "max_length": null,
         "choices": []
       }
@@ -4118,6 +4647,10 @@
           [
             "IMPORTACION",
             "Importacion masiva"
+          ],
+          [
+            "CAMBIO_PERMISOS",
+            "Cambio de permisos especiales"
           ]
         ]
       },

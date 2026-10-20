@@ -55,6 +55,7 @@ Equivalent commands from `rust/`:
 cargo run --locked -- init-db
 cargo run --locked -- seed-demo
 cargo run --locked -- serve
+cargo run --locked -- advance-hackathons   # schedule hourly (HU09)
 ```
 
 `init-db` only initializes an empty database. `seed-demo` only runs when the user
@@ -79,11 +80,11 @@ These are local demonstration credentials. Do not seed an internet-facing system
 
 | Area | Implemented in Rust |
 |---|---|
-| Data model | 46 typed domain records, PostgreSQL bootstrap schema, seven state-machine definitions |
-| Users | Django PBKDF2-SHA256 compatible login, expiring sessions, CSRF, login throttling, admin account creation, contact editing, password changes and revocation, activation/deactivation |
-| Companies | Role-scoped profiles/documents, private legal uploads, document decisions, restrictive-list checks, company verification, agreement transitions and expiry dates |
+| Data model | 49 typed domain records, PostgreSQL bootstrap schema with database defaults mirroring Django's Python defaults, seven state-machine definitions, one audit table for every state change |
+| Users | Django PBKDF2-SHA256 compatible login, expiring sessions, CSRF, login throttling, admin account creation, login by username or email (as Django), contact editing, password changes and revocation, activation/deactivation |
+| Companies | Configurable legal-document catalog (HU00): PDF uploads, catalog validity (e.g. 30-day Cámara de Comercio), document decisions, status derived from the documents as in Django, restrictive-list checks, agreement transitions and expiry dates |
 | Challenges | Company draft creation/editing, required-field review submission, admin approval/rejection, serialized numbering, audited manual state transitions |
-| Academic integration | Professor proposal, admin review, publication that opens the approved challenge |
+| Academic integration | Professor proposal with structured team (cédula, email, faculty/program) and dated schedule (HU03), the same review requirements, admin review, publication that opens the challenge and notifies assigned students |
 | Participation | Search, favorites, applications and withdrawal, acceptance/rejection, academic and operational team creation |
 | Deliverables | Private PDF/image/text upload, replacement, free-form grading, grade bounds and professor ownership |
 | Progress | Dated progress entries, 0–100% validation, company notification |
@@ -91,12 +92,12 @@ These are local demonstration credentials. Do not seed an internet-facing system
 | Certificates | Owner/admin PDF download and public UUID verification |
 | Notifications | Central transactional in-app notifications, event preferences and deduplication, mark-as-read |
 | Finance | Exact decimal budgets/expenses, role-scoped summaries, 80% threshold notifications |
-| Hackathons | Creation, stages/time windows, jurors, team registration/review, voting, average-based ranking, result publication |
+| Hackathons | Creation, stages/time windows, jurors (experts included), team registration/review, voting, ranking, automatic advance and result publication at close, event logistics with guests, final report in PDF/Excel (HU09) |
 | Reports | Role-scoped CSV, PDF and Excel record exports, with secret fields omitted |
-| Dashboard | Port of `apps/dashboard`: the same per-role KPIs, charts, quick links and period/faculty/program filters, verified to return identical numbers to the Django services on the same database |
+| Dashboard | Port of `apps/dashboard`: the same per-role KPIs, charts, quick links and period/faculty/program filters, including the expert juror panel, ecosystem filter and impact indicators; verified to return identical numbers to the Django services on the same database |
 | Catalogs | Native creation of faculties, programs, ecosystems and study units; role-scoped browsing |
 
-All 46 domain tables have authenticated, paginated read access with an explicit
+All 49 domain tables have authenticated, paginated read access with an explicit
 role policy. Unmapped tables default to administrator-only access. This read
 coverage does not imply every original form or command has been ported.
 
@@ -108,11 +109,11 @@ coverage does not imply every original form or command has been ported.
   the Rust notifier currently sends in-app notifications only.
 - Rubric creation and criterion-based grading. The native free-form grading
   endpoint explicitly refuses rubric-backed challenges.
-- Full academic session editing, team editing and invited-expert workflows.
+- Editing the operational student teams of an integration (structured team and schedule are native).
 - Complete company registration/contact forms and every legal-onboarding edge case.
 - Full closure agenda editing, recognition management and final-artifact upload.
-- The original specialized analytics/report catalog (the dashboard, its period
-  filters and charts are native). Native exports currently export the selected module's records, not those
+- The original specialized analytics/report catalog with its preview and email
+  sending (HU06; the dashboard, its period filters and charts are native). Native exports currently export the selected module's records, not those
   specialized reports. Each export is capped at 5,000 records; PDF reports state
   the exported count and original total. Excel stores values as literal strings
   to preserve identifiers, exact decimals and formula safety.
@@ -225,6 +226,8 @@ build must be validated in the target deployment environment.
 - `src/workflows.rs`, `academic.rs`, `lifecycle.rs`: transactional domain workflows.
 - `src/companies.rs`, `finance.rs`, `hackathon.rs`: module-specific business rules.
 - `src/dashboard.rs`: port of the Django dashboard indicators (HU05).
+- `src/team.rs`: structured integration team and schedule (HU03).
+- `src/event.rs`: hackathon schedule advance, logistics and final report (HU09).
 - `src/media.rs`, `reports.rs`: private files, PDF and spreadsheet generation.
 - `src/models.rs`, `schema.json`, `states.json`, `sql/`: exported migration inputs.
 - `web/`: browser UI compiled into the executable.

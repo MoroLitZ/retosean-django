@@ -134,6 +134,16 @@ async fn native_http_lifecycle_and_permissions() {
         let teacher = login(&app, "profesor.demo").await;
         let student = login(&app, "estudiante.demo").await;
         let expert = login(&app, "experto.demo").await;
+        // The login field says "Usuario o correo": the email works too (case-insensitive).
+        let by_email = login(&app, "Profesor.Demo@Example.Test").await;
+        assert_eq!(
+            ok(&app, &by_email, "GET", "/api/me", None).await["user"]["username"],
+            "profesor.demo"
+        );
+        // Experts get the juror dashboard, not the "no role" notice.
+        let panel = ok(&app, &expert, "GET", "/api/dashboard", None).await;
+        assert_eq!(panel["sin_rol"], false, "{panel}");
+        assert_eq!(panel["kpis"]["hackathones_asignados"], 0, "{panel}");
         for resource in retosean::resources::schema() {
             let name = resource["table"].as_str().unwrap();
             ok(
@@ -205,9 +215,20 @@ async fn native_http_lifecycle_and_permissions() {
         ok(&app,&student,"POST","/api/perfil",Some(json!({"first_name":"Estudiante","last_name":"Actualizado","email":"estudiante.actualizado@example.test"}))).await;
         ok(&app,&student,"POST","/api/preferencias",Some(json!({"recibir_email":false,"recibir_recordatorios":true,"eventos_silenciados":["EVENTO_SILENCIADO"]}))).await;
         assert_eq!(request(&app,&administrator,"POST","/api/empresas/1/revisar",Some(json!({"estado_validacion":"VERIFICADA","estado_listas_restrictivas":"APROBADO"}))).await.0,StatusCode::BAD_REQUEST);
-        for kind in ["RUT", "CAMARA_COMERCIO"] {
+        // HU00: every mandatory catalog document must be verified and valid.
+        let required: Vec<String> = sqlx::query_scalar(
+            "SELECT codigo FROM tipos_documento_legal WHERE activo AND obligatorio ORDER BY orden",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(required.len(), 8, "the brief's eight documents");
+        let issued = (chrono::Utc::now() - chrono::Duration::hours(5)).date_naive();
+        for kind in &required {
             let document:i64=sqlx::query_scalar("INSERT INTO documentos_empresas(empresa_id,tipo_documento,estado,fecha_carga) VALUES(1,$1,'PENDIENTE',now()) RETURNING id").bind(kind).fetch_one(&pool).await.unwrap();
-            let multipart = "--DOC\r\nContent-Disposition: form-data; name=\"fecha_expedicion\"\r\n\r\n2026-10-01\r\n--DOC\r\nContent-Disposition: form-data; name=\"archivo\"; filename=\"legal.pdf\"\r\nContent-Type: application/pdf\r\n\r\n%PDF-1.4 documento de prueba\r\n--DOC--\r\n";
+            let multipart = format!(
+                "--DOC\r\nContent-Disposition: form-data; name=\"fecha_expedicion\"\r\n\r\n{issued}\r\n--DOC\r\nContent-Disposition: form-data; name=\"archivo\"; filename=\"legal.pdf\"\r\nContent-Type: application/pdf\r\n\r\n%PDF-1.4 documento de prueba\r\n--DOC--\r\n"
+            );
             let response = app
                 .clone()
                 .oneshot(
@@ -318,6 +339,41 @@ async fn native_http_lifecycle_and_permissions() {
         .await;
         let integration=ok(&app,&teacher,"POST",&format!("/api/retos/{id}/integrar"),Some(json!({"facultad":"Ingeniería","nivel_formacion":"Pregrado","programa_academico":"Sistemas","descripcion":"Proyecto aplicado","alcance":"Prototipo","entregable_esperado":"Informe","cronograma_sesiones":"Semanal"}))).await;
         let integration = integration["id"].as_i64().unwrap();
+        // HU03: without a team and the required sessions it cannot go to review.
+        let (status, body, _) = request(
+            &app,
+            &teacher,
+            "POST",
+            &format!("/api/integraciones/{integration}/estado"),
+            Some(json!({"estado":"en_revision"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+        assert!(
+            body["error"]
+                .as_str()
+                .unwrap()
+                .contains("al menos un profesor"),
+            "{body}"
+        );
+        let (status, _, _) = request(&app, &teacher, "POST", &format!("/api/integraciones/{integration}/equipo"), Some(json!({"participantes":[{"rol":"ESTUDIANTE","nombre":"Sin programa","documento":"1","email":"x@ean.edu.co"}]}))).await;
+        assert_eq!(
+            status,
+            StatusCode::BAD_REQUEST,
+            "each role requires its data"
+        );
+        ok(&app, &teacher, "POST", &format!("/api/integraciones/{integration}/equipo"), Some(json!({
+            "participantes": [
+                {"rol":"PROFESOR","nombre":"Profesor Demo","documento":"10","email":"profe.titular@ean.edu.co","facultad":"Ingeniería"},
+                {"rol":"ESTUDIANTE","nombre":"Estudiante","documento":"20","email":"estudiante.actualizado@example.test","programa":"Sistemas"},
+                {"rol":"EXPERTO","nombre":"Mentora","documento":"30","email":"mentora@externo.co","facultad":"Innovación SAS"}
+            ],
+            "sesiones": [
+                {"tipo":"inicio","fecha_hora":"2026-11-02T14:00:00Z","enlace_reunion":"https://meet.example/abc"},
+                {"tipo":"seguimiento","fecha_hora":"2026-11-16T14:00:00Z"},
+                {"tipo":"evaluacion","fecha_hora":"2026-11-30T14:00:00Z"}
+            ]
+        }))).await;
         for (session, state) in [
             (&teacher, "en_revision"),
             (&administrator, "aprobada"),
@@ -343,6 +399,34 @@ async fn native_http_lifecycle_and_permissions() {
             .await["estado"],
             "abierto"
         );
+        // Publishing told the linked student once, and the schedule is visible to them.
+        let team = ok(
+            &app,
+            &student,
+            "GET",
+            &format!("/api/integraciones/{integration}/equipo"),
+            None,
+        )
+        .await;
+        assert_eq!(team["sesiones"].as_array().unwrap().len(), 3);
+        assert_eq!(
+            team["participantes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|p| p["cuenta"] == true)
+                .count(),
+            1
+        );
+        let notices = ok(
+            &app,
+            &student,
+            "GET",
+            "/api/records/notificaciones?q=EQUIPO_ASIGNADO",
+            None,
+        )
+        .await;
+        assert_eq!(notices["total"], 1, "{notices}");
         ok(
             &app,
             &student,
@@ -574,13 +658,48 @@ async fn native_http_lifecycle_and_permissions() {
             .0,
             StatusCode::FORBIDDEN
         );
-        for state in ["en_curso", "finalizado"] {
+        // HU09 logistics: the format decides what is required.
+        let (status, _, _) = request(
+            &app,
+            &teacher,
+            "POST",
+            &format!("/api/hackathons/{hack}/logistica"),
+            Some(json!({"modalidad":"virtual"})),
+        )
+        .await;
+        assert_eq!(
+            status,
+            StatusCode::BAD_REQUEST,
+            "a virtual event needs a streaming link"
+        );
+        ok(&app, &teacher, "POST", &format!("/api/hackathons/{hack}/logistica"), Some(json!({
+            "modalidad":"hibrida","lugar":"Auditorio EAN","enlace_transmision":"https://stream.example/live",
+            "invitados":[{"tipo":"MENTOR","nombre":"Ana Mentora","organizacion":"ACME","confirmado":true}]
+        }))).await;
+        assert_eq!(
+            request(
+                &app,
+                &student,
+                "POST",
+                &format!("/api/hackathons/{hack}/logistica"),
+                Some(json!({"modalidad":"virtual","enlace_transmision":"https://x.example"}))
+            )
+            .await
+            .0,
+            StatusCode::FORBIDDEN
+        );
+        // HU09 schedule: development started and the awards stage has begun, so
+        // opening the ranking starts, closes and publishes the results by itself.
+        for (kind, start, order) in [
+            ("desarrollo", "2026-01-01T00:00:00Z", 2),
+            ("premiacion", "2026-01-03T00:00:00Z", 4),
+        ] {
             ok(
                 &app,
                 &teacher,
                 "POST",
-                &format!("/api/hackathons/{hack}/estado"),
-                Some(json!({"estado":state})),
+                &format!("/api/hackathons/{hack}/etapa"),
+                Some(json!({"tipo":kind,"titulo":kind,"inicia_en":start,"orden":order})),
             )
             .await;
         }
@@ -593,6 +712,54 @@ async fn native_http_lifecycle_and_permissions() {
         )
         .await;
         assert_eq!(ranking["ranking"][0]["equipo"], "Equipo Rust");
+        let finished = ok(
+            &app,
+            &administrator,
+            "GET",
+            &format!("/api/records/hackathons/{hack}"),
+            None,
+        )
+        .await;
+        assert_eq!(
+            (
+                finished["estado"].as_str(),
+                finished["resultados_publicados"].as_bool()
+            ),
+            (Some("finalizado"), Some(true))
+        );
+        let results = ok(
+            &app,
+            &student,
+            "GET",
+            "/api/records/notificaciones?q=HACKATON_RESULTADOS",
+            None,
+        )
+        .await;
+        assert_eq!(results["total"], 1, "{results}");
+        // Final report for managers and the reto's company; not for students.
+        for format in ["pdf", "xlsx"] {
+            let (status, _, _) = request(
+                &app,
+                &company,
+                "GET",
+                &format!("/api/hackathons/{hack}/informe/{format}"),
+                None,
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK, "{format}");
+        }
+        assert_eq!(
+            request(
+                &app,
+                &student,
+                "GET",
+                &format!("/api/hackathons/{hack}/informe/pdf"),
+                None
+            )
+            .await
+            .0,
+            StatusCode::FORBIDDEN
+        );
         ok(&app,&teacher,"POST",&format!("/api/retos/{id}/seguimiento"),Some(json!({"fecha_sesion":"2026-10-14","porcentaje_avance":100,"avances":"Prototipo entregado"}))).await;
         let closed = ok(
             &app,

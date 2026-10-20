@@ -69,6 +69,7 @@ pub struct CierreReto {
     pub reto_id: i64,
     pub acta_url: Option<String>,
     pub notas: String,
+    pub impacto: String,
     pub encuesta_enviada: bool,
     pub cerrado_por_id: Option<i64>,
     pub cerrado_en: Option<chrono::DateTime<chrono::Utc>>,
@@ -107,11 +108,27 @@ pub struct EncuestaSatisfaccion {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SolicitudLogistica {
+    pub id: i64,
+    pub reto_id: i64,
+    pub evento: String,
+    pub tipo: String,
+    pub descripcion: String,
+    pub estado: String,
+    pub solicitada_por_id: Option<i64>,
+    pub creada_en: chrono::DateTime<chrono::Utc>,
+    pub actualizado_en: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Empresa {
     pub id: i64,
     pub nit: String,
     pub razon_social: String,
     pub sector_industrial: String,
+    pub tipo_convocatoria: String,
+    pub area_responsable: String,
+    pub sitio_web: String,
     pub fecha_creacion: chrono::NaiveDate,
     pub estado_validacion: String,
     pub estado_listas_restrictivas: String,
@@ -121,6 +138,8 @@ pub struct Empresa {
     pub renuncio_a_convenio: bool,
     pub estado_convenio: String,
     pub fecha_vencimiento_convenio: Option<chrono::NaiveDate>,
+    pub participacion_bloqueada: bool,
+    pub motivo_bloqueo: String,
     pub usuario_id: Option<i64>,
 }
 
@@ -133,6 +152,20 @@ pub struct ContactoEmpresa {
     pub email: String,
     pub telefono: String,
     pub es_principal: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TipoDocumentoLegal {
+    pub id: i64,
+    pub codigo: String,
+    pub nombre: String,
+    pub descripcion: String,
+    pub obligatorio: bool,
+    pub aplica_sin_convenio: bool,
+    pub vigencia_dias: Option<i64>,
+    pub requiere_permiso_especial: bool,
+    pub activo: bool,
+    pub orden: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -161,6 +194,8 @@ pub struct Entregable {
     pub comentario_estudiante: Option<String>,
     pub comentario_profesor: Option<String>,
     pub nota: Option<rust_decimal::Decimal>,
+    pub calificacion_publicada: bool,
+    pub calificacion_publicada_en: Option<chrono::DateTime<chrono::Utc>>,
     pub fecha_entrega: chrono::DateTime<chrono::Utc>,
     pub actualizado_en: chrono::DateTime<chrono::Utc>,
     pub estado: String,
@@ -223,8 +258,23 @@ pub struct Hackathon {
     pub reglas: String,
     pub estado: String,
     pub resultados_publicados: bool,
+    pub modalidad: String,
+    pub lugar: String,
+    pub enlace_transmision: String,
+    pub notas_logistica: String,
     pub creado_en: chrono::DateTime<chrono::Utc>,
     pub actualizado_en: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InvitadoHackathon {
+    pub id: i64,
+    pub hackathon_id: i64,
+    pub tipo: String,
+    pub nombre: String,
+    pub organizacion: String,
+    pub email: String,
+    pub confirmado: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -307,6 +357,8 @@ pub struct Postulacion {
     pub habilidades: String,
     pub semestre: Option<i64>,
     pub programa: String,
+    pub hoja_de_vida: Option<String>,
+    pub acepta_terminos: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -350,10 +402,12 @@ pub struct Gasto {
     pub presupuesto_id: i64,
     pub categoria: String,
     pub monto: rust_decimal::Decimal,
+    pub estado: String,
     pub descripcion: String,
     pub comprobante: Option<String>,
     pub registrado_por_id: Option<i64>,
     pub creado_en: chrono::DateTime<chrono::Utc>,
+    pub ejecutado_en: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -373,6 +427,7 @@ pub struct Reto {
     pub empresa_id: i64,
     pub tipo: String,
     pub titulo: String,
+    pub nombre_corto: String,
     pub descripcion: String,
     pub area: String,
     pub nivel_academico: String,
@@ -385,6 +440,9 @@ pub struct Reto {
     pub premios: String,
     pub documento_soporte: Option<String>,
     pub criterios_evaluacion: String,
+    pub uso_esperado_resultados: String,
+    pub insumos_inicio: String,
+    pub insumos_cierre: String,
     pub estado: String,
     pub consecutivo: Option<i64>,
     pub anio_consecutivo: Option<i64>,
@@ -395,17 +453,6 @@ pub struct Reto {
     pub actualizado_en: chrono::DateTime<chrono::Utc>,
     pub tiene_convenio_institucional: bool,
     pub eliminado_en: Option<chrono::DateTime<chrono::Utc>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HistorialEstadoReto {
-    pub id: i64,
-    pub reto_id: i64,
-    pub estado_anterior: String,
-    pub estado_nuevo: String,
-    pub comentario: String,
-    pub realizado_por_id: Option<i64>,
-    pub fecha: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -430,6 +477,7 @@ pub struct EquipoRetoAcademico {
 pub struct SesionRetoAcademico {
     pub id: i64,
     pub reto_id: i64,
+    pub integracion_id: Option<i64>,
     pub tipo: String,
     pub fecha_hora: chrono::DateTime<chrono::Utc>,
     pub enlace_reunion: Option<String>,
@@ -449,9 +497,6 @@ pub struct IntegracionAcademica {
     pub alcance: String,
     pub entregable_esperado: String,
     pub cronograma_sesiones: String,
-    pub equipo_profesores: String,
-    pub equipo_estudiantes: String,
-    pub expertos_invitados: String,
     pub requerimientos_empresa: String,
     pub requerimientos_internos: String,
     pub espacio_fisico: String,
@@ -461,6 +506,20 @@ pub struct IntegracionAcademica {
     pub fecha_aprobacion: Option<chrono::DateTime<chrono::Utc>>,
     pub creado_en: chrono::DateTime<chrono::Utc>,
     pub actualizado_en: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParticipanteIntegracion {
+    pub id: i64,
+    pub integracion_id: i64,
+    pub rol: String,
+    pub nombre: String,
+    pub documento: String,
+    pub email: String,
+    pub facultad: String,
+    pub programa: String,
+    pub usuario_id: Option<i64>,
+    pub notificado_en: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

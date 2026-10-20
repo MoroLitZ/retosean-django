@@ -76,7 +76,17 @@ pub fn scope(table: &str, user: &User) -> Option<String> {
         "cierre_encuestasatisfaccion" => format!("t.participante_id={actor}"),
         "cierre_agendacierre" => via_challenge("reto_id"),
         "cierre_entregablefinal" => format!("EXISTS(SELECT 1 FROM cierres_reto c JOIN retos r ON r.id=c.reto_id WHERE c.id=t.cierre_id AND ({challenge}))"),
-        "equipos" | "equipos_reto_academico" | "sesiones_reto_academico" | "seguimientos_reto" => via_challenge("reto_id"),
+        "equipos" | "equipos_reto_academico" | "seguimientos_reto" => via_challenge("reto_id"),
+        // HU03: the schedule is visible to every party, including assigned participants.
+        "sesiones_reto_academico" => format!("({}) OR EXISTS(SELECT 1 FROM participantes_integracion p WHERE p.integracion_id=t.integracion_id AND p.usuario_id={actor})", via_challenge("reto_id")),
+        "participantes_integracion" => match user.rol.as_str() {
+            "PROFESOR" => format!("EXISTS(SELECT 1 FROM integraciones_academicas i WHERE i.id=t.integracion_id AND i.profesor_id={actor})"),
+            "EMPRESA" => format!("EXISTS(SELECT 1 FROM integraciones_academicas i JOIN retos r ON r.id=i.reto_id WHERE i.id=t.integracion_id AND ({challenge}))"),
+            _ => format!("t.usuario_id={actor}"),
+        },
+        "tipos_documento_legal" if user.rol == "EMPRESA" => "t.activo".into(),
+        "cierre_solicitudlogistica" => via_challenge("reto_id"),
+        "invitados_hackaton" => format!("EXISTS(SELECT 1 FROM hackathons h JOIN retos r ON r.id=h.reto_id WHERE h.id=t.hackathon_id AND (({challenge}) OR h.estado IN ('publicado','en_curso','finalizado') OR EXISTS(SELECT 1 FROM jurados_hackaton j WHERE j.hackathon_id=h.id AND j.usuario_id={actor})))"),
         "presupuestos" if user.rol == "EMPRESA" => via_challenge("reto_id"),
         "gastos" if user.rol == "EMPRESA" => format!("EXISTS(SELECT 1 FROM presupuestos b JOIN retos r ON r.id=b.reto_id WHERE b.id=t.presupuesto_id AND ({challenge}))"),
         "cierres_reto" => via_challenge("reto_id"),
@@ -121,12 +131,22 @@ pub fn data_expression(table: &str) -> String {
             | "evaluacion_rubrica"
             | "evaluacion_criteriorubrica"
             | "jurados_hackaton" => "x.nombre",
+            // Integrations and hackathons are known by their reto's title.
+            "integraciones_academicas" | "hackathons" => {
+                "(SELECT r.titulo FROM retos r WHERE r.id=x.reto_id)"
+            }
             _ => continue,
         };
         let key = name.trim_end_matches("_id");
         expr.push_str(&format!(
             "||jsonb_build_object('{key}',(SELECT {label} FROM \"{related}\" x WHERE x.id=t.\"{name}\"))"
         ));
+        if related == "retos" {
+            // The reto's state decides which actions apply (e.g. editing an integration).
+            expr.push_str(&format!(
+                "||jsonb_build_object('{key}_estado',(SELECT x.estado FROM retos x WHERE x.id=t.\"{name}\"))"
+            ));
+        }
     }
     expr
 }
@@ -218,6 +238,7 @@ pub async fn detail(
     Path((name, id)): Path<(String, i64)>,
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, false).await?;
+    crate::event::advance_before_read(&state, &name, id).await;
     let record = visible_record(&state, &user, &name, id).await?;
     Ok(Json(record))
 }
