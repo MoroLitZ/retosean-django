@@ -6,7 +6,7 @@ use crate::{
     auth::User,
     error::{AppError, Result},
     mail,
-    reports::pdf_lines,
+    reports::pdf_table,
 };
 use axum::{
     Json,
@@ -694,29 +694,27 @@ fn render(built: &Built, format: &str) -> Result<(Vec<u8>, &'static str, &'stati
         ))
     } else {
         // Limited to 2000 rows, as Django's MAX_FILAS_PDF.
-        let mut lines = vec![
+        let meta = [
             built.report.description.to_string(),
             format!("Generado el {generated}"),
             describe(built),
-            String::new(),
         ];
-        for row in built.rows.iter().take(2000) {
-            for ((_, label, _, _), value) in built.columns.iter().zip(row) {
-                let line = format!("{label}: {value}");
-                let chars: Vec<char> = line.chars().collect();
-                lines.extend(chars.chunks(95).map(|c| c.iter().collect::<String>()));
-            }
-            lines.push("-".repeat(60));
-        }
+        let columns: Vec<(&str, f32)> = built.columns.iter().map(|c| (c.1, c.2 as f32)).collect();
         let shown = built.rows.len().min(2000);
         let truncated = if built.rows.len() > 2000 {
             " (truncado a 2000; exporta a Excel para el listado completo)"
         } else {
             ""
         };
-        lines.push(format!("Total de registros: {shown}{truncated}"));
+        let total = format!("Total de registros: {shown}{truncated}");
         Ok((
-            pdf_lines(built.report.name, &lines),
+            pdf_table(
+                built.report.name,
+                &meta,
+                &columns,
+                &built.rows[..shown],
+                &total,
+            ),
             "pdf",
             "application/pdf",
         ))
