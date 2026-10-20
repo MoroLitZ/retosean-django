@@ -198,7 +198,11 @@ pub async fn integration_state(
         notify(
             &mut tx,
             recipient,
-            "INTEGRACION_ESTADO_CAMBIADO",
+            match input.estado.as_str() {
+                "en_revision" => "INTEGRACION_ENVIADA_REVISION",
+                "aprobada" | "rechazada" => "INTEGRACION_REVISADA",
+                _ => "INTEGRACION_ESTADO_CAMBIADO",
+            },
             &message,
             &key,
         )

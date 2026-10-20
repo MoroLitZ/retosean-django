@@ -83,7 +83,7 @@ fn rango(f: &Filtro, hoy: NaiveDate) -> (Option<NaiveDate>, Option<NaiveDate>, S
 }
 
 /// Display label of a choice value, as Django's get_FOO_display.
-fn etiqueta(tabla: &str, campo: &str, valor: &str) -> String {
+pub fn etiqueta(tabla: &str, campo: &str, valor: &str) -> String {
     schema()
         .iter()
         .filter(|m| m["table"] == tabla)

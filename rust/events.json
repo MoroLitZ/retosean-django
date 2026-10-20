@@ -1,0 +1,127 @@
+{
+  "CERTIFICADO_DISPONIBLE": {
+    "permite_email": true,
+    "tipo": "EXITO",
+    "titulo": "Tu certificado esta disponible"
+  },
+  "COMENTARIO_EMPRESA": {
+    "permite_email": true,
+    "tipo": "INFO",
+    "titulo": "Comentario de la empresa a un entregable"
+  },
+  "CONVENIO_ACTUALIZADO": {
+    "permite_email": true,
+    "tipo": "INFO",
+    "titulo": "Avance en el tramite de tu convenio"
+  },
+  "DOCUMENTO_CARGADO_ADMIN": {
+    "permite_email": true,
+    "tipo": "INFO",
+    "titulo": "Documento legal cargado por empresa"
+  },
+  "DOCUMENTO_REVISADO": {
+    "permite_email": true,
+    "tipo": "INFO",
+    "titulo": "Documentacion revisada"
+  },
+  "EMPRESA_LISTAS_RESTRICTIVAS": {
+    "permite_email": true,
+    "tipo": "ERROR",
+    "titulo": "Verificacion en listas restrictivas"
+  },
+  "EMPRESA_PARTICIPACION": {
+    "permite_email": true,
+    "tipo": "INFO",
+    "titulo": "Estado de participacion de tu empresa"
+  },
+  "ENCUESTA_PENDIENTE": {
+    "permite_email": true,
+    "tipo": "INFO",
+    "titulo": "Encuesta de satisfaccion"
+  },
+  "ENTREGABLE_CALIFICADO": {
+    "permite_email": true,
+    "tipo": "EXITO",
+    "titulo": "Tu entregable fue calificado"
+  },
+  "ENTREGABLE_RECIBIDO": {
+    "permite_email": true,
+    "tipo": "INFO",
+    "titulo": "Nuevo entregable recibido"
+  },
+  "EQUIPO_ASIGNADO": {
+    "permite_email": true,
+    "tipo": "EXITO",
+    "titulo": "Fuiste asignado a un equipo"
+  },
+  "HACKATON_PUBLICADO": {
+    "permite_email": true,
+    "tipo": "INFO",
+    "titulo": "Hackathon publicado"
+  },
+  "HACKATON_RESULTADOS": {
+    "permite_email": true,
+    "tipo": "EXITO",
+    "titulo": "Resultados del hackathon"
+  },
+  "INTEGRACION_ENVIADA_REVISION": {
+    "permite_email": true,
+    "tipo": "INFO",
+    "titulo": "Nueva postulacion docente a reto"
+  },
+  "INTEGRACION_REVISADA": {
+    "permite_email": true,
+    "tipo": "INFO",
+    "titulo": "Integracion academica revisada"
+  },
+  "LOGISTICA_SOLICITADA": {
+    "permite_email": true,
+    "tipo": "INFO",
+    "titulo": "Nueva solicitud de logistica"
+  },
+  "POSTULACION_GESTIONADA": {
+    "permite_email": true,
+    "tipo": "INFO",
+    "titulo": "Respuesta a tu postulacion"
+  },
+  "POSTULACION_NUEVA": {
+    "permite_email": true,
+    "tipo": "INFO",
+    "titulo": "Nueva postulacion"
+  },
+  "POSTULACION_RECIBIDA": {
+    "permite_email": true,
+    "tipo": "EXITO",
+    "titulo": "Recibimos tu postulacion"
+  },
+  "PRESUPUESTO_80": {
+    "permite_email": true,
+    "tipo": "ADVERTENCIA",
+    "titulo": "Presupuesto por encima del 80%"
+  },
+  "RECORDATORIO_FECHA_LIMITE": {
+    "permite_email": true,
+    "tipo": "ADVERTENCIA",
+    "titulo": "Recordatorio de fecha limite"
+  },
+  "RETO_ENVIADO_REVISION": {
+    "permite_email": true,
+    "tipo": "INFO",
+    "titulo": "Reto enviado a revision"
+  },
+  "RETO_ESTADO_CAMBIADO": {
+    "permite_email": true,
+    "tipo": "INFO",
+    "titulo": "Cambio de estado de tu reto"
+  },
+  "RETO_FINALIZADO": {
+    "permite_email": true,
+    "tipo": "EXITO",
+    "titulo": "Reto finalizado"
+  },
+  "RETO_SIN_ACTUALIZAR": {
+    "permite_email": true,
+    "tipo": "ADVERTENCIA",
+    "titulo": "Reto vencido sin actualizaciones"
+  }
+}

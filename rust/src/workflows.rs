@@ -19,8 +19,10 @@ pub async fn notify(
     message: &str,
     key: &str,
 ) -> Result<()> {
-    sqlx::query("INSERT INTO notificaciones(usuario_id,tipo,evento,titulo,mensaje,leida,link,clave_dedupe,enviada_por_correo,error_envio,creada_en) SELECT $1,'INFO',$2,'RetosEAN',$3,false,'/',$4,false,'',now() WHERE NOT EXISTS(SELECT 1 FROM preferencias_notificacion WHERE usuario_id=$1 AND eventos_silenciados ? $2) ON CONFLICT (usuario_id,clave_dedupe) WHERE clave_dedupe<>'' DO NOTHING")
-        .bind(user).bind(event).bind(message).bind(key).execute(&mut **tx).await?;
+    // Title and type come from Django's event catalog; the outbox emails it later.
+    let (tipo, titulo, _) = crate::mail::event(event);
+    sqlx::query("INSERT INTO notificaciones(usuario_id,tipo,evento,titulo,mensaje,leida,link,clave_dedupe,enviada_por_correo,error_envio,creada_en) SELECT $1,$5,$2,$6,$3,false,'/',$4,false,'',now() WHERE NOT EXISTS(SELECT 1 FROM preferencias_notificacion WHERE usuario_id=$1 AND eventos_silenciados ? $2) ON CONFLICT (usuario_id,clave_dedupe) WHERE clave_dedupe<>'' DO NOTHING")
+        .bind(user).bind(event).bind(message).bind(key).bind(tipo).bind(titulo).execute(&mut **tx).await?;
     Ok(())
 }
 /// Reto state changes go to the shared audit table, like every other entity (Django).

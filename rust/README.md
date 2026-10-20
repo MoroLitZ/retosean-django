@@ -56,6 +56,7 @@ cargo run --locked -- init-db
 cargo run --locked -- seed-demo
 cargo run --locked -- serve
 cargo run --locked -- advance-hackathons   # schedule hourly (HU09)
+cargo run --locked -- send-reminders       # schedule daily (HU15), like enviar_recordatorios
 ```
 
 `init-db` only initializes an empty database. `seed-demo` only runs when the user
@@ -90,7 +91,7 @@ These are local demonstration credentials. Do not seed an internet-facing system
 | Progress | Dated progress entries, 0–100% validation, company notification |
 | Closure | Required deliverable, final artifact linking, state transition, idempotent certificates and satisfaction surveys |
 | Certificates | Owner/admin PDF download and public UUID verification |
-| Notifications | Central transactional in-app notifications, event preferences and deduplication, mark-as-read |
+| Notifications | Django's event catalog (titles, types), in-app bell, preferences and deduplication, email outbox within 20 s using Django's template and EMAIL_* settings (sent/failed recorded), daily reminders (`send-reminders`, same rules as `enviar_recordatorios`) |
 | Finance | Exact decimal budgets/expenses, role-scoped summaries, 80% threshold notifications |
 | Hackathons | Creation, stages/time windows, jurors (experts included), team registration/review, voting, ranking, automatic advance and result publication at close, event logistics with guests, final report in PDF/Excel (HU09) |
 | Reports | Role-scoped CSV, PDF and Excel record exports, with secret fields omitted |
@@ -105,8 +106,6 @@ coverage does not imply every original form or command has been ported.
 
 - Public self-registration, email verification and password recovery; account
   bulk CSV/Excel import; full user-role administration.
-- SMTP delivery and scheduled reminder jobs. Email preferences are stored, but
-  the Rust notifier currently sends in-app notifications only.
 - Rubric creation and criterion-based grading. The native free-form grading
   endpoint explicitly refuses rubric-backed challenges.
 - Editing the operational student teams of an integration (structured team and schedule are native).
@@ -227,6 +226,7 @@ build must be validated in the target deployment environment.
 - `src/companies.rs`, `finance.rs`, `hackathon.rs`: module-specific business rules.
 - `src/dashboard.rs`: port of the Django dashboard indicators (HU05).
 - `src/team.rs`: structured integration team and schedule (HU03).
+- `src/mail.rs`, `reminders.rs`: notification email outbox and daily reminders (HU15).
 - `src/event.rs`: hackathon schedule advance, logistics and final report (HU09).
 - `src/media.rs`, `reports.rs`: private files, PDF and spreadsheet generation.
 - `src/models.rs`, `schema.json`, `states.json`, `sql/`: exported migration inputs.

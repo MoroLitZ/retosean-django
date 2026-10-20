@@ -107,7 +107,11 @@ pub async fn review(
         notify(
             &mut tx,
             owner,
-            "EMPRESA_REVISADA",
+            if input.estado_listas_restrictivas == "RECHAZADO" {
+                "EMPRESA_LISTAS_RESTRICTIVAS"
+            } else {
+                "EMPRESA_PARTICIPACION"
+            },
             &format!(
                 "Empresa: {}. {}",
                 input.estado_validacion, input.observaciones
@@ -168,7 +172,7 @@ pub async fn agreement(
         notify(
             &mut tx,
             owner,
-            "CONVENIO_ESTADO_CAMBIADO",
+            "CONVENIO_ACTUALIZADO",
             &format!("Convenio: {}", input.estado),
             &format!("convenio:{id}:{from}->{}", input.estado),
         )

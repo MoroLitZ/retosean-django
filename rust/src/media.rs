@@ -132,7 +132,7 @@ pub async fn submit(
         notify(
             &mut tx,
             teacher,
-            "ENTREGABLE_ENVIADO",
+            "ENTREGABLE_RECIBIDO",
             &format!("{} entregó {title}", user.username),
             &format!("entregable:{id}:{}", uuid::Uuid::new_v4().simple()),
         )
@@ -300,7 +300,7 @@ pub async fn company_document(
         notify(
             &mut tx,
             admin,
-            "DOCUMENTO_CARGADO",
+            "DOCUMENTO_CARGADO_ADMIN",
             &format!("Documento {kind} pendiente de revisión"),
             &format!("documento:{id}:{}", uuid::Uuid::new_v4().simple()),
         )

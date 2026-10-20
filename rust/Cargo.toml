@@ -22,6 +22,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 pdf-writer = "0.15"
 encoding_rs = "0.8"
 rust_xlsxwriter = "0.96"
+# SMTP for notification emails (same EMAIL_* settings as Django).
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "hostname", "tokio1-rustls-tls"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

@@ -58,6 +58,9 @@ def export():
                 table = node.value.args[1]
                 machines[node.targets[0].id] = {ast.literal_eval(k): sorted(ast.literal_eval(v)) if isinstance(v, ast.Set) else [] for k, v in zip(table.keys, table.values)}
     (OUT / "states.json").write_text(json.dumps(machines, ensure_ascii=False, indent=2), encoding="utf-8")
+    from apps.notificaciones.eventos import EVENTOS
+    eventos = {e.slug: {"tipo": e.tipo, "titulo": e.titulo, "permite_email": e.permite_email} for e in EVENTOS.values()}
+    (OUT / "events.json").write_text(json.dumps(eventos, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     export_seed()
     print(f"Exported {len(MODELS)} models and {len(machines)} state machines; no database writes.")
 

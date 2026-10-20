@@ -903,6 +903,47 @@ async fn native_http_lifecycle_and_permissions() {
             request(&app, &expert, "GET", "/api/me", None).await.0,
             StatusCode::UNAUTHORIZED
         );
+        // HU15 reminders: a favorited open reto closing applications in 3 days.
+        sqlx::query("UPDATE retos SET fecha_limite_postulacion=(now() AT TIME ZONE 'America/Bogota')::date+3 WHERE id=4").execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO retos_favoritos(usuario_id,reto_id,fecha) VALUES(4,4,now()) ON CONFLICT DO NOTHING").execute(&pool).await.unwrap();
+        let created = retosean::reminders::run(&pool, &[7, 3, 1]).await.unwrap();
+        assert!(created >= 1, "reminder created");
+        let reminders: i64 = sqlx::query_scalar("SELECT count(*) FROM notificaciones WHERE usuario_id=4 AND clave_dedupe='recordatorio:postulacion:4:3'").fetch_one(&pool).await.unwrap();
+        assert_eq!(reminders, 1);
+        assert_eq!(
+            retosean::reminders::run(&pool, &[7, 3, 1]).await.unwrap(),
+            0,
+            "idempotent, like Django"
+        );
+        // HU15: the outbox emails pending notifications once, with Django's titles,
+        // and skips users who turned email off (the student did, above).
+        let outbox = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mailer = retosean::mail::Mailer::Memory(outbox.clone());
+        let sent = retosean::mail::deliver_pending(&pool, &mailer, "http://test")
+            .await
+            .unwrap();
+        assert!(sent > 0, "pending notifications are emailed");
+        let mails = outbox.lock().unwrap().clone();
+        assert!(
+            mails
+                .iter()
+                .all(|(to, subject, _)| !to.starts_with("estudiante.actualizado")
+                    && subject.starts_with("[RetosEAN] "))
+        );
+        assert!(
+            mails.iter().any(
+                |(_, subject, _)| subject == "[RetosEAN] Respuesta a tu postulacion"
+                    || subject.contains("Nueva postulacion")
+            ),
+            "{mails:?}"
+        );
+        assert_eq!(
+            retosean::mail::deliver_pending(&pool, &mailer, "http://test")
+                .await
+                .unwrap(),
+            0,
+            "never twice"
+        );
         ok(&app, &student, "POST", "/api/logout", Some(json!({}))).await;
         assert_eq!(
             request(&app, &student, "GET", "/api/me", None).await.0,

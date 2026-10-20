@@ -73,6 +73,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         return Ok(());
     }
+    if command == "send-reminders" {
+        // Django `enviar_recordatorios --dias 7 3 1`; schedule once a day.
+        let days: Vec<i64> = std::env::args()
+            .skip(2)
+            .filter_map(|d| d.parse().ok())
+            .collect();
+        let days = if days.is_empty() { vec![7, 3, 1] } else { days };
+        let sent = retosean::reminders::run(&pool, &days)
+            .await
+            .map_err(|e| format!("send-reminders failed: {}", e.1))?;
+        println!("{sent} reminder(s) generated");
+        return Ok(());
+    }
     if command == "advance-hackathons" {
         // Schedule hourly, like Django's avanzar_hackathones (HU09).
         let changed = retosean::event::advance_all(&pool)
@@ -82,9 +95,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     if command != "serve" {
-        return Err("Commands: serve | init-db | seed-demo | advance-hackathons".into());
+        return Err(
+            "Commands: serve | init-db | seed-demo | advance-hackathons | send-reminders [days...]"
+                .into(),
+        );
     }
     retosean::auth::init(&pool).await?;
+    // Notification emails (HU15): Django's EMAIL_* settings; console backend when unset.
+    let site = std::env::var("RUST_SITE_URL").unwrap_or_else(|_| format!("http://{}", config.bind));
+    retosean::mail::spawn_outbox(pool.clone(), retosean::mail::Mailer::from_env(), site);
     let listener = tokio::net::TcpListener::bind(config.bind).await?;
     tracing::info!(address=%config.bind, database=%config.database_name, "RetosEAN Rust ready");
     axum::serve(

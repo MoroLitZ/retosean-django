@@ -217,7 +217,11 @@ pub async fn state(
         notify(
             &mut tx,
             member,
-            "HACKATON_ESTADO_CAMBIADO",
+            match input.estado.as_str() {
+                "publicado" => "HACKATON_PUBLICADO",
+                "finalizado" => "HACKATON_RESULTADOS",
+                _ => "HACKATON_ESTADO_CAMBIADO",
+            },
             &format!("Hackathon {id}: {}", input.estado),
             &format!("hackathon:{id}:{}", input.estado),
         )
