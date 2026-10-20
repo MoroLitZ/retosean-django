@@ -13,9 +13,28 @@ pub async fn challenge_options(
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, false).await?;
     let mut tx = state.pool.begin().await?;
-    manager(&mut tx, id, &user).await?;
-    let students:Vec<Value>=sqlx::query_scalar("SELECT jsonb_build_object('value',u.id,'label',trim(u.first_name||' '||u.last_name)||' ('||u.username||')') FROM usuarios u JOIN postulaciones p ON p.estudiante_id=u.id WHERE p.reto_id=$1 AND p.estado='ACEPTADA' AND u.is_active ORDER BY u.first_name,u.last_name").bind(id).fetch_all(&mut *tx).await?;
-    Ok(Json(json!({"students":students})))
+    integrated(&mut tx, id, &user).await?;
+    let mut lists = serde_json::Map::new();
+    for (name, roles) in [
+        ("profesores", "{PROFESOR}"),
+        ("estudiantes", "{ESTUDIANTE}"),
+        ("expertos_invitados", "{EMPRESA,EXPERTO}"),
+    ] {
+        let options: Vec<Value> = sqlx::query_scalar("SELECT jsonb_build_object('value',id,'label',COALESCE(NULLIF(trim(first_name||' '||last_name),''),username),'selected',id=$2) FROM usuarios WHERE rol=ANY($1::text[]) ORDER BY first_name,last_name")
+            .bind(roles).bind(user.id).fetch_all(&mut *tx).await?;
+        lists.insert(name.into(), Value::Array(options));
+    }
+    Ok(Json(Value::Object(lists)))
+}
+/// solo_profesor + IntegracionAcademica(profesor=user): admins do not pass in Django.
+async fn integrated(tx: &mut Transaction<'_, Postgres>, reto: i64, user: &User) -> Result<()> {
+    let ok: bool = sqlx::query_scalar("SELECT $3='PROFESOR' AND EXISTS(SELECT 1 FROM integraciones_academicas i JOIN retos r ON r.id=i.reto_id WHERE i.reto_id=$1 AND i.profesor_id=$2 AND r.eliminado_en IS NULL)")
+        .bind(reto).bind(user.id).bind(&user.rol).fetch_one(&mut **tx).await?;
+    if ok {
+        Ok(())
+    } else {
+        Err(AppError::forbidden())
+    }
 }
 pub async fn options(
     State(state): State<AppState>,
@@ -82,63 +101,69 @@ async fn window(tx: &mut Transaction<'_, Postgres>, id: i64, kind: &str) -> Resu
         Err(AppError::bad("La etapa no está abierta"))
     }
 }
-#[derive(Deserialize)]
-pub struct TeamInput {
-    nombre: String,
-    estudiantes: Vec<i64>,
-}
+/// crear_equipo_academico: the academic team plus its operative mirror; students notified.
 pub async fn team(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(reto): Path<i64>,
-    Json(mut input): Json<TeamInput>,
+    Json(mut input): Json<AcademicTeamInput>,
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, true).await?;
-    domain::validate_text(&input.nombre, 100, "Nombre del equipo")?;
-    input.estudiantes.sort_unstable();
-    input.estudiantes.dedup();
-    if input.estudiantes.is_empty() || input.estudiantes.len() > 50 {
-        return Err(AppError::bad("Selecciona entre 1 y 50 estudiantes"));
-    }
+    validate_team(&state, &mut input).await?;
     let mut tx = state.pool.begin().await?;
-    let active:Option<i64>=sqlx::query_scalar("SELECT id FROM retos WHERE id=$1 AND eliminado_en IS NULL AND estado IN ('aprobado','abierto','en_curso','pausado') FOR UPDATE").bind(reto).fetch_optional(&mut *tx).await?;
-    if active.is_none() {
-        return Err(AppError::bad("El reto no admite equipos"));
-    }
-    manager(&mut tx, reto, &user).await?;
-    let accepted:i64=sqlx::query_scalar("SELECT count(*) FROM postulaciones p JOIN usuarios u ON u.id=p.estudiante_id WHERE p.reto_id=$1 AND p.estudiante_id=ANY($2) AND p.estado='ACEPTADA' AND u.is_active AND u.rol='ESTUDIANTE'").bind(reto).bind(&input.estudiantes).fetch_one(&mut *tx).await?;
-    if accepted != input.estudiantes.len() as i64 {
-        return Err(AppError::bad(
-            "Todos los integrantes deben tener postulación aceptada",
-        ));
-    }
-    let id: i64 = sqlx::query_scalar(
-        "INSERT INTO equipos(reto_id,nombre,creado_en) VALUES($1,$2,now()) RETURNING id",
+    integrated(&mut tx, reto, &user).await?;
+    let name = input.nombre_equipo.trim();
+    let academic: i64 = sqlx::query_scalar(
+        "INSERT INTO equipos_reto_academico(reto_id,nombre_equipo) VALUES($1,$2) RETURNING id",
     )
     .bind(reto)
-    .bind(&input.nombre)
+    .bind(name)
     .fetch_one(&mut *tx)
     .await?;
-    let academic:i64=sqlx::query_scalar("INSERT INTO equipos_reto_academico(reto_id,nombre_equipo,equipo_espejo_id) VALUES($1,$2,$3) RETURNING id").bind(reto).bind(&input.nombre).bind(id).fetch_one(&mut *tx).await?;
-    if user.rol == "PROFESOR" {
-        sqlx::query("INSERT INTO equipos_reto_academico_profesores(equiporetoacademico_id,usuario_id) VALUES($1,$2)").bind(academic).bind(user.id).execute(&mut *tx).await?;
+    for (table, list) in [
+        ("profesores", &input.profesores),
+        ("estudiantes", &input.estudiantes),
+        ("expertos_invitados", &input.expertos_invitados),
+    ] {
+        sqlx::query(&format!("INSERT INTO equipos_reto_academico_{table}(equiporetoacademico_id,usuario_id) SELECT $1,u FROM unnest($2::bigint[]) u"))
+            .bind(academic).bind(list).execute(&mut *tx).await?;
     }
-    for (index, student) in input.estudiantes.iter().enumerate() {
-        sqlx::query("INSERT INTO miembros_equipo(equipo_id,estudiante_id,rol,fecha_ingreso) VALUES($1,$2,$3,now())").bind(id).bind(student).bind(if index==0{"LIDER"}else{"MIEMBRO"}).execute(&mut *tx).await?;
-        sqlx::query("INSERT INTO equipos_reto_academico_estudiantes(equiporetoacademico_id,usuario_id) VALUES($1,$2)").bind(academic).bind(student).execute(&mut *tx).await?;
-    }
+    sync_mirror(&mut tx, academic, reto, None, name, &input.estudiantes).await?;
+    let mirror: i64 =
+        sqlx::query_scalar("SELECT equipo_espejo_id FROM equipos_reto_academico WHERE id=$1")
+            .bind(academic)
+            .fetch_one(&mut *tx)
+            .await?;
     history(
         &mut tx,
         ("participaciones", "equipo"),
-        id,
+        mirror,
         "",
         "creado",
         user.id,
-        &input.nombre,
+        name,
     )
     .await?;
+    let title: String = sqlx::query_scalar("SELECT titulo FROM retos WHERE id=$1")
+        .bind(reto)
+        .fetch_one(&mut *tx)
+        .await?;
+    for student in &input.estudiantes {
+        notify(
+            &mut tx,
+            *student,
+            "EQUIPO_ASIGNADO",
+            &format!("Fuiste incorporado al equipo \"{name}\" del reto \"{title}\"."),
+            &format!("equipo:{academic}:asignado"),
+        )
+        .await?;
+    }
     tx.commit().await?;
-    Ok(Json(json!({"id":id,"equipo_academico":academic})))
+    Ok(Json(json!({
+        "id": mirror,
+        "equipo_academico": academic,
+        "mensaje": format!("Equipo academico configurado y {} estudiante(s) notificados.", input.estudiantes.len()),
+    })))
 }
 /// editar/eliminar_equipo_academico: only a professor integrated in the reto.
 async fn academic_team(
@@ -150,25 +175,9 @@ async fn academic_team(
         .bind(id).bind(user.id).bind(&user.rol).fetch_optional(&mut **tx).await?;
     row.ok_or_else(AppError::not_found)
 }
-#[derive(Deserialize)]
-pub struct AcademicTeamInput {
-    nombre_equipo: String,
-    #[serde(default)]
-    profesores: Vec<i64>,
-    #[serde(default)]
-    estudiantes: Vec<i64>,
-    #[serde(default)]
-    expertos_invitados: Vec<i64>,
-}
-pub async fn edit_team(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(id): Path<i64>,
-    Json(mut input): Json<AcademicTeamInput>,
-) -> Result<Json<Value>> {
-    let user = auth::current(&state, &headers, true).await?;
+/// EquipoRetoAcademicoForm: each list only takes users of its roles.
+async fn validate_team(state: &AppState, input: &mut AcademicTeamInput) -> Result<()> {
     domain::validate_text(&input.nombre_equipo, 100, "Nombre del equipo")?;
-    // EquipoRetoAcademicoForm choices: each list only takes users of its roles.
     for (list, roles) in [
         (&mut input.profesores, &["PROFESOR"][..]),
         (&mut input.estudiantes, &["ESTUDIANTE"][..]),
@@ -191,6 +200,26 @@ pub async fn edit_team(
             ));
         }
     }
+    Ok(())
+}
+#[derive(Deserialize)]
+pub struct AcademicTeamInput {
+    nombre_equipo: String,
+    #[serde(default)]
+    profesores: Vec<i64>,
+    #[serde(default)]
+    estudiantes: Vec<i64>,
+    #[serde(default)]
+    expertos_invitados: Vec<i64>,
+}
+pub async fn edit_team(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(mut input): Json<AcademicTeamInput>,
+) -> Result<Json<Value>> {
+    let user = auth::current(&state, &headers, true).await?;
+    validate_team(&state, &mut input).await?;
     let mut tx = state.pool.begin().await?;
     let (reto, mirror) = academic_team(&mut tx, id, &user).await?;
     sqlx::query("UPDATE equipos_reto_academico SET nombre_equipo=$2 WHERE id=$1")

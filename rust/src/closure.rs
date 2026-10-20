@@ -78,6 +78,11 @@ pub async fn show(
     let user = auth::current(&state, &headers, false).await?;
     let mut tx = state.pool.begin().await?;
     manage(&mut tx, reto, &user, true).await?;
+    // gestionar: opening a finished reto's closure catches up missing certificates.
+    if crate::lifecycle::issue_certificates(&mut tx, reto, user.id, None).await? > 0 {
+        tx.commit().await?;
+        tx = state.pool.begin().await?;
+    }
     let q = |sql: &'static str| sqlx::query_scalar::<_, Value>(sql).bind(reto);
     let agenda = q("SELECT COALESCE((SELECT jsonb_build_object('fecha_hora',to_char(fecha_hora AT TIME ZONE 'America/Bogota','YYYY-MM-DD\"T\"HH24:MI'),'espacio',espacio,'recursos',recursos,'invitados',invitados,'agenda',agenda) FROM cierre_agendacierre WHERE reto_id=$1),'{}')").fetch_one(&mut *tx).await?;
     let closure = q("SELECT COALESCE((SELECT jsonb_build_object('id',id,'notas',notas,'impacto',impacto,'acta',COALESCE(acta_url,'')<>'','cerrado_en',cerrado_en) FROM cierres_reto WHERE reto_id=$1),'{}')").fetch_one(&mut *tx).await?;

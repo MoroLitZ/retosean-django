@@ -640,11 +640,29 @@ function columns(records) {
     ),
   ].slice(0, 6);
 }
+let showInactive = false;
 async function loadRecords() {
+  const inactive = selected === "unidades_estudio" && showInactive ? "&activo=0" : "";
   const data = await api(
-    `/api/records/${selected}?page=${page}&q=${encodeURIComponent(query)}`,
+    `/api/records/${selected}?page=${page}&q=${encodeURIComponent(query)}${inactive}`,
   );
   $("extra-panel").replaceChildren();
+  if (selected === "unidades_estudio") {
+    const wrap = el("div", "form-check mb-2");
+    const box = el("input", "form-check-input");
+    box.type = "checkbox";
+    box.id = "show-inactive";
+    box.checked = showInactive;
+    box.onchange = () => {
+      showInactive = box.checked;
+      page = 1;
+      loadRecords().catch(showError);
+    };
+    const l = el("label", "form-check-label", "Mostrar unidades inactivas");
+    l.htmlFor = box.id;
+    wrap.append(box, l);
+    $("extra-panel").append(wrap);
+  }
   if (selected === "equipos_reto_academico" && user.rol === "ESTUDIANTE")
     scheduleForStudent().catch(showError);
   total = data.total;
@@ -853,26 +871,10 @@ async function openRecord(id) {
       if (["abierto", "en_curso"].includes(record.estado))
         action(actions, "Entregar archivo", () => deliveryForm(id));
     }
-    if (
-      (admin() || user.rol === "PROFESOR") &&
-      ["aprobado", "abierto", "en_curso", "pausado"].includes(record.estado)
-    )
+    if (user.rol === "PROFESOR")
       action(actions, "Crear equipo", async () => {
         const options = await api(`/api/retos/${id}/opciones`);
-        simpleForm(
-          "Equipo académico",
-          `/api/retos/${id}/equipo`,
-          [
-            ["nombre", "Nombre del equipo"],
-            [
-              "estudiantes",
-              "Estudiantes aceptados (selecciona uno o varios)",
-              "multiselect",
-              options.students,
-            ],
-          ],
-          (data) => ({ ...data, estudiantes: data.estudiantes.map(Number) }),
-        );
+        teamFields("Configurar Equipo Académico", `/api/retos/${id}/equipo`, "", options);
       });
     if (admin() && record.tipo === "hackathon")
       action(actions, "Crear hackathon", () =>
@@ -1197,22 +1199,7 @@ async function openRecord(id) {
     const team = await api(`/api/equipos-academicos/${id}`).catch(() => null);
     if (team) {
       action(actions, "Editar equipo", () =>
-        simpleForm(
-          "Editar Equipo Académico",
-          `/api/equipos-academicos/${id}`,
-          [
-            ["nombre_equipo", "Nombre del equipo", "text", team.nombre_equipo],
-            ["profesores", "Profesores", "multiselect", team.opciones.profesores],
-            ["estudiantes", "Estudiantes", "multiselect", team.opciones.estudiantes],
-            ["expertos_invitados", "Expertos invitados", "multiselect", team.opciones.expertos_invitados],
-          ],
-          (data) => ({
-            ...data,
-            profesores: data.profesores.map(Number),
-            estudiantes: data.estudiantes.map(Number),
-            expertos_invitados: data.expertos_invitados.map(Number),
-          }),
-        ),
+        teamFields("Editar Equipo Académico", `/api/equipos-academicos/${id}`, team.nombre_equipo, team.opciones),
       );
       action(actions, "Eliminar equipo", async () => {
         if (confirm(`¿Eliminar el equipo "${team.nombre_equipo}"? También se elimina su equipo operativo.`))
@@ -2613,6 +2600,24 @@ async function sendUnit(e, form, url) {
   } finally {
     button.disabled = false;
   }
+}
+function teamFields(heading, url, name, options) {
+  simpleForm(
+    heading,
+    url,
+    [
+      ["nombre_equipo", "Nombre del equipo", "text", name],
+      ["profesores", "Profesores", "multiselect", options.profesores],
+      ["estudiantes", "Estudiantes", "multiselect", options.estudiantes],
+      ["expertos_invitados", "Expertos invitados", "multiselect", options.expertos_invitados],
+    ],
+    (data) => ({
+      ...data,
+      profesores: data.profesores.map(Number),
+      estudiantes: data.estudiantes.map(Number),
+      expertos_invitados: data.expertos_invitados.map(Number),
+    }),
+  );
 }
 function profileForm() {
   simpleForm("Mi Perfil", "/api/perfil", [

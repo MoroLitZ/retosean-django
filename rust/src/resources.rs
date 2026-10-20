@@ -186,6 +186,8 @@ pub struct Filters {
     pub q: Option<String>,
     pub page: Option<u32>,
     pub limit: Option<u32>,
+    /// unidades_estudio: Django lists active units unless activo=0.
+    pub activo: Option<String>,
 }
 pub async fn rows(
     state: &AppState,
@@ -215,7 +217,12 @@ pub async fn rows(
             .replace('_', "\\_")
     );
     let base = format!(
-        "WITH actor AS (SELECT $1::bigint id) SELECT {expr} data FROM \"{table}\" t WHERE ({policy}) AND ({expr})::text ILIKE $2"
+        "WITH actor AS (SELECT $1::bigint id) SELECT {expr} data FROM \"{table}\" t WHERE ({policy}) AND ({expr})::text ILIKE $2{}",
+        if table == "unidades_estudio" && filters.activo.as_deref() != Some("0") {
+            " AND t.activo"
+        } else {
+            ""
+        }
     );
     let count: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM ({base}) visible"))
         .bind(user.id)

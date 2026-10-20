@@ -320,6 +320,25 @@ async fn native_http_lifecycle_and_permissions() {
             off["mensaje"],
             "Unidad de estudio 'RS-01' desactivada correctamente."
         );
+        // Inactive units only show with activo=0, as Django's list.
+        let listed = ok(
+            &app,
+            &teacher,
+            "GET",
+            "/api/records/unidades_estudio?q=RS-01",
+            None,
+        )
+        .await;
+        assert_eq!(listed["total"], 0);
+        let listed = ok(
+            &app,
+            &teacher,
+            "GET",
+            "/api/records/unidades_estudio?q=RS-01&activo=0",
+            None,
+        )
+        .await;
+        assert_eq!(listed["total"], 1);
         ok(
             &app,
             &teacher,
@@ -1032,11 +1051,29 @@ async fn native_http_lifecycle_and_permissions() {
             &teacher,
             "POST",
             &format!("/api/retos/{id}/equipo"),
-            Some(json!({"nombre":"Equipo Rust","estudiantes":[4]})),
+            Some(json!({"nombre_equipo":"Equipo Rust","profesores":[3],"estudiantes":[4]})),
         )
         .await["id"]
             .as_i64()
             .unwrap();
+        // crear_equipo_academico: professors only (not admins); students are notified.
+        assert_eq!(
+            request(
+                &app,
+                &administrator,
+                "POST",
+                &format!("/api/retos/{id}/equipo"),
+                Some(json!({"nombre_equipo":"x"}))
+            )
+            .await
+            .0,
+            StatusCode::FORBIDDEN
+        );
+        let assigned: String = sqlx::query_scalar("SELECT mensaje FROM notificaciones WHERE usuario_id=4 AND evento='EQUIPO_ASIGNADO' ORDER BY id DESC LIMIT 1").fetch_one(&pool).await.unwrap();
+        assert!(
+            assigned.starts_with("Fuiste incorporado al equipo \"Equipo Rust\""),
+            "{assigned}"
+        );
         // Academic team edit/delete keep the operative mirror in step (Django sincronizar).
         let academic: i64 =
             sqlx::query_scalar("SELECT id FROM equipos_reto_academico WHERE equipo_espejo_id=$1")
@@ -1079,7 +1116,7 @@ async fn native_http_lifecycle_and_permissions() {
             &teacher,
             "POST",
             &format!("/api/retos/{id}/equipo"),
-            Some(json!({"nombre":"Equipo descartable","estudiantes":[4]})),
+            Some(json!({"nombre_equipo":"Equipo descartable","estudiantes":[4]})),
         )
         .await;
         let deleted = ok(
@@ -1412,6 +1449,11 @@ async fn native_http_lifecycle_and_permissions() {
         )
         .await;
         assert_eq!(repeat["certificados_emitidos"], 0);
+        // Django's close sends the survey notice with its own title, then the certificate notice.
+        let titles: Vec<String> = sqlx::query_scalar("SELECT titulo FROM notificaciones WHERE usuario_id=4 AND evento IN ('ENCUESTA_PENDIENTE','CERTIFICADO_DISPONIBLE') AND clave_dedupe IN ($1,$2) ORDER BY id")
+            .bind(format!("cierre:{id}:encuesta")).bind(format!("certificado:{id}")).fetch_all(&pool).await.unwrap();
+        assert_eq!(titles.len(), 2);
+        assert!(titles[0].starts_with("Reto finalizado: "), "{titles:?}");
         let certificate: uuid::Uuid = sqlx::query_scalar(
             "SELECT codigo_verificacion FROM certificados WHERE reto_id=$1 AND usuario_id=4",
         )
@@ -1428,7 +1470,7 @@ async fn native_http_lifecycle_and_permissions() {
         )
         .await;
         assert!(
-            choices["students"]
+            choices["estudiantes"]
                 .as_array()
                 .unwrap()
                 .iter()

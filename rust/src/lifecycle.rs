@@ -76,13 +76,13 @@ pub async fn close(
         return Err(AppError::bad("Datos de cierre inválidos"));
     }
     let mut tx = state.pool.begin().await?;
-    let row: Option<(String, i64)> = sqlx::query_as(
-        "SELECT estado,empresa_id FROM retos WHERE id=$1 AND eliminado_en IS NULL FOR UPDATE",
+    let from: Option<String> = sqlx::query_scalar(
+        "SELECT estado FROM retos WHERE id=$1 AND eliminado_en IS NULL FOR UPDATE",
     )
     .bind(reto)
     .fetch_optional(&mut *tx)
     .await?;
-    let (from, company) = row.ok_or_else(AppError::not_found)?;
+    let from = from.ok_or_else(AppError::not_found)?;
     let teacher: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2)",
     )
@@ -120,46 +120,102 @@ pub async fn close(
         )
         .await?;
     }
-    // Teacher roles take precedence when one participant appears through multiple paths.
-    let mut participants: std::collections::BTreeMap<i64, String> =
-        std::collections::BTreeMap::new();
-    participants.insert(company, "EMPRESA".into());
-    let students:Vec<i64>=sqlx::query_scalar("SELECT estudiante_id FROM postulaciones WHERE reto_id=$1 AND estado='ACEPTADA' UNION SELECT estudiante_id FROM entregables WHERE reto_id=$1 UNION SELECT m.estudiante_id FROM miembros_equipo m JOIN equipos e ON e.id=m.equipo_id WHERE e.reto_id=$1 UNION SELECT m.usuario_id FROM equipos_reto_academico_estudiantes m JOIN equipos_reto_academico e ON e.id=m.equiporetoacademico_id WHERE e.reto_id=$1").bind(reto).fetch_all(&mut *tx).await?;
-    for id in students {
-        participants
-            .entry(id)
-            .or_insert_with(|| "ESTUDIANTE".into());
-    }
-    let jurors:Vec<i64>=sqlx::query_scalar("SELECT j.usuario_id FROM jurados_hackaton j JOIN hackathons h ON h.id=j.hackathon_id WHERE h.reto_id=$1 AND j.usuario_id IS NOT NULL").bind(reto).fetch_all(&mut *tx).await?;
-    for id in jurors {
-        participants.entry(id).or_insert_with(|| "JURADO".into());
-    }
-    let teachers: Vec<i64> = sqlx::query_scalar(
-        "SELECT DISTINCT profesor_id FROM integraciones_academicas WHERE reto_id=$1",
-    )
-    .bind(reto)
-    .fetch_all(&mut *tx)
-    .await?;
-    for id in teachers {
-        participants.insert(id, "PROFESOR".into());
-    }
-    let mut issued = 0u64;
-    for (participant, role) in participants {
-        issued+=sqlx::query("INSERT INTO certificados(reto_id,usuario_id,rol_participacion,codigo_verificacion,horas,emitido_en,emitido_por_id) VALUES($1,$2,$3,$4,$5,now(),$6) ON CONFLICT(reto_id,usuario_id,rol_participacion) DO NOTHING").bind(reto).bind(participant).bind(&role).bind(uuid::Uuid::new_v4()).bind(input.horas).bind(user.id).execute(&mut *tx).await?.rows_affected();
+    // cierre._participantes: the company, professors, accepted applicants and team members.
+    let participants: Vec<i64> = sqlx::query_scalar("SELECT empresa_id FROM retos WHERE id=$1 UNION SELECT profesor_id FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id IS NOT NULL UNION SELECT estudiante_id FROM postulaciones WHERE reto_id=$1 AND estado='ACEPTADA' UNION SELECT m.estudiante_id FROM miembros_equipo m JOIN equipos e ON e.id=m.equipo_id WHERE e.reto_id=$1")
+        .bind(reto).fetch_all(&mut *tx).await?;
+    let title: String = sqlx::query_scalar("SELECT titulo FROM retos WHERE id=$1")
+        .bind(reto)
+        .fetch_one(&mut *tx)
+        .await?;
+    let key = format!("cierre:{reto}:encuesta");
+    for participant in participants {
         sqlx::query("INSERT INTO cierre_encuestasatisfaccion(cierre_id,participante_id,comentario,creada_en) VALUES($1,$2,'',now()) ON CONFLICT(cierre_id,participante_id) DO NOTHING").bind(cierre).bind(participant).execute(&mut *tx).await?;
         notify(
             &mut tx,
             participant,
-            "CERTIFICADO_DISPONIBLE",
-            &format!("El reto {reto} finalizó. Tu certificado y encuesta están disponibles."),
-            &format!("certificado:{reto}"),
+            "ENCUESTA_PENDIENTE",
+            "El reto fue cerrado formalmente. Te invitamos a responder la encuesta de satisfaccion.",
+            &key,
         )
         .await?;
     }
+    // Django passes its own title for this notice.
+    sqlx::query("UPDATE notificaciones SET titulo=$2 WHERE clave_dedupe=$1")
+        .bind(&key)
+        .bind(format!("Reto finalizado: {title}"))
+        .execute(&mut *tx)
+        .await?;
+    let issued = issue_certificates(&mut tx, reto, user.id, input.horas).await?;
     tx.commit().await?;
     Ok(Json(
         json!({"estado":"finalizado","certificados_emitidos":issued}),
     ))
+}
+/// emitir_certificados_de_reto: idempotent; only a finished reto, notifies new holders.
+pub async fn issue_certificates(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    reto: i64,
+    by: i64,
+    hours: Option<i32>,
+) -> Result<u64> {
+    let row: Option<(String, String, i64)> =
+        sqlx::query_as("SELECT estado,titulo,empresa_id FROM retos WHERE id=$1")
+            .bind(reto)
+            .fetch_optional(&mut **tx)
+            .await?;
+    let Some((_, title, company)) = row.filter(|r| r.0 == "finalizado") else {
+        return Ok(0);
+    };
+    // _participantes_del_reto, in Django's precedence order.
+    let mut eligible: std::collections::BTreeMap<i64, &str> = std::collections::BTreeMap::new();
+    let accepted: Vec<i64> = sqlx::query_scalar(
+        "SELECT estudiante_id FROM postulaciones WHERE reto_id=$1 AND estado='ACEPTADA'",
+    )
+    .bind(reto)
+    .fetch_all(&mut **tx)
+    .await?;
+    for id in accepted {
+        eligible.insert(id, "ESTUDIANTE");
+    }
+    let students: Vec<i64> = sqlx::query_scalar("SELECT m.usuario_id FROM equipos_reto_academico_estudiantes m JOIN equipos_reto_academico e ON e.id=m.equiporetoacademico_id WHERE e.reto_id=$1 UNION SELECT estudiante_id FROM entregables WHERE reto_id=$1 AND estudiante_id IS NOT NULL")
+        .bind(reto).fetch_all(&mut **tx).await?;
+    for id in students {
+        eligible.entry(id).or_insert("ESTUDIANTE");
+    }
+    let teachers: Vec<i64> = sqlx::query_scalar(
+        "SELECT profesor_id FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id IS NOT NULL",
+    )
+    .bind(reto)
+    .fetch_all(&mut **tx)
+    .await?;
+    for id in teachers {
+        eligible.insert(id, "PROFESOR");
+    }
+    let jurors: Vec<i64> = sqlx::query_scalar("SELECT j.usuario_id FROM jurados_hackaton j JOIN hackathons h ON h.id=j.hackathon_id WHERE h.reto_id=$1 AND j.usuario_id IS NOT NULL")
+        .bind(reto).fetch_all(&mut **tx).await?;
+    for id in jurors {
+        eligible.entry(id).or_insert("JURADO");
+    }
+    eligible.entry(company).or_insert("EMPRESA");
+    let mut issued = 0u64;
+    for (participant, role) in eligible {
+        let created = sqlx::query("INSERT INTO certificados(reto_id,usuario_id,rol_participacion,codigo_verificacion,horas,emitido_en,emitido_por_id) VALUES($1,$2,$3,$4,$5,now(),$6) ON CONFLICT(reto_id,usuario_id,rol_participacion) DO NOTHING")
+            .bind(reto).bind(participant).bind(role).bind(uuid::Uuid::new_v4()).bind(hours).bind(by).execute(&mut **tx).await?.rows_affected();
+        if created > 0 {
+            notify(
+                tx,
+                participant,
+                "CERTIFICADO_DISPONIBLE",
+                &format!(
+                    "Ya puedes descargar tu certificado de participacion en el reto '{title}'."
+                ),
+                &format!("certificado:{reto}"),
+            )
+            .await?;
+        }
+        issued += created;
+    }
+    Ok(issued)
 }
 #[derive(Deserialize)]
 pub struct SurveyInput {

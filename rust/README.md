@@ -109,7 +109,6 @@ coverage does not imply every original form or command has been ported.
 - Report PDFs list rows as labelled text rather than Django's landscape table.
   Generic module exports are capped at 5,000 records; Excel stores values as
   literal strings to preserve identifiers, exact decimals and formula safety.
-- The study-unit list shows inactive units too (Django hides them by default).
 - Django migration history is not synthesized by `init-db`; do not run Django
   migrations against a Rust-initialized database. A later schema change needs
   an explicit incremental migration, not another `init-db`.
