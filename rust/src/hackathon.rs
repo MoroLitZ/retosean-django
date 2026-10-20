@@ -140,6 +140,215 @@ pub async fn team(
     tx.commit().await?;
     Ok(Json(json!({"id":id,"equipo_academico":academic})))
 }
+/// editar/eliminar_equipo_academico: only a professor integrated in the reto.
+async fn academic_team(
+    tx: &mut Transaction<'_, Postgres>,
+    id: i64,
+    user: &User,
+) -> Result<(i64, Option<i64>)> {
+    let row: Option<(i64, Option<i64>)> = sqlx::query_as("SELECT q.reto_id,q.equipo_espejo_id FROM equipos_reto_academico q WHERE q.id=$1 AND $3='PROFESOR' AND EXISTS(SELECT 1 FROM integraciones_academicas i WHERE i.reto_id=q.reto_id AND i.profesor_id=$2) FOR UPDATE")
+        .bind(id).bind(user.id).bind(&user.rol).fetch_optional(&mut **tx).await?;
+    row.ok_or_else(AppError::not_found)
+}
+#[derive(Deserialize)]
+pub struct AcademicTeamInput {
+    nombre_equipo: String,
+    #[serde(default)]
+    profesores: Vec<i64>,
+    #[serde(default)]
+    estudiantes: Vec<i64>,
+    #[serde(default)]
+    expertos_invitados: Vec<i64>,
+}
+pub async fn edit_team(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(mut input): Json<AcademicTeamInput>,
+) -> Result<Json<Value>> {
+    let user = auth::current(&state, &headers, true).await?;
+    domain::validate_text(&input.nombre_equipo, 100, "Nombre del equipo")?;
+    // EquipoRetoAcademicoForm choices: each list only takes users of its roles.
+    for (list, roles) in [
+        (&mut input.profesores, &["PROFESOR"][..]),
+        (&mut input.estudiantes, &["ESTUDIANTE"][..]),
+        (&mut input.expertos_invitados, &["EMPRESA", "EXPERTO"][..]),
+    ] {
+        list.sort_unstable();
+        list.dedup();
+        if list.len() > 50 {
+            return Err(AppError::bad("Máximo 50 integrantes por lista"));
+        }
+        let valid: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM usuarios WHERE id=ANY($1) AND rol=ANY($2)")
+                .bind(&*list)
+                .bind(roles)
+                .fetch_one(&state.pool)
+                .await?;
+        if valid != list.len() as i64 {
+            return Err(AppError::bad(
+                "No se pudo actualizar el equipo. Revisa los datos del formulario.",
+            ));
+        }
+    }
+    let mut tx = state.pool.begin().await?;
+    let (reto, mirror) = academic_team(&mut tx, id, &user).await?;
+    sqlx::query("UPDATE equipos_reto_academico SET nombre_equipo=$2 WHERE id=$1")
+        .bind(id)
+        .bind(input.nombre_equipo.trim())
+        .execute(&mut *tx)
+        .await?;
+    for (table, list) in [
+        ("profesores", &input.profesores),
+        ("estudiantes", &input.estudiantes),
+        ("expertos_invitados", &input.expertos_invitados),
+    ] {
+        sqlx::query(&format!("DELETE FROM equipos_reto_academico_{table} WHERE equiporetoacademico_id=$1 AND NOT usuario_id=ANY($2)"))
+            .bind(id).bind(list).execute(&mut *tx).await?;
+        sqlx::query(&format!("INSERT INTO equipos_reto_academico_{table}(equiporetoacademico_id,usuario_id) SELECT $1,u FROM unnest($2::bigint[]) u ON CONFLICT DO NOTHING"))
+            .bind(id).bind(list).execute(&mut *tx).await?;
+    }
+    sync_mirror(
+        &mut tx,
+        id,
+        reto,
+        mirror,
+        input.nombre_equipo.trim(),
+        &input.estudiantes,
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(Json(json!({"id":id})))
+}
+/// sincronizar_equipo_academico: keep the operative participaciones.Equipo in step.
+async fn sync_mirror(
+    tx: &mut Transaction<'_, Postgres>,
+    academic: i64,
+    reto: i64,
+    mirror: Option<i64>,
+    name: &str,
+    students: &[i64],
+) -> Result<()> {
+    let mirror = match mirror {
+        Some(mirror) => {
+            sqlx::query("UPDATE equipos SET nombre=$2 WHERE id=$1 AND nombre<>$2")
+                .bind(mirror)
+                .bind(name)
+                .execute(&mut **tx)
+                .await?;
+            mirror
+        }
+        None => {
+            let mirror: i64 = sqlx::query_scalar(
+                "INSERT INTO equipos(reto_id,nombre,creado_en) VALUES($1,$2,now()) RETURNING id",
+            )
+            .bind(reto)
+            .bind(name)
+            .fetch_one(&mut **tx)
+            .await?;
+            sqlx::query("UPDATE equipos_reto_academico SET equipo_espejo_id=$2 WHERE id=$1")
+                .bind(academic)
+                .bind(mirror)
+                .execute(&mut **tx)
+                .await?;
+            mirror
+        }
+    };
+    sqlx::query("DELETE FROM miembros_equipo WHERE equipo_id=$1 AND NOT estudiante_id=ANY($2)")
+        .bind(mirror)
+        .bind(students)
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query("INSERT INTO miembros_equipo(equipo_id,estudiante_id,rol,fecha_ingreso) SELECT $1,s,'MIEMBRO',now() FROM unnest($2::bigint[]) s WHERE NOT EXISTS(SELECT 1 FROM miembros_equipo WHERE equipo_id=$1 AND estudiante_id=s)")
+        .bind(mirror).bind(students).execute(&mut **tx).await?;
+    // The first member by id leads, the rest are members.
+    sqlx::query("UPDATE miembros_equipo SET rol=CASE WHEN estudiante_id=$2 THEN 'LIDER' ELSE 'MIEMBRO' END WHERE equipo_id=$1")
+        .bind(mirror).bind(students.first().copied()).execute(&mut **tx).await?;
+    Ok(())
+}
+pub async fn show_team(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+) -> Result<Json<Value>> {
+    let user = auth::current(&state, &headers, false).await?;
+    let mut tx = state.pool.begin().await?;
+    academic_team(&mut tx, id, &user).await?;
+    let name: String =
+        sqlx::query_scalar("SELECT nombre_equipo FROM equipos_reto_academico WHERE id=$1")
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await?;
+    let mut lists = serde_json::Map::new();
+    for (table, roles) in [
+        ("profesores", "{PROFESOR}"),
+        ("estudiantes", "{ESTUDIANTE}"),
+        ("expertos_invitados", "{EMPRESA,EXPERTO}"),
+    ] {
+        let options: Vec<Value> = sqlx::query_scalar(&format!("SELECT jsonb_build_object('value',u.id,'label',COALESCE(NULLIF(trim(u.first_name||' '||u.last_name),''),u.username),'selected',EXISTS(SELECT 1 FROM equipos_reto_academico_{table} m WHERE m.equiporetoacademico_id=$1 AND m.usuario_id=u.id)) FROM usuarios u WHERE u.rol=ANY($2::text[]) ORDER BY u.first_name,u.last_name"))
+            .bind(id).bind(roles).fetch_all(&mut *tx).await?;
+        lists.insert(table.into(), Value::Array(options));
+    }
+    Ok(Json(json!({"nombre_equipo":name,"opciones":lists})))
+}
+pub async fn delete_team(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+) -> Result<Json<Value>> {
+    let user = auth::current(&state, &headers, true).await?;
+    let mut tx = state.pool.begin().await?;
+    let (_, mirror) = academic_team(&mut tx, id, &user).await?;
+    let name: String =
+        sqlx::query_scalar("SELECT nombre_equipo FROM equipos_reto_academico WHERE id=$1")
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await?;
+    for table in ["profesores", "estudiantes", "expertos_invitados"] {
+        sqlx::query(&format!(
+            "DELETE FROM equipos_reto_academico_{table} WHERE equiporetoacademico_id=$1"
+        ))
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    sqlx::query("DELETE FROM equipos_reto_academico WHERE id=$1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    if let Some(mirror) = mirror {
+        // Django's Equipo.delete(): deliverables keep their row (SET_NULL),
+        // votes, hackathon registrations and members go with the team (CASCADE).
+        sqlx::query("UPDATE entregables SET equipo_id=NULL WHERE equipo_id=$1")
+            .bind(mirror)
+            .execute(&mut *tx)
+            .await?;
+        for table in [
+            "votaciones_hackaton",
+            "inscripciones_hackaton",
+            "miembros_equipo",
+        ] {
+            sqlx::query(&format!("DELETE FROM {table} WHERE equipo_id=$1"))
+                .bind(mirror)
+                .execute(&mut *tx)
+                .await?;
+        }
+        sqlx::query(
+            "UPDATE equipos_reto_academico SET equipo_espejo_id=NULL WHERE equipo_espejo_id=$1",
+        )
+        .bind(mirror)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query("DELETE FROM equipos WHERE id=$1")
+            .bind(mirror)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    Ok(Json(
+        json!({"ok":true,"mensaje":format!("Equipo académico \"{name}\" eliminado.")}),
+    ))
+}
 #[derive(Deserialize)]
 pub struct RulesInput {
     #[serde(default)]

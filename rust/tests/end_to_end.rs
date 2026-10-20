@@ -889,6 +889,72 @@ async fn native_http_lifecycle_and_permissions() {
         .await["id"]
             .as_i64()
             .unwrap();
+        // Academic team edit/delete keep the operative mirror in step (Django sincronizar).
+        let academic: i64 =
+            sqlx::query_scalar("SELECT id FROM equipos_reto_academico WHERE equipo_espejo_id=$1")
+                .bind(team)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            request(
+                &app,
+                &student,
+                "POST",
+                &format!("/api/equipos-academicos/{academic}"),
+                Some(json!({"nombre_equipo":"x","estudiantes":[4]}))
+            )
+            .await
+            .0,
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            request(
+                &app,
+                &teacher,
+                "POST",
+                &format!("/api/equipos-academicos/{academic}"),
+                Some(json!({"nombre_equipo":"x","estudiantes":[3]}))
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+        ok(&app,&teacher,"POST",&format!("/api/equipos-academicos/{academic}"),Some(json!({"nombre_equipo":"Equipo Rust editado","profesores":[3],"estudiantes":[4],"expertos_invitados":[5]}))).await;
+        let (mirror_name, leader): (String, String) = sqlx::query_as("SELECT e.nombre,m.rol FROM equipos e JOIN miembros_equipo m ON m.equipo_id=e.id WHERE e.id=$1 AND m.estudiante_id=4").bind(team).fetch_one(&pool).await.unwrap();
+        assert_eq!(
+            (mirror_name.as_str(), leader.as_str()),
+            ("Equipo Rust editado", "LIDER")
+        );
+        let spare = ok(
+            &app,
+            &teacher,
+            "POST",
+            &format!("/api/retos/{id}/equipo"),
+            Some(json!({"nombre":"Equipo descartable","estudiantes":[4]})),
+        )
+        .await;
+        let deleted = ok(
+            &app,
+            &teacher,
+            "POST",
+            &format!(
+                "/api/equipos-academicos/{}/eliminar",
+                spare["equipo_academico"]
+            ),
+            None,
+        )
+        .await;
+        assert_eq!(
+            deleted["mensaje"],
+            "Equipo académico \"Equipo descartable\" eliminado."
+        );
+        let left: i64 = sqlx::query_scalar("SELECT count(*) FROM equipos WHERE id=$1")
+            .bind(spare["id"].as_i64().unwrap())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(left, 0);
         let hack = ok(
             &app,
             &administrator,
@@ -1018,7 +1084,7 @@ async fn native_http_lifecycle_and_permissions() {
             None,
         )
         .await;
-        assert_eq!(ranking["ranking"][0]["equipo"], "Equipo Rust");
+        assert_eq!(ranking["ranking"][0]["equipo"], "Equipo Rust editado");
         let finished = ok(
             &app,
             &administrator,

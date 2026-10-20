@@ -165,6 +165,14 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/retos/{id}/equipo", post(hackathon::team))
         .route(
+            "/api/equipos-academicos/{id}",
+            get(hackathon::show_team).post(hackathon::edit_team),
+        )
+        .route(
+            "/api/equipos-academicos/{id}/eliminar",
+            post(hackathon::delete_team),
+        )
+        .route(
             "/api/retos/{id}/opciones",
             get(hackathon::challenge_options),
         )

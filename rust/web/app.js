@@ -1188,6 +1188,33 @@ async function openRecord(id) {
       $("detail-dialog").close();
       await loadRecords();
     });
+  if (selected === "equipos_reto_academico" && user.rol === "PROFESOR") {
+    const team = await api(`/api/equipos-academicos/${id}`).catch(() => null);
+    if (team) {
+      action(actions, "Editar equipo", () =>
+        simpleForm(
+          "Editar Equipo Académico",
+          `/api/equipos-academicos/${id}`,
+          [
+            ["nombre_equipo", "Nombre del equipo", "text", team.nombre_equipo],
+            ["profesores", "Profesores", "multiselect", team.opciones.profesores],
+            ["estudiantes", "Estudiantes", "multiselect", team.opciones.estudiantes],
+            ["expertos_invitados", "Expertos invitados", "multiselect", team.opciones.expertos_invitados],
+          ],
+          (data) => ({
+            ...data,
+            profesores: data.profesores.map(Number),
+            estudiantes: data.estudiantes.map(Number),
+            expertos_invitados: data.expertos_invitados.map(Number),
+          }),
+        ),
+      );
+      action(actions, "Eliminar equipo", async () => {
+        if (confirm(`¿Eliminar el equipo "${team.nombre_equipo}"? También se elimina su equipo operativo.`))
+          await mutate(`/api/equipos-academicos/${id}/eliminar`, {});
+      });
+    }
+  }
   if (selected === "documentos_empresas" && admin())
     action(actions, "Revisar documento", () =>
       simpleForm("Documento legal", `/api/documentos/${id}/revisar`, [
@@ -2008,12 +2035,13 @@ function simpleForm(title, path, fields, transform = (data) => data) {
       const select = document.createElement("select");
       select.id = "field-" + name;
       select.name = name;
-      select.required = true;
+      select.required = type === "select";
       select.multiple = type === "multiselect";
       for (const v of value) {
         const option = document.createElement("option");
         option.value = typeof v === "object" ? v.value : v;
         option.textContent = typeof v === "object" ? v.label : choiceLabel(v);
+        option.selected = typeof v === "object" && !!v.selected;
         select.append(option);
       }
       wrap.append(l, select);
