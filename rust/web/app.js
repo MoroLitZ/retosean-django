@@ -153,7 +153,7 @@ function icon(name) {
 }
 async function start() {
   const session = await api("/api/me");
-  user = session.user;
+  user = { ...session.user, permisos: session.permisos || [] };
   csrf = session.csrf;
   resources = await api("/api/resources");
   $("login-view").hidden = true;
@@ -977,6 +977,15 @@ async function openRecord(id) {
       record.activo ? "Desactivar usuario" : "Activar usuario",
       () => mutate(`/api/usuarios/${id}/estado`, { activo: !record.activo }),
     );
+  if (selected === "usuarios" && admin() && record.id !== user.id) {
+    // HU13: role and per-module permissions.
+    action(actions, "Cambiar rol", () =>
+      simpleForm("Cambiar rol", `/api/usuarios/${id}/rol`, [
+        ["rol", "Nuevo rol", "select", ["ADMIN", "EMPRESA", "PROFESOR", "ESTUDIANTE", "EXPERTO"].map((v) => ({ value: v, label: choiceLabel(v) }))],
+      ]),
+    );
+    action(actions, "Permisos especiales", () => permissionsForm(id));
+  }
   if (selected === "certificados")
     action(actions, "Verificar certificado", async () => {
       const data = await api(`/api/verificar/${record.codigo_verificacion}`);
@@ -1161,6 +1170,24 @@ async function openRecord(id) {
       ),
     );
   }
+  if (selected === "empresas" && admin())
+    action(
+      actions,
+      record.participacion_bloqueada ? "Habilitar participación" : "Bloquear participación",
+      () =>
+        record.participacion_bloqueada
+          ? mutate(`/api/empresas/${id}/bloqueo`, { bloquear: false })
+          : simpleForm("Bloquear participación", `/api/empresas/${id}/bloqueo`, [["motivo", "Motivo del bloqueo", "textarea"]], (data) => ({ ...data, bloquear: true })),
+    );
+  if (selected === "empresas" && user.permisos.includes("empresas.cargar_listas_informa"))
+    action(actions, "Cargar Listas Informa", () => documentForm(`/api/empresas/${id}/documentos/LISTAS_INFORMA/cargar`));
+  if (selected === "empresas" && user.rol === "EMPRESA" && !record.renuncio_a_convenio)
+    action(actions, "Participar sin convenio", async () => {
+      const data = await api("/api/empresa/modo-convenio", { opcion: "no_convenio" });
+      toast(data.motivos.length ? "Participarás sin convenio: no necesitas la minuta ni el convenio firmado. Carga el resto de documentos para poder publicar retos." : "Has seleccionado participar sin convenio.");
+      $("detail-dialog").close();
+      await loadRecords();
+    });
   if (selected === "documentos_empresas" && admin())
     action(actions, "Revisar documento", () =>
       simpleForm("Documento legal", `/api/documentos/${id}/revisar`, [
@@ -1169,7 +1196,7 @@ async function openRecord(id) {
       ]),
     );
   if (selected === "documentos_empresas" && user.rol === "EMPRESA")
-    action(actions, "Cargar documento", () => documentForm(id));
+    action(actions, "Cargar documento", () => documentForm(`/api/documentos/${id}/cargar`));
   if (selected === "hackathons") {
     // HU09: logistics, guests, automatic close and the final report.
     const event = await api(`/api/hackathons/${id}/logistica`);
@@ -2080,26 +2107,19 @@ function deliveryForm(id) {
   };
   parent.append(form);
 }
-function documentForm(id) {
+function documentForm(url) {
   const parent = modal("Cargar documento legal");
   const form = document.createElement("form");
-  input(form, "fecha_expedicion", "Fecha de expedición", "", "date");
-  input(
-    form,
-    "fecha_vencimiento",
-    "Fecha de vencimiento (si aplica)",
-    "",
-    "date",
-  );
+  input(form, "fecha_expedicion", "Fecha de expedición", "", "date", true);
   const file = input(
     form,
     "archivo",
-    "Documento PDF, PNG o JPG (máximo 9 MB)",
+    "Documento PDF (máximo 9 MB)",
     "",
     "file",
     true,
   );
-  file.accept = ".pdf,.png,.jpg,.jpeg";
+  file.accept = ".pdf";
   const button = document.createElement("button");
   button.className = "primary";
   button.textContent = "Cargar documento";
@@ -2108,7 +2128,7 @@ function documentForm(id) {
     e.preventDefault();
     button.disabled = true;
     try {
-      const response = await fetch(`/api/documentos/${id}/cargar`, {
+      const response = await fetch(url, {
         method: "POST",
         headers: { "X-CSRF-Token": csrf },
         body: new FormData(form),
@@ -2124,6 +2144,32 @@ function documentForm(id) {
     } finally {
       button.disabled = false;
     }
+  };
+  parent.append(form);
+}
+async function permissionsForm(id) {
+  const data = await api(`/api/usuarios/${id}/permisos`);
+  const parent = modal("Permisos especiales");
+  const form = document.createElement("form");
+  for (const p of data.permisos) {
+    const wrap = el("div", "form-check mb-2");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.className = "form-check-input";
+    box.id = "perm-" + p.codigo;
+    box.value = p.codigo;
+    box.checked = p.otorgado;
+    const l = el("label", "form-check-label", p.nombre);
+    l.htmlFor = box.id;
+    wrap.append(box, l, el("div", "small text-muted", p.descripcion));
+    form.append(wrap);
+  }
+  const button = el("button", "primary", "Guardar permisos");
+  form.append(button);
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const codigos = Array.from(form.querySelectorAll("input:checked")).map((b) => b.value);
+    await mutate(`/api/usuarios/${id}/permisos`, { codigos });
   };
   parent.append(form);
 }

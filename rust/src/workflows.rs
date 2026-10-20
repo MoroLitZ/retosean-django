@@ -103,11 +103,19 @@ pub async fn create_challenge(
     }
     input.validate()?;
     let mut tx = state.pool.begin().await?;
-    let verified: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM empresas WHERE usuario_id=$1 AND estado_validacion='VERIFICADA' AND estado_listas_restrictivas='APROBADO')").bind(user.id).fetch_one(&mut *tx).await?;
-    if !verified {
-        return Err(AppError::bad(
-            "La empresa debe estar verificada y aprobada en listas restrictivas",
-        ));
+    // solo_empresa_con_documentos: puede_la_empresa_operar.
+    let company: Option<i64> = sqlx::query_scalar("SELECT id FROM empresas WHERE usuario_id=$1")
+        .bind(user.id)
+        .fetch_optional(&mut *tx)
+        .await?;
+    let company =
+        company.ok_or_else(|| AppError::bad("No tienes un perfil de empresa asociado."))?;
+    let reasons = crate::permissions::operating_reasons(&mut tx, company).await?;
+    if !reasons.is_empty() {
+        return Err(AppError::bad(format!(
+            "Tu empresa aún no puede publicar retos: {}",
+            reasons.join(" ")
+        )));
     }
     let id: i64 = sqlx::query_scalar("INSERT INTO retos(empresa_id,tipo,titulo,descripcion,area,nivel_academico,fecha_inicio_tentativa,fecha_fin_tentativa,fecha_limite_postulacion,premios,criterios_evaluacion,estado,comentarios_revision,creado_en,actualizado_en,tiene_convenio_institucional) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'','','borrador','',now(),now(),false) RETURNING id")
         .bind(user.id).bind(&input.tipo).bind(input.titulo.trim()).bind(&input.descripcion).bind(&input.area).bind(&input.nivel_academico).bind(input.fecha_inicio_tentativa).bind(input.fecha_fin_tentativa).bind(input.fecha_limite_postulacion).fetch_one(&mut *tx).await?;

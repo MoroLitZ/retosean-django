@@ -60,6 +60,36 @@ async fn ok(
     assert!(status.is_success(), "{method} {path}: {status} {body}");
     body
 }
+async fn legal_upload(
+    app: &Router,
+    session: &Session,
+    uri: &str,
+    issued: chrono::NaiveDate,
+) -> (StatusCode, Value) {
+    let multipart = format!(
+        "--DOC\r\nContent-Disposition: form-data; name=\"fecha_expedicion\"\r\n\r\n{issued}\r\n--DOC\r\nContent-Disposition: form-data; name=\"archivo\"; filename=\"legal.pdf\"\r\nContent-Type: application/pdf\r\n\r\n%PDF-1.4 documento de prueba\r\n--DOC--\r\n"
+    );
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header("cookie", &session.cookie)
+                .header("x-csrf-token", &session.csrf)
+                .header("content-type", "multipart/form-data; boundary=DOC")
+                .body(Body::from(multipart))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
+}
 async fn login(app: &Router, name: &str) -> Session {
     let (status, body, cookie) = request(
         app,
@@ -224,26 +254,86 @@ async fn native_http_lifecycle_and_permissions() {
         .unwrap();
         assert_eq!(required.len(), 8, "the brief's eight documents");
         let issued = (chrono::Utc::now() - chrono::Duration::hours(5)).date_naive();
+        // HU13: only holders of empresas.cargar_listas_informa upload special documents.
+        let catalog = ok(
+            &app,
+            &administrator,
+            "GET",
+            "/api/usuarios/3/permisos",
+            None,
+        )
+        .await;
+        assert_eq!(catalog["permisos"][0]["otorgado"], false);
+        assert_eq!(
+            legal_upload(
+                &app,
+                &teacher,
+                "/api/empresas/1/documentos/LISTAS_INFORMA/cargar",
+                issued
+            )
+            .await
+            .0,
+            StatusCode::FORBIDDEN
+        );
+        let granted = ok(
+            &app,
+            &administrator,
+            "POST",
+            "/api/usuarios/3/permisos",
+            Some(json!({"codigos":["empresas.cargar_listas_informa","no.existe"]})),
+        )
+        .await;
+        assert_eq!(
+            granted["otorgados"],
+            json!(["empresas.cargar_listas_informa"])
+        );
         for kind in &required {
-            let document:i64=sqlx::query_scalar("INSERT INTO documentos_empresas(empresa_id,tipo_documento,estado,fecha_carga) VALUES(1,$1,'PENDIENTE',now()) RETURNING id").bind(kind).fetch_one(&pool).await.unwrap();
-            let multipart = format!(
-                "--DOC\r\nContent-Disposition: form-data; name=\"fecha_expedicion\"\r\n\r\n{issued}\r\n--DOC\r\nContent-Disposition: form-data; name=\"archivo\"; filename=\"legal.pdf\"\r\nContent-Type: application/pdf\r\n\r\n%PDF-1.4 documento de prueba\r\n--DOC--\r\n"
-            );
-            let response = app
-                .clone()
-                .oneshot(
-                    Request::builder()
-                        .method("POST")
-                        .uri(format!("/api/documentos/{document}/cargar"))
-                        .header("cookie", &company.cookie)
-                        .header("x-csrf-token", &company.csrf)
-                        .header("content-type", "multipart/form-data; boundary=DOC")
-                        .body(Body::from(multipart))
-                        .unwrap(),
+            let (status, body) = if kind == "LISTAS_INFORMA" {
+                legal_upload(
+                    &app,
+                    &teacher,
+                    &format!("/api/empresas/1/documentos/{kind}/cargar"),
+                    issued,
                 )
                 .await
-                .unwrap();
-            assert_eq!(response.status(), StatusCode::OK);
+            } else {
+                let document:i64=sqlx::query_scalar("INSERT INTO documentos_empresas(empresa_id,tipo_documento,estado,fecha_carga) VALUES(1,$1,'PENDIENTE',now()) RETURNING id").bind(kind).fetch_one(&pool).await.unwrap();
+                // CargarDocumentoForm: the issue date is never in the future.
+                assert_eq!(
+                    legal_upload(
+                        &app,
+                        &company,
+                        &format!("/api/documentos/{document}/cargar"),
+                        issued + chrono::Duration::days(1)
+                    )
+                    .await
+                    .0,
+                    StatusCode::BAD_REQUEST
+                );
+                legal_upload(
+                    &app,
+                    &company,
+                    &format!("/api/documentos/{document}/cargar"),
+                    issued,
+                )
+                .await
+            };
+            assert_eq!(status, StatusCode::OK, "{kind}: {body}");
+            let document = body["id"].as_i64().unwrap();
+            if kind == "LISTAS_INFORMA" {
+                // The company itself may not reload it.
+                assert_eq!(
+                    legal_upload(
+                        &app,
+                        &company,
+                        &format!("/api/documentos/{document}/cargar"),
+                        issued
+                    )
+                    .await
+                    .0,
+                    StatusCode::FORBIDDEN
+                );
+            }
             ok(
                 &app,
                 &administrator,
@@ -253,6 +343,26 @@ async fn native_http_lifecycle_and_permissions() {
             )
             .await;
         }
+        let revoked = ok(
+            &app,
+            &administrator,
+            "POST",
+            "/api/usuarios/3/permisos",
+            Some(json!({"codigos":[]})),
+        )
+        .await;
+        assert_eq!(
+            revoked["retirados"],
+            json!(["empresas.cargar_listas_informa"])
+        );
+        let audit: Vec<String> = sqlx::query_scalar("SELECT detalle FROM log_actividad WHERE accion='CAMBIO_PERMISOS' AND usuario_id=3 ORDER BY id").fetch_all(&pool).await.unwrap();
+        assert_eq!(
+            audit,
+            [
+                "Permisos especiales otorgados: empresas.cargar_listas_informa.",
+                "Permisos especiales retirados: empresas.cargar_listas_informa."
+            ]
+        );
         ok(&app,&administrator,"POST","/api/empresas/1/revisar",Some(json!({"estado_validacion":"VERIFICADA","estado_listas_restrictivas":"APROBADO","observaciones":"Documentos verificados"}))).await;
         for status in ["RADICADO", "EN_JURIDICA", "FIRMADO"] {
             ok(
@@ -264,6 +374,89 @@ async fn native_http_lifecycle_and_permissions() {
             )
             .await;
         }
+        // HU13 role change: audited, never on oneself.
+        assert_eq!(
+            request(
+                &app,
+                &administrator,
+                "POST",
+                "/api/usuarios/1/rol",
+                Some(json!({"rol":"EXPERTO"}))
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+        let changed = ok(
+            &app,
+            &administrator,
+            "POST",
+            &format!("/api/usuarios/{new_user}/rol"),
+            Some(json!({"rol":"EXPERTO"})),
+        )
+        .await;
+        assert_eq!(changed["cambiado"], true);
+        let (detail, field): (String, String) = sqlx::query_as("SELECT l.detalle,h.campo FROM log_actividad l JOIN historial_estados h ON h.object_id=l.usuario_id AND h.campo='rol' WHERE l.accion='CAMBIO_ROL' AND l.usuario_id=$1").bind(new_user).fetch_one(&pool).await.unwrap();
+        assert_eq!(
+            (detail.as_str(), field.as_str()),
+            ("Rol cambiado de ESTUDIANTE a EXPERTO.", "rol")
+        );
+        // HU00 participation block: the company cannot publish retos while blocked.
+        assert_eq!(
+            request(
+                &app,
+                &administrator,
+                "POST",
+                "/api/empresas/1/bloqueo",
+                Some(json!({"bloquear":true}))
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+        ok(
+            &app,
+            &administrator,
+            "POST",
+            "/api/empresas/1/bloqueo",
+            Some(json!({"bloquear":true,"motivo":"Revisión de pagos"})),
+        )
+        .await;
+        let (status, blocked, _) = request(
+            &app,
+            &company,
+            "POST",
+            "/api/retos",
+            Some(json!({"titulo":"Bloqueado","tipo":"reto","descripcion":"x","area":"x"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert!(
+            blocked["error"]
+                .as_str()
+                .unwrap()
+                .contains("Participación bloqueada por el administrador. Revisión de pagos"),
+            "{blocked}"
+        );
+        ok(
+            &app,
+            &administrator,
+            "POST",
+            "/api/empresas/1/bloqueo",
+            Some(json!({"bloquear":false})),
+        )
+        .await;
+        let notices: Vec<String> = sqlx::query_scalar("SELECT tipo FROM notificaciones WHERE usuario_id=2 AND clave_dedupe LIKE 'empresa:1:bloqueo:%' ORDER BY id").fetch_all(&pool).await.unwrap();
+        assert_eq!(notices, ["ERROR", "EXITO"]);
+        let choice = ok(
+            &app,
+            &company,
+            "POST",
+            "/api/empresa/modo-convenio",
+            Some(json!({"opcion":"si_convenio"})),
+        )
+        .await;
+        assert_eq!(choice["siguiente"], "documentos");
         let private = ok(&app, &student, "GET", "/api/records/usuarios", None).await;
         assert_eq!(private["total"], 1);
         assert!(private["records"][0].get("password").is_none());

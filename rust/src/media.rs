@@ -196,15 +196,46 @@ pub async fn company_document(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<i64>,
-    mut multipart: Multipart,
+    multipart: Multipart,
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, true).await?;
     if user.rol != "EMPRESA" {
         return Err(AppError::forbidden());
     }
+    let upload = read_document(multipart).await?;
+    let mut tx = state.pool.begin().await?;
+    let row:Option<(i64,String,bool)>=sqlx::query_as("SELECT e.id,d.tipo_documento,COALESCE(t.requiere_permiso_especial,false) FROM documentos_empresas d JOIN empresas e ON e.id=d.empresa_id LEFT JOIN tipos_documento_legal t ON t.codigo=d.tipo_documento WHERE d.id=$1 AND e.usuario_id=$2 FOR UPDATE OF d").bind(id).bind(user.id).fetch_optional(&mut *tx).await?;
+    let (company, kind, special) = row.ok_or_else(AppError::not_found)?;
+    // Listas Informa and other special types are uploaded by the university (HU13).
+    if special {
+        return Err(AppError::forbidden());
+    }
+    store_document(&state, tx, &user, company, &kind, upload).await
+}
+/// cargar_documento_especial: holders of empresas.cargar_listas_informa upload
+/// special-permission documents for any company.
+pub async fn special_document(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((company, kind)): Path<(i64, String)>,
+    multipart: Multipart,
+) -> Result<Json<Value>> {
+    let user = auth::current(&state, &headers, true).await?;
+    if !crate::permissions::has_perm(&state.pool, &user, "empresas.cargar_listas_informa").await? {
+        return Err(AppError::forbidden());
+    }
+    let upload = read_document(multipart).await?;
+    let tx = state.pool.begin().await?;
+    let special: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM tipos_documento_legal WHERE codigo=$1 AND activo AND requiere_permiso_especial) AND EXISTS(SELECT 1 FROM empresas WHERE id=$2)").bind(&kind).bind(company).fetch_one(&state.pool).await?;
+    if !special {
+        return Err(AppError::not_found());
+    }
+    store_document(&state, tx, &user, company, &kind, upload).await
+}
+type Upload = (axum::body::Bytes, Option<chrono::NaiveDate>);
+async fn read_document(mut multipart: Multipart) -> Result<Upload> {
     let mut data = None;
     let mut issued = None;
-    let mut expires = None;
     while let Some(field) = multipart
         .next_field()
         .await
@@ -236,52 +267,71 @@ pub async fn company_document(
                     );
                 }
             }
-            "fecha_vencimiento" => {
-                let text = field
-                    .text()
-                    .await
-                    .map_err(|_| AppError::bad("Fecha inválida"))?;
-                if !text.is_empty() {
-                    expires = Some(
-                        text.parse::<chrono::NaiveDate>()
-                            .map_err(|_| AppError::bad("Fecha de vencimiento inválida"))?,
-                    );
-                }
-            }
+            // The expiry comes from the catalog (fecha_vencimiento_para), never the client.
+            "fecha_vencimiento" => {}
             _ => return Err(AppError::bad("Campo desconocido")),
         }
     }
-    let data = data.ok_or_else(|| AppError::bad("Adjunta un archivo"))?;
+    Ok((
+        data.ok_or_else(|| AppError::bad("Adjunta un archivo"))?,
+        issued,
+    ))
+}
+/// cargar_documento + CargarDocumentoForm: create or reload the document in CARGADO.
+async fn store_document(
+    state: &AppState,
+    mut tx: sqlx::Transaction<'_, sqlx::Postgres>,
+    user: &auth::User,
+    company: i64,
+    kind: &str,
+    (data, issued): Upload,
+) -> Result<Json<Value>> {
     let ext = extension(&data)?;
     // DocumentoEmpresa.EXTENSIONES_PERMITIDAS: legal documents are PDF only.
     if ext != "pdf" {
         return Err(AppError::bad("Los documentos legales deben ser PDF"));
     }
-    let mut tx = state.pool.begin().await?;
-    let row:Option<(String,String,i64,Option<i16>,Option<String>)>=sqlx::query_as("SELECT d.estado,d.tipo_documento,e.id,t.vigencia_dias,t.nombre FROM documentos_empresas d JOIN empresas e ON e.id=d.empresa_id LEFT JOIN tipos_documento_legal t ON t.codigo=d.tipo_documento WHERE d.id=$1 AND e.usuario_id=$2 FOR UPDATE OF d").bind(id).bind(user.id).fetch_optional(&mut *tx).await?;
-    let (from, kind, company, validity, name) = row.ok_or_else(AppError::not_found)?;
-    // Catalog validity (e.g. Cámara de Comercio, 30 days): the issue date is
-    // required, must be recent enough, and fixes the expiry (fecha_vencimiento_para).
+    let catalog: Option<(Option<i16>, String)> =
+        sqlx::query_as("SELECT vigencia_dias,nombre FROM tipos_documento_legal WHERE codigo=$1")
+            .bind(kind)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let (validity, name) = catalog.unwrap_or((None, kind.to_string()));
+    let issued =
+        issued.ok_or_else(|| AppError::bad("Indica la fecha de expedición del documento."))?;
+    let today = (chrono::Utc::now() - chrono::Duration::hours(5)).date_naive(); // Bogota, no DST
+    if issued > today {
+        return Err(AppError::bad("La fecha de expedición no puede ser futura."));
+    }
+    let mut expires = None;
     if let Some(days) = validity.filter(|d| *d > 0) {
-        let name = name.unwrap_or_default();
-        let issued_on = issued
-            .ok_or_else(|| AppError::bad(format!("{name}: indica la fecha de expedición")))?;
-        let today = (chrono::Utc::now() - chrono::Duration::hours(5)).date_naive(); // Bogota, no DST
-        if issued_on > today || (today - issued_on).num_days() > days as i64 {
+        let age = (today - issued).num_days();
+        if age > days as i64 {
             return Err(AppError::bad(format!(
-                "{name}: debe tener menos de {days} días de expedida"
+                "{name} tiene {age} dias de expedida y el maximo es {days}."
             )));
         }
-        expires = Some(issued_on + chrono::Duration::days(days as i64));
+        expires = Some(issued + chrono::Duration::days(days as i64));
     }
-    if issued.zip(expires).is_some_and(|(a, b)| a > b) {
-        return Err(AppError::bad(
-            "La expedición debe ser anterior al vencimiento",
-        ));
-    }
-    domain::transition("MAQUINA_DOCUMENTO", &from, "CARGADO")?;
     let key = format!("{}.{}", uuid::Uuid::new_v4().simple(), ext);
-    sqlx::query("UPDATE documentos_empresas SET archivo=$2,estado='CARGADO',fecha_expedicion=$3,fecha_vencimiento=$4,motivo_rechazo='',fecha_carga=now() WHERE id=$1").bind(id).bind(&key).bind(issued).bind(expires).execute(&mut *tx).await?;
+    let existing: Option<(i64, String)> = sqlx::query_as(
+        "SELECT id,estado FROM documentos_empresas WHERE empresa_id=$1 AND tipo_documento=$2 FOR UPDATE",
+    )
+    .bind(company)
+    .bind(kind)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let (id, from, comment) = match existing {
+        Some((id, from)) => {
+            domain::transition("MAQUINA_DOCUMENTO", &from, "CARGADO")?;
+            sqlx::query("UPDATE documentos_empresas SET archivo=$2,estado='CARGADO',fecha_expedicion=$3,fecha_vencimiento=$4,motivo_rechazo='',fecha_carga=now() WHERE id=$1").bind(id).bind(&key).bind(issued).bind(expires).execute(&mut *tx).await?;
+            (id, from, "Documento recargado.")
+        }
+        None => {
+            let id: i64 = sqlx::query_scalar("INSERT INTO documentos_empresas(empresa_id,tipo_documento,archivo,estado,fecha_expedicion,fecha_vencimiento,fecha_carga,motivo_rechazo) VALUES($1,$2,$3,'CARGADO',$4,$5,now(),'') RETURNING id").bind(company).bind(kind).bind(&key).bind(issued).bind(expires).fetch_one(&mut *tx).await?;
+            (id, String::new(), "Documento cargado.")
+        }
+    };
     history(
         &mut tx,
         ("empresas", "documentoempresa"),
@@ -289,7 +339,7 @@ pub async fn company_document(
         &from,
         "CARGADO",
         user.id,
-        "Documento legal cargado",
+        comment,
     )
     .await?;
     crate::companies::recompute_validation(&mut tx, company).await?;
@@ -317,7 +367,7 @@ pub async fn company_document(
         let _ = tokio::fs::remove_file(path).await;
         return Err(error.into());
     }
-    Ok(Json(json!({"estado":"CARGADO"})))
+    Ok(Json(json!({"id":id,"estado":"CARGADO"})))
 }
 #[cfg(test)]
 mod tests {

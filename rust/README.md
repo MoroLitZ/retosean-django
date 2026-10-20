@@ -82,8 +82,8 @@ These are local demonstration credentials. Do not seed an internet-facing system
 | Area | Implemented in Rust |
 |---|---|
 | Data model | 49 typed domain records, PostgreSQL bootstrap schema with database defaults mirroring Django's Python defaults, seven state-machine definitions, one audit table for every state change |
-| Users | Bulk import from CSV or Excel with row-by-row preview, unusable passwords plus a set-password email for rows without one (HU13); public self-registration (Comunidad EAN with institutional email, or company with its catalog documents) with welcome email, password recovery by single-use 3-day email link, Django PBKDF2-SHA256 compatible login, expiring sessions, CSRF, login throttling, admin account creation, login by username or email (as Django), contact editing, password changes and revocation, activation/deactivation |
-| Companies | Configurable legal-document catalog (HU00): PDF uploads, catalog validity (e.g. 30-day Cámara de Comercio), document decisions, status derived from the documents as in Django, restrictive-list checks, agreement transitions and expiry dates |
+| Users | Bulk import from CSV or Excel with row-by-row preview, unusable passwords plus a set-password email for rows without one (HU13); public self-registration (Comunidad EAN with institutional email, or company with its catalog documents) with welcome email, password recovery by single-use 3-day email link, Django PBKDF2-SHA256 compatible login, expiring sessions, CSRF, login throttling, admin account creation, login by username or email (as Django), contact editing, password changes and revocation, activation/deactivation, audited role changes and per-module permissions such as Cargar Listas Informa (HU13) |
+| Companies | Configurable legal-document catalog (HU00): PDF uploads, catalog validity (e.g. 30-day Cámara de Comercio), document decisions, status derived from the documents as in Django, restrictive-list checks, agreement transitions and expiry dates, participation block with reason, the agreement-or-not choice, special documents uploaded only by permission holders, and Django's operating gate (block, lists, every required document verified and in force) before publishing retos |
 | Challenges | Company draft creation/editing, required-field review submission, admin approval/rejection, serialized numbering, audited manual state transitions |
 | Academic integration | Professor proposal with structured team (cédula, email, faculty/program) and dated schedule (HU03), the same review requirements, admin review, publication that opens the challenge and notifies assigned students |
 | Participation | Search, favorites, applications and withdrawal, acceptance/rejection, academic and operational team creation |
@@ -225,6 +225,7 @@ build must be validated in the target deployment environment.
 - `src/builder.rs`: report builder (HU06).
 - `src/grading.rs`: rubrics, grading and grade publication (HU12).
 - `src/import.rs`: bulk user import (HU13).
+- `src/permissions.rs`: roles, module permissions, participation block and the company operating gate (HU13/HU00).
 - `src/registration.rs`: self-registration and password recovery.
 - `src/mail.rs`, `reminders.rs`: notification email outbox and daily reminders (HU15).
 - `src/event.rs`: hackathon schedule advance, logistics and final report (HU09).

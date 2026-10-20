@@ -17,6 +17,7 @@ pub mod lifecycle;
 pub mod mail;
 pub mod media;
 pub mod models;
+pub mod permissions;
 pub mod registration;
 pub mod reminders;
 pub mod reports;
@@ -118,6 +119,21 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/preferencias", post(workflows::preferences))
         .route("/api/usuarios/{id}/estado", post(workflows::user_status))
+        .route("/api/usuarios/{id}/rol", post(permissions::role))
+        .route(
+            "/api/usuarios/{id}/permisos",
+            get(permissions::show_permissions).post(permissions::permissions),
+        )
+        .route("/api/empresas/{id}/bloqueo", post(permissions::block))
+        .route(
+            "/api/empresa/modo-convenio",
+            post(permissions::agreement_choice),
+        )
+        .route(
+            "/api/empresas/{id}/documentos/{kind}/cargar",
+            post(media::special_document)
+                .layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024)),
+        )
         .route("/api/retos/{id}/presupuesto", post(finance::set_budget))
         .route("/api/presupuestos/{id}/gastos", post(finance::expense))
         .route("/api/presupuestos/{id}/resumen", get(finance::summary))

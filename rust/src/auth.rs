@@ -223,7 +223,13 @@ pub async fn me(
         .bind(digest(session_token(&headers).unwrap_or("")))
         .fetch_one(&state.pool)
         .await?;
-    Ok(Json(json!({"user":user,"csrf":csrf})))
+    let mut permisos = Vec::new();
+    for (code, ..) in crate::permissions::PERMISOS_MODULO {
+        if crate::permissions::has_perm(&state.pool, &user, code).await? {
+            permisos.push(*code);
+        }
+    }
+    Ok(Json(json!({"user":user,"csrf":csrf,"permisos":permisos})))
 }
 pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Result<Response> {
     current(&state, &headers, true).await?;
