@@ -94,7 +94,7 @@ These are local demonstration credentials. Do not seed an internet-facing system
 | Notifications | Django's event catalog (titles, types), in-app bell, preferences and deduplication, email outbox within 20 s using Django's template and EMAIL_* settings (sent/failed recorded), daily reminders (`send-reminders`, same rules as `enviar_recordatorios`) |
 | Finance | Exact decimal budgets/expenses, role-scoped summaries, 80% threshold notifications |
 | Hackathons | Creation, stages/time windows, jurors (experts included), team registration/review, voting, ranking, automatic advance and result publication at close, event logistics with guests, final report in PDF/Excel (HU09) |
-| Reports | Role-scoped CSV, PDF and Excel record exports, with secret fields omitted |
+| Reports | Django's report builder (HU06): the same five reports, columns, filters and roles, with preview, PDF/Excel generation logged in the history, and sending by email as an attachment; verified cell by cell against Django's catalog. Also role-scoped CSV/PDF/Excel exports of any module |
 | Dashboard | Port of `apps/dashboard`: the same per-role KPIs, charts, quick links and period/faculty/program filters, including the expert juror panel, ecosystem filter and impact indicators; verified to return identical numbers to the Django services on the same database |
 | Catalogs | Native creation of faculties, programs, ecosystems and study units; role-scoped browsing |
 
@@ -109,11 +109,9 @@ coverage does not imply every original form or command has been ported.
 - Editing the operational student teams of an integration (structured team and schedule are native).
 - Complete company registration/contact forms and every legal-onboarding edge case.
 - Full closure agenda editing, recognition management and final-artifact upload.
-- The original specialized analytics/report catalog with its preview and email
-  sending (HU06; the dashboard, its period filters and charts are native). Native exports currently export the selected module's records, not those
-  specialized reports. Each export is capped at 5,000 records; PDF reports state
-  the exported count and original total. Excel stores values as literal strings
-  to preserve identifiers, exact decimals and formula safety.
+- Report PDFs list rows as labelled text rather than Django's landscape table.
+  Generic module exports are capped at 5,000 records; Excel stores values as
+  literal strings to preserve identifiers, exact decimals and formula safety.
 - Full CRUD and file management for study-unit catalogs (creation is native).
 - Automated migration/import of an existing Django database and its media.
   Django migration history is not synthesized by `init-db`; do not run Django
@@ -224,6 +222,7 @@ build must be validated in the target deployment environment.
 - `src/companies.rs`, `finance.rs`, `hackathon.rs`: module-specific business rules.
 - `src/dashboard.rs`: port of the Django dashboard indicators (HU05).
 - `src/team.rs`: structured integration team and schedule (HU03).
+- `src/builder.rs`: report builder (HU06).
 - `src/grading.rs`: rubrics, grading and grade publication (HU12).
 - `src/registration.rs`: self-registration and password recovery.
 - `src/mail.rs`, `reminders.rs`: notification email outbox and daily reminders (HU15).

@@ -32,7 +32,8 @@ pub fn safe_key(key: &str) -> bool {
     };
     name.len() == 32
         && name.bytes().all(|c| c.is_ascii_hexdigit())
-        && ["pdf", "png", "jpg", "txt"].contains(&ext)
+        // xlsx: generated reports (HU06); never accepted as an upload.
+        && ["pdf", "png", "jpg", "txt", "xlsx"].contains(&ext)
 }
 fn file_error(error: std::io::Error) -> AppError {
     tracing::error!(%error,"private storage failure");
@@ -178,12 +179,13 @@ pub async fn download(
                 file_error(e)
             }
         })?;
+    let extension = key.rsplit('.').next().unwrap_or("bin");
     Ok((
         [
-            (header::CONTENT_TYPE, "application/octet-stream"),
+            (header::CONTENT_TYPE, "application/octet-stream".to_string()),
             (
                 header::CONTENT_DISPOSITION,
-                "attachment; filename=retosean-adjunto",
+                format!("attachment; filename=retosean-adjunto.{extension}"),
             ),
         ],
         data,

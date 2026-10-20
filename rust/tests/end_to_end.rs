@@ -1147,6 +1147,106 @@ async fn native_http_lifecycle_and_permissions() {
         )
         .await;
         assert_eq!(status, StatusCode::OK);
+        // HU06 report builder: generate (logged), history download, send by email, roles.
+        let (status, _, _) = request(&app, &administrator, "POST", "/api/reportes/generar", Some(json!({"reporte":"retos","formato":"EXCEL","periodo":"todo","columnas":["titulo","estado"]}))).await;
+        assert_eq!(status, StatusCode::OK);
+        let report_id: i64 = sqlx::query_scalar("SELECT id FROM reportes_generados WHERE filtros->>'reporte'='retos' ORDER BY id DESC LIMIT 1").fetch_one(&pool).await.unwrap();
+        assert_eq!(
+            request(
+                &app,
+                &administrator,
+                "GET",
+                &format!("/api/archivo/reportes_generados/{report_id}/archivo"),
+                None
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+        let preview = ok(
+            &app,
+            &administrator,
+            "POST",
+            "/api/reportes/vista-previa",
+            Some(json!({"reporte":"empresas","periodo":"todo"})),
+        )
+        .await;
+        assert_eq!(preview["encabezados"][0], "NIT");
+        assert!(preview["total"].as_i64().unwrap() >= 1);
+        assert_eq!(
+            request(
+                &app,
+                &administrator,
+                "POST",
+                "/api/reportes/enviar",
+                Some(json!({"reporte":"retos","periodo":"todo","destinatarios":"no-es-correo"}))
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+        let sent = ok(&app, &administrator, "POST", "/api/reportes/enviar", Some(json!({"reporte":"presupuesto","formato":"PDF","periodo":"todo","destinatarios":"jefe@ean.edu.co; otra@ean.edu.co"}))).await;
+        assert_eq!(sent["enviado"], true);
+        let flagged: bool =
+            sqlx::query_scalar("SELECT enviado_por_email FROM reportes_generados WHERE id=$1")
+                .bind(sent["id"].as_i64().unwrap())
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert!(flagged);
+        assert_eq!(
+            inbox
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(_, subject, _)| subject == "[RetosEAN] Ejecucion presupuestal")
+                .count(),
+            2
+        );
+        assert_eq!(
+            request(
+                &app,
+                &teacher,
+                "POST",
+                "/api/reportes/vista-previa",
+                Some(json!({"reporte":"retos","periodo":"todo"}))
+            )
+            .await
+            .0,
+            StatusCode::FORBIDDEN,
+            "retos report is admin-only"
+        );
+        assert_eq!(
+            request(
+                &app,
+                &teacher,
+                "POST",
+                "/api/reportes/vista-previa",
+                Some(json!({"reporte":"participacion","periodo":"todo"}))
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+        assert_eq!(
+            request(
+                &app,
+                &teacher,
+                "GET",
+                &format!("/api/archivo/reportes_generados/{report_id}/archivo"),
+                None
+            )
+            .await
+            .0,
+            StatusCode::NOT_FOUND,
+            "not their report"
+        );
+        assert_eq!(
+            request(&app, &student, "GET", "/api/reportes/catalogo", None)
+                .await
+                .0,
+            StatusCode::FORBIDDEN
+        );
         // HU15 reminders: a favorited open reto closing applications in 3 days.
         sqlx::query("UPDATE retos SET fecha_limite_postulacion=(now() AT TIME ZONE 'America/Bogota')::date+3 WHERE id=4").execute(&pool).await.unwrap();
         sqlx::query("INSERT INTO retos_favoritos(usuario_id,reto_id,fecha) VALUES(4,4,now()) ON CONFLICT DO NOTHING").execute(&pool).await.unwrap();

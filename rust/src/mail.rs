@@ -143,6 +143,71 @@ impl Mailer {
     }
 }
 
+impl Mailer {
+    /// Plain message with one attachment (reports sent by email, HU06).
+    pub async fn send_attachment(
+        &self,
+        to: &[String],
+        subject: &str,
+        text: &str,
+        filename: &str,
+        bytes: Vec<u8>,
+        mime: &str,
+    ) -> std::result::Result<(), String> {
+        match self {
+            Mailer::Console => {
+                tracing::info!(
+                    ?to,
+                    subject,
+                    filename,
+                    "email with attachment (console backend)
+{text}"
+                );
+                Ok(())
+            }
+            Mailer::Memory(sent) => {
+                for address in to {
+                    sent.lock().unwrap().push((
+                        address.clone(),
+                        subject.into(),
+                        format!(
+                            "{text}
+[adjunto: {filename}]"
+                        ),
+                    ));
+                }
+                Ok(())
+            }
+            Mailer::Smtp { transport, from } => {
+                use lettre::message::{Attachment, SinglePart, header::ContentType};
+                let mut builder = Message::builder()
+                    .from(
+                        from.parse()
+                            .map_err(|e| format!("DEFAULT_FROM_EMAIL: {e}"))?,
+                    )
+                    .subject(subject);
+                for address in to {
+                    builder =
+                        builder.to(address.parse().map_err(|e| format!("destinatario: {e}"))?);
+                }
+                let kind = ContentType::parse(mime).map_err(|e| e.to_string())?;
+                let message = builder
+                    .multipart(
+                        MultiPart::mixed()
+                            .singlepart(SinglePart::plain(text.to_string()))
+                            .singlepart(Attachment::new(filename.to_string()).body(bytes, kind)),
+                    )
+                    .map_err(|e| e.to_string())?;
+                transport
+                    .send(message)
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
+            }
+        }
+    }
+}
+
 fn escape(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('<', "&lt;")

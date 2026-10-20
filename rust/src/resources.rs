@@ -85,6 +85,8 @@ pub fn scope(table: &str, user: &User) -> Option<String> {
             _ => format!("t.usuario_id={actor}"),
         },
         "tipos_documento_legal" if user.rol == "EMPRESA" => "t.activo".into(),
+        // A professor sees (and downloads) only the reports they generated.
+        "reportes_generados" if user.rol == "PROFESOR" => format!("t.usuario_id={actor}"),
         "cierre_solicitudlogistica" => via_challenge("reto_id"),
         "invitados_hackaton" => format!("EXISTS(SELECT 1 FROM hackathons h JOIN retos r ON r.id=h.reto_id WHERE h.id=t.hackathon_id AND (({challenge}) OR h.estado IN ('publicado','en_curso','finalizado') OR EXISTS(SELECT 1 FROM jurados_hackaton j WHERE j.hackathon_id=h.id AND j.usuario_id={actor})))"),
         "presupuestos" if user.rol == "EMPRESA" => via_challenge("reto_id"),

@@ -1,6 +1,7 @@
 pub mod academic;
 pub mod accounts;
 pub mod auth;
+pub mod builder;
 pub mod catalogs;
 pub mod companies;
 pub mod config;
@@ -157,6 +158,10 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/hackathons/{id}/votar", post(hackathon::vote))
         .route("/api/hackathons/{id}/ranking", get(hackathon::ranking))
+        .route("/api/reportes/catalogo", get(builder::catalog))
+        .route("/api/reportes/vista-previa", post(builder::preview))
+        .route("/api/reportes/generar", post(builder::download))
+        .route("/api/reportes/enviar", post(builder::send))
         .route("/api/retos/{id}/rubrica", post(grading::create_rubric))
         .route("/api/entregables/{id}/rubricas", get(grading::rubrics))
         .route(
