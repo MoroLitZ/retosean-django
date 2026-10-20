@@ -12,6 +12,7 @@ pub mod event;
 pub mod finance;
 pub mod grading;
 pub mod hackathon;
+pub mod import;
 pub mod lifecycle;
 pub mod mail;
 pub mod media;
@@ -87,6 +88,11 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/me", get(auth::me))
         .route("/api/usuarios", post(accounts::create))
+        .route(
+            "/api/usuarios/importar",
+            post(import::import).layer(axum::extract::DefaultBodyLimit::max(6 * 1024 * 1024)),
+        )
+        .route("/api/usuarios/plantilla", get(import::template))
         .route("/api/perfil", post(accounts::profile))
         .route("/api/password", post(accounts::password))
         .route("/api/catalogos/{resource}", post(catalogs::create))

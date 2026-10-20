@@ -1147,6 +1147,151 @@ async fn native_http_lifecycle_and_permissions() {
         )
         .await;
         assert_eq!(status, StatusCode::OK);
+        // HU13 bulk import: preview validates without writing; confirm creates valid rows.
+        async fn upload(
+            app: &Router,
+            session: &Session,
+            name: &str,
+            bytes: Vec<u8>,
+            action: &str,
+        ) -> Value {
+            let mut body = format!("--IMP\r\nContent-Disposition: form-data; name=\"accion\"\r\n\r\n{action}\r\n--IMP\r\nContent-Disposition: form-data; name=\"archivo\"; filename=\"{name}\"\r\nContent-Type: application/octet-stream\r\n\r\n").into_bytes();
+            body.extend(bytes);
+            body.extend(b"\r\n--IMP--\r\n");
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/api/usuarios/importar")
+                        .header("cookie", &session.cookie)
+                        .header("x-csrf-token", &session.csrf)
+                        .header("content-type", "multipart/form-data; boundary=IMP")
+                        .body(Body::from(body))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let status = response.status();
+            let value: Value =
+                serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                    .unwrap();
+            assert_eq!(status, StatusCode::OK, "{value}");
+            value
+        }
+        let csv = "username;email;first_name;last_name;rol;telefono;password
+imp.uno;uno@ean.edu.co;Uno;Import;estudiante;300;ClaveImportada2026
+imp.dos;dos@ean.edu.co;Dos;Import;PROFESOR;;
+imp.mal;nueva@universidadean.edu.co;Mal;Import;ROLRARO;;corta
+;;;;;;
+";
+        let preview = upload(
+            &app,
+            &administrator,
+            "usuarios.csv",
+            csv.as_bytes().to_vec(),
+            "previsualizar",
+        )
+        .await;
+        assert_eq!(preview["validas"].as_array().unwrap().len(), 2, "{preview}");
+        let errors = preview["invalidas"][0]["errores"].to_string();
+        assert!(
+            errors.contains("Ya existe un usuario con ese correo")
+                && errors.contains("Rol no valido")
+                && errors.contains("Contrasena debil"),
+            "{errors}"
+        );
+        let none: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM usuarios WHERE username LIKE 'imp.%'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(none, 0, "preview writes nothing");
+        let done = upload(
+            &app,
+            &administrator,
+            "usuarios.csv",
+            csv.as_bytes().to_vec(),
+            "confirmar",
+        )
+        .await;
+        assert_eq!(
+            (done["creados"].as_i64(), done["omitidas"].as_i64()),
+            (Some(2), Some(1))
+        );
+        assert_eq!(
+            request(
+                &app,
+                &public,
+                "POST",
+                "/api/login",
+                Some(json!({"username":"imp.uno","password":"ClaveImportada2026"}))
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+        assert_eq!(
+            request(
+                &app,
+                &public,
+                "POST",
+                "/api/login",
+                Some(json!({"username":"imp.dos","password":"!"}))
+            )
+            .await
+            .0,
+            StatusCode::UNAUTHORIZED,
+            "no usable password"
+        );
+        let logged: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM log_actividad WHERE accion='IMPORTACION'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(logged, 1);
+        // Excel works too, and a missing required column is reported for the whole file.
+        let mut book = rust_xlsxwriter::Workbook::new();
+        let sheet = book.add_worksheet();
+        for (c, h) in ["username", "email", "rol"].iter().enumerate() {
+            sheet.write_string(0, c as u16, *h).unwrap();
+        }
+        for (c, v) in ["imp.tres", "tres@ean.edu.co", "EXPERTO"]
+            .iter()
+            .enumerate()
+        {
+            sheet.write_string(1, c as u16, *v).unwrap();
+        }
+        let xlsx = upload(
+            &app,
+            &administrator,
+            "usuarios.xlsx",
+            book.save_to_buffer().unwrap(),
+            "previsualizar",
+        )
+        .await;
+        assert_eq!(
+            xlsx["validas"][0]["datos"]["username"], "imp.tres",
+            "{xlsx}"
+        );
+        let missing = upload(
+            &app,
+            &administrator,
+            "x.csv",
+            b"username,rol
+z,ESTUDIANTE
+"
+            .to_vec(),
+            "previsualizar",
+        )
+        .await;
+        assert!(missing["error_global"].as_str().unwrap().contains("email"));
+        assert_eq!(
+            request(&app, &teacher, "GET", "/api/usuarios/plantilla", None)
+                .await
+                .0,
+            StatusCode::FORBIDDEN
+        );
         // HU06 report builder: generate (logged), history download, send by email, roles.
         let (status, _, _) = request(&app, &administrator, "POST", "/api/reportes/generar", Some(json!({"reporte":"retos","formato":"EXCEL","periodo":"todo","columnas":["titulo","estado"]}))).await;
         assert_eq!(status, StatusCode::OK);

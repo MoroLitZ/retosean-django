@@ -325,6 +325,7 @@ async function route() {
       : selected === "retos"
         ? "Publicar Reto"
         : "Agregar registro";
+  $("import-users").hidden = !(selected === "usuarios" && admin());
   $("dashboard-panel").hidden = selected !== "dashboard";
   $("builder-panel").hidden = selected !== "reportes";
   $("records-panel").hidden = ["dashboard", "reportes"].includes(selected);
@@ -1901,6 +1902,72 @@ async function loadBuilder() {
   card.append(header, body);
   panel.append(card, preview);
 }
+// ── HU13: bulk user import (Django usuarios/admin/importar_usuarios.html) ──
+function importForm() {
+  const parent = modal("Importación Masiva de Usuarios");
+  parent.append(
+    el("p", "small text-muted mb-1", "Columnas: username, email, first_name, last_name, rol, telefono, password. Obligatorias: username, email, rol."),
+    el("p", "small text-muted", "Sin contraseña, la cuenta recibe por correo un enlace para definirla."),
+  );
+  const template = el("a", "secondary mb-3 d-inline-block", "Descargar plantilla CSV");
+  template.href = "/api/usuarios/plantilla";
+  const form = el("form");
+  const file = input(form, "archivo", "Archivo .csv o .xlsx (máximo 1000 filas)", "", "file", true);
+  file.accept = ".csv,.xlsx,.xlsm";
+  const result = el("div", "mt-3");
+  const send = async (accion) => {
+    const data = new FormData();
+    data.append("accion", accion);
+    data.append("archivo", file.files[0]);
+    const response = await fetch("/api/usuarios/importar", { method: "POST", headers: { "X-CSRF-Token": csrf }, body: data });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || "No se pudo leer el archivo");
+    return body;
+  };
+  const preview = el("button", "secondary", "Previsualizar");
+  preview.type = "button";
+  const confirm = el("button", "primary ms-2", "Confirmar importación");
+  confirm.type = "button";
+  confirm.hidden = true;
+  preview.onclick = async () => {
+    if (!file.files[0]) return toast("Elige un archivo");
+    try {
+      const data = await send("previsualizar");
+      result.replaceChildren();
+      if (data.error_global) {
+        result.append(el("div", "alert alert-danger py-2", data.error_global));
+        confirm.hidden = true;
+        return;
+      }
+      const rows = [...data.validas, ...data.invalidas].sort((a, b) => a.fila - b.fila);
+      result.append(
+        el("p", "small", `${data.validas.length} fila(s) válidas · ${data.invalidas.length} con errores`),
+        table(["Fila", "Usuario", "Correo", "Nombre", "Rol", "Estado"], rows.map((r) => [
+          r.fila, r.datos.username, r.datos.email, `${r.datos.first_name || ""} ${r.datos.last_name || ""}`.trim(), r.datos.rol,
+          r.errores.length ? r.errores.join(" ") : "Lista para crear",
+        ])),
+      );
+      confirm.hidden = data.validas.length === 0;
+    } catch (e) {
+      toast(e.message);
+    }
+  };
+  confirm.onclick = async () => {
+    confirm.disabled = true;
+    try {
+      const data = await send("confirmar");
+      $("detail-dialog").close();
+      toast(`${data.creados} usuario(s) creado(s) correctamente.` + (data.omitidas ? ` ${data.omitidas} fila(s) se omitieron por errores de validacion.` : ""));
+      await loadRecords();
+    } catch (e) {
+      toast(e.message);
+    } finally {
+      confirm.disabled = false;
+    }
+  };
+  form.append(el("div", "mt-2"), preview, confirm, result);
+  parent.append(template, form);
+}
 function simpleForm(title, path, fields, transform = (data) => data) {
   const parent = modal(title),
     form = document.createElement("form");
@@ -2345,6 +2412,7 @@ $("toggle-password").onclick = () => {
   $("toggle-password").firstElementChild.className =
     "bi " + (input.type === "password" ? "bi-eye" : "bi-eye-slash");
 };
+$("import-users").onclick = importForm;
 $("bell").onclick = () => {
   $("bell-menu").hidden = !$("bell-menu").hidden;
   $("bell").setAttribute("aria-expanded", String(!$("bell-menu").hidden));
