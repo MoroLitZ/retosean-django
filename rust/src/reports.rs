@@ -18,8 +18,20 @@ fn text(value: &Value) -> String {
         v => v.to_string(),
     }
 }
+/// Base-14 fonts only cover Windows-1252; other characters print as '?'
+/// instead of encoding_rs's literal "&#NNNN;" references.
 fn winansi(text: &str) -> Vec<u8> {
-    encoding_rs::WINDOWS_1252.encode(text).0.into_owned()
+    let mut out = Vec::with_capacity(text.len());
+    let mut buffer = [0u8; 4];
+    for c in text.chars() {
+        let (bytes, _, unmappable) = encoding_rs::WINDOWS_1252.encode(c.encode_utf8(&mut buffer));
+        if unmappable {
+            out.push(b'?');
+        } else {
+            out.extend_from_slice(&bytes);
+        }
+    }
+    out
 }
 /// Each page uses a fixed-width base font and bounded lines; no HTML is interpreted.
 pub fn pdf_lines(title: &str, lines: &[String]) -> Vec<u8> {
@@ -560,6 +572,13 @@ pub async fn certificate(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn unsupported_characters_print_as_question_marks() {
+        assert_eq!(
+            winansi("A\u{f1}o \u{2192} 5\u{20ac}"),
+            b"A\xf1o ? 5\x80".to_vec()
+        );
+    }
     #[test]
     fn table_wraps_and_repeats_header_across_pages() {
         let lines = wrap("Universidad EAN supercalifragilisticoespialidoso", 60., 7.5);

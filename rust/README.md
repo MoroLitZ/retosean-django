@@ -104,15 +104,26 @@ coverage does not imply every original form or command has been ported.
 
 ## Remaining work before replacing Django
 
-- Rust requires 12-character passwords; Django has no password validators configured.
-- Generic module exports (a Rust addition; Django has none) are capped at 5,000
-  records. Excel stores values as literal strings to preserve identifiers,
-  exact decimals and formula safety.
-- Django migration history is not synthesized by `init-db`; do not run Django
-  migrations against a Rust-initialized database. A later schema change needs
-  an explicit incremental migration, not another `init-db`.
-- Production hardening, Unicode font embedding beyond Windows-1252 in PDFs,
-  accessibility review and exhaustive parity with the original test suite.
+- Deliberate differences: Rust requires 12-character passwords (Django has no
+  password validators configured), and generic module exports (a Rust addition)
+  are capped at 5,000 records. Excel stores values as literal strings to
+  preserve identifiers, exact decimals and formula safety.
+- PDFs use the standard Helvetica fonts, which cover Windows-1252 (all Spanish
+  text); other characters print as "?". Embedding a Unicode font is the upgrade.
+- Before production: a deployment review (HTTPS, `RUST_SECURE_COOKIE=true`,
+  backups, scheduled `send-reminders` and `advance-hackathons`), an
+  accessibility review, and a pass against Django's full test suite.
+
+## Schema changes
+
+`init-db` creates the full schema once. Later changes go in
+`sql/migrations/NNNN_name.sql`, listed in `src/schema_migrations.rs`, and are
+applied with `retosean migrate` (each once, in order, recorded in
+`rust_schema_migrations`). Never run Django migrations against a Rust database.
+
+`seed-demo` also verifies the demo company's required documents, so it can
+publish retos right away; the end-to-end test loads the bare demo data and
+walks the verification itself.
 
 ## Importing an existing Django database
 

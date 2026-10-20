@@ -24,6 +24,7 @@ pub mod registration;
 pub mod reminders;
 pub mod reports;
 pub mod resources;
+pub mod schema_migrations;
 pub mod study_units;
 pub mod team;
 pub mod workflows;
