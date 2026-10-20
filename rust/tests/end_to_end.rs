@@ -903,6 +903,136 @@ async fn native_http_lifecycle_and_permissions() {
             request(&app, &expert, "GET", "/api/me", None).await.0,
             StatusCode::UNAUTHORIZED
         );
+        // Self-registration (vista_registro) and password recovery.
+        let inbox = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        retosean::mail::install(retosean::mail::Mailer::Memory(inbox.clone()));
+        let public = Session::default();
+        let academic = json!({"tipo":"academico","rol":"ESTUDIANTE","username":"nueva.estudiante","email":"nueva@gmail.com","password":"ClaveSegura2026!","password2":"ClaveSegura2026!","first_name":"Nueva","last_name":"Estudiante","semestre":3});
+        let (status, body, _) = request(
+            &app,
+            &public,
+            "POST",
+            "/api/registro",
+            Some(academic.clone()),
+        )
+        .await;
+        assert_eq!(
+            status,
+            StatusCode::BAD_REQUEST,
+            "institutional email required: {body}"
+        );
+        let mut academic = academic;
+        academic["email"] = json!("nueva@universidadean.edu.co");
+        let (status, body, cookie) =
+            request(&app, &public, "POST", "/api/registro", Some(academic)).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let registered = Session {
+            cookie: cookie.unwrap(),
+            csrf: body["csrf"].as_str().unwrap().into(),
+        };
+        assert_eq!(
+            ok(&app, &registered, "GET", "/api/me", None).await["user"]["rol"],
+            "ESTUDIANTE"
+        );
+        let semester: i32 = sqlx::query_scalar("SELECT e.semestre FROM estudiantes e JOIN usuarios u ON u.id=e.usuario_id WHERE u.username='nueva.estudiante'").fetch_one(&pool).await.unwrap();
+        assert_eq!(semester, 3);
+        let company = json!({"tipo":"empresa","username":"acme.sas","email":"contacto@acme.co","password":"ClaveSegura2026!","password2":"ClaveSegura2026!","nit":"901234567","razon_social":"ACME S.A.S.","sector_industrial":"Tecnología","tipo_convocatoria":"AMBOS","area_responsable":"Innovación","sitio_web":"https://acme.co"});
+        assert_eq!(
+            request(
+                &app,
+                &public,
+                "POST",
+                "/api/registro",
+                Some(company.clone())
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+        let docs: i64 = sqlx::query_scalar("SELECT count(*) FROM documentos_empresas d JOIN empresas e ON e.id=d.empresa_id WHERE e.nit='901234567'").fetch_one(&pool).await.unwrap();
+        assert_eq!(docs, 9, "one pending row per active catalog type");
+        let mut again = company;
+        again["username"] = json!("acme.dos");
+        assert_eq!(
+            request(&app, &public, "POST", "/api/registro", Some(again))
+                .await
+                .0,
+            StatusCode::BAD_REQUEST,
+            "duplicate NIT"
+        );
+        // Recovery: the emailed link works once and signs the account out everywhere.
+        ok(
+            &app,
+            &public,
+            "POST",
+            "/api/password/reset",
+            Some(json!({"email":"NUEVA@universidadean.edu.co"})),
+        )
+        .await;
+        ok(
+            &app,
+            &public,
+            "POST",
+            "/api/password/reset",
+            Some(json!({"email":"nadie@ninguno.co"})),
+        )
+        .await;
+        let mut link = None;
+        for _ in 0..50 {
+            link = inbox.lock().unwrap().iter().find_map(
+                |(to, _, text): &(String, String, String)| {
+                    (to == "nueva@universidadean.edu.co")
+                        .then(|| {
+                            text.split("#restablecer/")
+                                .nth(1)
+                                .map(|t| t[..64].to_string())
+                        })
+                        .flatten()
+                },
+            );
+            if link.is_some() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        let token = link.expect("reset email sent");
+        let confirm =
+            json!({"token":token,"nueva":"OtraClaveSegura2026","nueva2":"OtraClaveSegura2026"});
+        ok(
+            &app,
+            &public,
+            "POST",
+            "/api/password/reset/confirm",
+            Some(confirm.clone()),
+        )
+        .await;
+        assert_eq!(
+            request(
+                &app,
+                &public,
+                "POST",
+                "/api/password/reset/confirm",
+                Some(confirm)
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST,
+            "single use"
+        );
+        assert_eq!(
+            request(&app, &registered, "GET", "/api/me", None).await.0,
+            StatusCode::UNAUTHORIZED,
+            "sessions revoked"
+        );
+        let (status, _, _) = request(
+            &app,
+            &public,
+            "POST",
+            "/api/login",
+            Some(json!({"username":"nueva.estudiante","password":"OtraClaveSegura2026"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
         // HU15 reminders: a favorited open reto closing applications in 3 days.
         sqlx::query("UPDATE retos SET fecha_limite_postulacion=(now() AT TIME ZONE 'America/Bogota')::date+3 WHERE id=4").execute(&pool).await.unwrap();
         sqlx::query("INSERT INTO retos_favoritos(usuario_id,reto_id,fecha) VALUES(4,4,now()) ON CONFLICT DO NOTHING").execute(&pool).await.unwrap();

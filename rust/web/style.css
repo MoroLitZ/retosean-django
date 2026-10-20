@@ -811,3 +811,29 @@ body.auth {
     padding: 2rem 1.5rem;
   }
 }
+
+.text-link-green {
+  color: var(--ean-green);
+  font-weight: 600;
+  text-decoration: none;
+}
+.text-link-green:hover {
+  color: var(--ean-green-dk);
+  text-decoration: underline;
+}
+.auth-choice {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1rem 1.2rem;
+  margin-bottom: 0.8rem;
+  background: #fff;
+}
+.auth-choice:hover {
+  border-color: var(--ean-green);
+}
+#auth-alt .form-label {
+  margin-top: 0.6rem;
+}

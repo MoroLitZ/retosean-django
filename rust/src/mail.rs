@@ -221,6 +221,32 @@ pub async fn deliver_pending(pool: &PgPool, mailer: &Mailer, site_url: &str) -> 
     Ok(sent)
 }
 
+static GLOBAL: OnceLock<Mailer> = OnceLock::new();
+
+/// Process-wide mailer (set by `serve`; tests may install a Memory mailer).
+pub fn install(mailer: Mailer) -> &'static Mailer {
+    GLOBAL.get_or_init(|| mailer)
+}
+pub fn global() -> &'static Mailer {
+    GLOBAL.get_or_init(|| Mailer::Console)
+}
+
+/// Sends a plain message after the request, never failing it (Django fail_silently=True).
+pub fn send_later(to: String, subject: String, text: String) {
+    if to.is_empty() {
+        return;
+    }
+    tokio::spawn(async move {
+        let html = format!(
+            "<pre style=\"font-family:Segoe UI,Arial,sans-serif\">{}</pre>",
+            escape(&text)
+        );
+        if let Err(error) = global().send(&to, &subject, &text, &html).await {
+            tracing::warn!(%error, "email failed");
+        }
+    });
+}
+
 /// Background outbox: every 20 seconds, well inside the brief's 2 minutes.
 pub fn spawn_outbox(pool: PgPool, mailer: Mailer, site_url: String) {
     tokio::spawn(async move {

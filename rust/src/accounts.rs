@@ -179,6 +179,11 @@ pub async fn password(
             "La contraseña cambió durante la operación; inicia sesión de nuevo",
         ));
     }
+    // A password change also invalidates pending reset links, as Django's tokens do.
+    sqlx::query("DELETE FROM rust_password_resets WHERE user_id=$1")
+        .bind(user.id)
+        .execute(&state.pool)
+        .await?;
     sqlx::query("DELETE FROM rust_sessions WHERE user_id=$1")
         .bind(user.id)
         .execute(&mut *tx)

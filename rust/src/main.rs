@@ -103,7 +103,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     retosean::auth::init(&pool).await?;
     // Notification emails (HU15): Django's EMAIL_* settings; console backend when unset.
     let site = std::env::var("RUST_SITE_URL").unwrap_or_else(|_| format!("http://{}", config.bind));
-    retosean::mail::spawn_outbox(pool.clone(), retosean::mail::Mailer::from_env(), site);
+    let mailer = retosean::mail::install(retosean::mail::Mailer::from_env()).clone();
+    retosean::mail::spawn_outbox(pool.clone(), mailer, site);
     let listener = tokio::net::TcpListener::bind(config.bind).await?;
     tracing::info!(address=%config.bind, database=%config.database_name, "RetosEAN Rust ready");
     axum::serve(

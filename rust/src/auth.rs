@@ -39,10 +39,10 @@ impl User {
 }
 
 pub async fn init(pool: &PgPool) -> std::result::Result<(), sqlx::Error> {
-    sqlx::raw_sql("CREATE TABLE IF NOT EXISTS rust_sessions (token_hash TEXT PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE, csrf TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL); CREATE INDEX IF NOT EXISTS rust_sessions_expiry ON rust_sessions(expires_at); CREATE TABLE IF NOT EXISTS rust_login_attempts (subject TEXT NOT NULL, attempted_at TIMESTAMPTZ NOT NULL DEFAULT now()); CREATE INDEX IF NOT EXISTS rust_login_attempts_subject ON rust_login_attempts(subject, attempted_at);").execute(pool).await?;
+    sqlx::raw_sql("CREATE TABLE IF NOT EXISTS rust_sessions (token_hash TEXT PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE, csrf TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL); CREATE INDEX IF NOT EXISTS rust_sessions_expiry ON rust_sessions(expires_at); CREATE TABLE IF NOT EXISTS rust_login_attempts (subject TEXT NOT NULL, attempted_at TIMESTAMPTZ NOT NULL DEFAULT now()); CREATE INDEX IF NOT EXISTS rust_login_attempts_subject ON rust_login_attempts(subject, attempted_at); CREATE TABLE IF NOT EXISTS rust_password_resets (token_hash TEXT PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE, expires_at TIMESTAMPTZ NOT NULL);").execute(pool).await?;
     Ok(())
 }
-fn digest(value: &str) -> String {
+pub fn digest(value: &str) -> String {
     format!("{:x}", Sha256::digest(value.as_bytes()))
 }
 fn session_token(headers: &HeaderMap) -> Option<&str> {
@@ -181,6 +181,10 @@ pub async fn login(
             "Usuario o contraseña incorrectos".into(),
         ));
     }
+    start_session(&state, id).await
+}
+/// Opens an 8-hour session for `id` and returns the cookie response (login, registration).
+pub async fn start_session(state: &AppState, id: i64) -> Result<Response> {
     let token = format!(
         "{}{}",
         uuid::Uuid::new_v4().simple(),

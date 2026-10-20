@@ -82,7 +82,7 @@ These are local demonstration credentials. Do not seed an internet-facing system
 | Area | Implemented in Rust |
 |---|---|
 | Data model | 49 typed domain records, PostgreSQL bootstrap schema with database defaults mirroring Django's Python defaults, seven state-machine definitions, one audit table for every state change |
-| Users | Django PBKDF2-SHA256 compatible login, expiring sessions, CSRF, login throttling, admin account creation, login by username or email (as Django), contact editing, password changes and revocation, activation/deactivation |
+| Users | Public self-registration (Comunidad EAN with institutional email, or company with its catalog documents) with welcome email, password recovery by single-use 3-day email link, Django PBKDF2-SHA256 compatible login, expiring sessions, CSRF, login throttling, admin account creation, login by username or email (as Django), contact editing, password changes and revocation, activation/deactivation |
 | Companies | Configurable legal-document catalog (HU00): PDF uploads, catalog validity (e.g. 30-day Cámara de Comercio), document decisions, status derived from the documents as in Django, restrictive-list checks, agreement transitions and expiry dates |
 | Challenges | Company draft creation/editing, required-field review submission, admin approval/rejection, serialized numbering, audited manual state transitions |
 | Academic integration | Professor proposal with structured team (cédula, email, faculty/program) and dated schedule (HU03), the same review requirements, admin review, publication that opens the challenge and notifies assigned students |
@@ -104,8 +104,8 @@ coverage does not imply every original form or command has been ported.
 
 ## Remaining work before replacing Django
 
-- Public self-registration, email verification and password recovery; account
-  bulk CSV/Excel import; full user-role administration.
+- Account bulk CSV/Excel import and full user-role administration. Rust requires
+  12-character passwords; Django has no password validators configured.
 - Rubric creation and criterion-based grading. The native free-form grading
   endpoint explicitly refuses rubric-backed challenges.
 - Editing the operational student teams of an integration (structured team and schedule are native).
@@ -226,6 +226,7 @@ build must be validated in the target deployment environment.
 - `src/companies.rs`, `finance.rs`, `hackathon.rs`: module-specific business rules.
 - `src/dashboard.rs`: port of the Django dashboard indicators (HU05).
 - `src/team.rs`: structured integration team and schedule (HU03).
+- `src/registration.rs`: self-registration and password recovery.
 - `src/mail.rs`, `reminders.rs`: notification email outbox and daily reminders (HU15).
 - `src/event.rs`: hackathon schedule advance, logistics and final report (HU09).
 - `src/media.rs`, `reports.rs`: private files, PDF and spreadsheet generation.

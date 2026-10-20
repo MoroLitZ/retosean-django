@@ -14,6 +14,7 @@ pub mod lifecycle;
 pub mod mail;
 pub mod media;
 pub mod models;
+pub mod registration;
 pub mod reminders;
 pub mod reports;
 pub mod resources;
@@ -75,6 +76,13 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(health))
         .route("/api/login", post(auth::login))
         .route("/api/logout", post(auth::logout))
+        .route("/api/registro", post(registration::register))
+        .route("/api/registro/opciones", get(registration::options))
+        .route("/api/password/reset", post(registration::reset_request))
+        .route(
+            "/api/password/reset/confirm",
+            post(registration::reset_confirm),
+        )
         .route("/api/me", get(auth::me))
         .route("/api/usuarios", post(accounts::create))
         .route("/api/perfil", post(accounts::profile))
