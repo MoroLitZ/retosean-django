@@ -250,6 +250,9 @@ pub async fn list(
     Query(filters): Query<Filters>,
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, false).await?;
+    if name == "entregables" {
+        crate::grading::mark_in_review(&state, &user).await?;
+    }
     Ok(Json(rows(&state, &user, &name, &filters, false).await?))
 }
 pub async fn detail(

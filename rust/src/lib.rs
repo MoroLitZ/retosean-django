@@ -146,6 +146,10 @@ pub fn router(state: AppState) -> Router {
             post(permissions::agreement_choice),
         )
         .route(
+            "/api/empresa/documentos/{kind}/cargar",
+            post(media::own_document).layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024)),
+        )
+        .route(
             "/api/empresas/{id}/documentos/{kind}/cargar",
             post(media::special_document)
                 .layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024)),

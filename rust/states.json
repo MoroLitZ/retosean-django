@@ -38,6 +38,51 @@
       "RADICADO"
     ]
   },
+  "MAQUINA_ENTREGABLE": {
+    "ENVIADO": [
+      "CALIFICADO",
+      "ENVIADO",
+      "EN_REVISION"
+    ],
+    "EN_REVISION": [
+      "CALIFICADO",
+      "ENVIADO"
+    ],
+    "CALIFICADO": [
+      "CALIFICADO",
+      "ENVIADO"
+    ]
+  },
+  "MAQUINA_INSCRIPCION": {
+    "PENDIENTE": [
+      "ACEPTADA",
+      "RECHAZADA"
+    ],
+    "ACEPTADA": [
+      "RECHAZADA"
+    ],
+    "RECHAZADA": [
+      "ACEPTADA"
+    ]
+  },
+  "MAQUINA_POSTULACION": {
+    "PENDIENTE": [
+      "ACEPTADA",
+      "EN_REVISION",
+      "RECHAZADA",
+      "RETIRADA"
+    ],
+    "EN_REVISION": [
+      "ACEPTADA",
+      "RECHAZADA",
+      "RETIRADA"
+    ],
+    "RETIRADA": [
+      "PENDIENTE"
+    ],
+    "ACEPTADA": [],
+    "RECHAZADA": []
+  },
   "MAQUINA_RETO": {
     "borrador": [
       "cancelado",
@@ -72,21 +117,6 @@
     "finalizado": [],
     "cancelado": []
   },
-  "MAQUINA_ENTREGABLE": {
-    "ENVIADO": [
-      "CALIFICADO",
-      "ENVIADO",
-      "EN_REVISION"
-    ],
-    "EN_REVISION": [
-      "CALIFICADO",
-      "ENVIADO"
-    ],
-    "CALIFICADO": [
-      "CALIFICADO",
-      "ENVIADO"
-    ]
-  },
   "MAQUINA_INTEGRACION": {
     "borrador": [
       "en_revision"
@@ -103,34 +133,16 @@
     ],
     "publicada": []
   },
-  "MAQUINA_INSCRIPCION": {
-    "PENDIENTE": [
-      "ACEPTADA",
-      "RECHAZADA"
+  "MAQUINA_SOLICITUD_LOGISTICA": {
+    "SOLICITADA": [
+      "CONFIRMADA",
+      "DESCARTADA"
     ],
-    "ACEPTADA": [
-      "RECHAZADA"
+    "CONFIRMADA": [
+      "SOLICITADA"
     ],
-    "RECHAZADA": [
-      "ACEPTADA"
+    "DESCARTADA": [
+      "SOLICITADA"
     ]
-  },
-  "MAQUINA_POSTULACION": {
-    "PENDIENTE": [
-      "ACEPTADA",
-      "EN_REVISION",
-      "RECHAZADA",
-      "RETIRADA"
-    ],
-    "EN_REVISION": [
-      "ACEPTADA",
-      "RECHAZADA",
-      "RETIRADA"
-    ],
-    "RETIRADA": [
-      "PENDIENTE"
-    ],
-    "ACEPTADA": [],
-    "RECHAZADA": []
   }
 }

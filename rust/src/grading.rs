@@ -243,3 +243,28 @@ pub async fn publish(
     tx.commit().await?;
     Ok(Json(json!({"publicadas": pending.len()})))
 }
+
+/// marcar_en_revision: opening the professor's deliverables moves submitted ones
+/// to EN_REVISION, the only way that state is reached (Django panel_profesor).
+pub async fn mark_in_review(state: &AppState, user: &crate::auth::User) -> Result<()> {
+    if user.rol != "PROFESOR" {
+        return Ok(());
+    }
+    let mut tx = state.pool.begin().await?;
+    let opened: Vec<i64> = sqlx::query_scalar("UPDATE entregables SET estado='EN_REVISION',actualizado_en=now() WHERE estado='ENVIADO' AND reto_id IN (SELECT reto_id FROM integraciones_academicas WHERE profesor_id=$1) RETURNING id")
+        .bind(user.id).fetch_all(&mut *tx).await?;
+    for id in opened {
+        crate::workflows::history(
+            &mut tx,
+            ("evaluacion", "entregable"),
+            id,
+            "ENVIADO",
+            "EN_REVISION",
+            user.id,
+            "Entregable abierto para revision.",
+        )
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}

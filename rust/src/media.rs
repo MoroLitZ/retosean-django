@@ -213,6 +213,28 @@ pub async fn company_document(
     }
     store_document(&state, tx, &user, company, &kind, upload).await
 }
+/// The company's own upload by catalog type (empresas:documentos): created on the
+/// first upload, reloaded afterwards; special types stay with the university.
+pub async fn own_document(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(kind): Path<String>,
+    multipart: Multipart,
+) -> Result<Json<Value>> {
+    let user = auth::current(&state, &headers, true).await?;
+    if user.rol != "EMPRESA" {
+        return Err(AppError::forbidden());
+    }
+    let upload = read_document(multipart).await?;
+    let tx = state.pool.begin().await?;
+    let row: Option<(i64, bool)> = sqlx::query_as("SELECT e.id,t.requiere_permiso_especial FROM empresas e JOIN tipos_documento_legal t ON t.codigo=$2 AND t.activo WHERE e.usuario_id=$1")
+        .bind(user.id).bind(&kind).fetch_optional(&state.pool).await?;
+    let (company, special) = row.ok_or_else(AppError::not_found)?;
+    if special {
+        return Err(AppError::forbidden());
+    }
+    store_document(&state, tx, &user, company, &kind, upload).await
+}
 /// cargar_documento_especial: holders of empresas.cargar_listas_informa upload
 /// special-permission documents for any company.
 pub async fn special_document(

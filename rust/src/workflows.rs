@@ -474,6 +474,17 @@ pub async fn user_status(
         .execute(&mut *tx)
         .await?;
     sqlx::query("INSERT INTO log_actividad(usuario_id,identificador,accion,detalle,realizado_por_id,creado_en) VALUES($1,'','CAMBIO_ESTADO',$2,$3,now())").bind(id).bind(format!("activo={}",input.activo)).bind(user.id).execute(&mut *tx).await?;
+    // Django's alternar_estado: the shared audit with campo is_active.
+    let (from, to) = if input.activo {
+        ("INACTIVO", "ACTIVO")
+    } else {
+        ("ACTIVO", "INACTIVO")
+    };
+    let audit = history(&mut tx, ("usuarios", "usuario"), id, from, to, user.id, "").await?;
+    sqlx::query("UPDATE historial_estados SET campo='is_active' WHERE id=$1")
+        .bind(audit)
+        .execute(&mut *tx)
+        .await?;
     tx.commit().await?;
     Ok(Json(json!({"ok":true})))
 }

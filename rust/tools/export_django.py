@@ -51,12 +51,18 @@ def export():
                        "verbose_name": str(model._meta.verbose_name), "verbose_name_plural": str(model._meta.verbose_name_plural), "fields": fields})
     (OUT / "src/models.rs").write_text("\n".join(code), encoding="utf-8")
     (OUT / "schema.json").write_text(json.dumps(schema, ensure_ascii=False, indent=2), encoding="utf-8")
-    machines = {}
-    for source in (ROOT / "apps").glob("*/services.py"):
-        for node in ast.parse(source.read_text(encoding="utf-8")).body:
-            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name) and node.value.func.id == "MaquinaEstados":
-                table = node.value.args[1]
-                machines[node.targets[0].id] = {ast.literal_eval(k): sorted(ast.literal_eval(v)) if isinstance(v, ast.Set) else [] for k, v in zip(table.keys, table.values)}
+    # Live MaquinaEstados objects (services.py and cierre/views.py): transitions,
+    # plus the Spanish name and labels Django uses in TransicionInvalida messages.
+    import importlib
+    from apps.seguimiento.services import MaquinaEstados
+    machines, meta = {}, {}
+    modules = [f"apps.{p.parent.name}.services" for p in sorted((ROOT / "apps").glob("*/services.py"))] + ["apps.cierre.views"]
+    for module in modules:
+        for name, value in vars(importlib.import_module(module)).items():
+            if isinstance(value, MaquinaEstados) and name.startswith("MAQUINA_"):
+                machines[name] = {k: sorted(v) for k, v in value.transiciones.items()}
+                meta[name] = {"nombre": value.nombre, "etiquetas": {k: str(v) for k, v in value.etiquetas.items()}}
+    (OUT / "states_meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     (OUT / "states.json").write_text(json.dumps(machines, ensure_ascii=False, indent=2), encoding="utf-8")
     from apps.notificaciones.eventos import EVENTOS
     eventos = {e.slug: {"tipo": e.tipo, "titulo": e.titulo, "permite_email": e.permite_email} for e in EVENTOS.values()}

@@ -1,0 +1,79 @@
+{
+  "MAQUINA_CONVENIO": {
+    "etiquetas": {
+      "EN_JURIDICA": "En proceso en Jurídica",
+      "FIRMADO": "Firmado por las partes",
+      "NO_RADICADO": "No radicado",
+      "RADICADO": "Radicado"
+    },
+    "nombre": "el convenio"
+  },
+  "MAQUINA_DOCUMENTO": {
+    "etiquetas": {
+      "CARGADO": "En Revision",
+      "PENDIENTE": "Pendiente",
+      "RECHAZADO": "Rechazado",
+      "VENCIDO": "Vencido",
+      "VERIFICADO": "Aprobado"
+    },
+    "nombre": "el documento"
+  },
+  "MAQUINA_ENTREGABLE": {
+    "etiquetas": {
+      "CALIFICADO": "Calificado",
+      "ENVIADO": "Enviado",
+      "EN_REVISION": "En Revision"
+    },
+    "nombre": "el entregable"
+  },
+  "MAQUINA_INSCRIPCION": {
+    "etiquetas": {
+      "ACEPTADA": "Aceptada",
+      "PENDIENTE": "Pendiente",
+      "RECHAZADA": "Rechazada"
+    },
+    "nombre": "la inscripcion"
+  },
+  "MAQUINA_INTEGRACION": {
+    "etiquetas": {
+      "aprobada": "Aprobada",
+      "borrador": "Borrador",
+      "en_revision": "En revision",
+      "publicada": "Publicada",
+      "rechazada": "Rechazada"
+    },
+    "nombre": "la integracion academica"
+  },
+  "MAQUINA_POSTULACION": {
+    "etiquetas": {
+      "ACEPTADA": "Aceptada",
+      "EN_REVISION": "En revision",
+      "PENDIENTE": "Pendiente de Aprobacion",
+      "RECHAZADA": "Rechazada",
+      "RETIRADA": "Retirada"
+    },
+    "nombre": "la postulacion"
+  },
+  "MAQUINA_RETO": {
+    "etiquetas": {
+      "abierto": "Abierto",
+      "aprobado": "Aprobado",
+      "borrador": "Borrador",
+      "cancelado": "Cancelado",
+      "en_curso": "En Curso",
+      "en_revision": "En Revision",
+      "finalizado": "Finalizado",
+      "pausado": "Pausado",
+      "rechazado": "Rechazado"
+    },
+    "nombre": "el reto"
+  },
+  "MAQUINA_SOLICITUD_LOGISTICA": {
+    "etiquetas": {
+      "CONFIRMADA": "Confirmada",
+      "DESCARTADA": "Descartada",
+      "SOLICITADA": "Solicitada"
+    },
+    "nombre": "la solicitud"
+  }
+}

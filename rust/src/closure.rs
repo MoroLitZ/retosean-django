@@ -363,18 +363,7 @@ pub async fn request_state(
             .fetch_optional(&mut *tx)
             .await?;
     let from = from.ok_or_else(AppError::not_found)?;
-    let allowed = match from.as_str() {
-        "SOLICITADA" => ["CONFIRMADA", "DESCARTADA"].contains(&input.estado.as_str()),
-        "CONFIRMADA" | "DESCARTADA" => input.estado == "SOLICITADA",
-        _ => false,
-    };
-    if !allowed {
-        return Err(AppError::bad(format!(
-            "No se puede pasar la solicitud de \"{}\" a \"{}\".",
-            etiqueta("cierre_solicitudlogistica", "estado", &from),
-            etiqueta("cierre_solicitudlogistica", "estado", &input.estado)
-        )));
-    }
+    crate::domain::transition("MAQUINA_SOLICITUD_LOGISTICA", &from, &input.estado)?;
     sqlx::query("UPDATE cierre_solicitudlogistica SET estado=$2,actualizado_en=now() WHERE id=$1")
         .bind(id)
         .bind(&input.estado)

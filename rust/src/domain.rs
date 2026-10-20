@@ -17,10 +17,33 @@ pub fn transition(machine: &str, from: &str, to: &str) -> Result<()> {
     {
         Ok(())
     } else {
-        Err(AppError::bad(format!(
-            "Transición no permitida: {from} → {to}"
-        )))
+        Err(AppError::bad(invalid_transition(machine, from, to)))
     }
+}
+/// TransicionInvalida's message: 'No se puede pasar el documento de "Rechazado" a "Aprobado".'
+pub fn invalid_transition(machine: &str, from: &str, to: &str) -> String {
+    static META: OnceLock<serde_json::Value> = OnceLock::new();
+    let meta = &META.get_or_init(|| {
+        serde_json::from_str(include_str!("../states_meta.json")).expect("bundled state labels")
+    })[machine];
+    let label = |state: &str| -> String {
+        meta["etiquetas"][state]
+            .as_str()
+            .map(str::to_string)
+            .unwrap_or_else(|| {
+                if state.is_empty() {
+                    "sin estado".into()
+                } else {
+                    state.into()
+                }
+            })
+    };
+    format!(
+        "No se puede pasar {} de \"{}\" a \"{}\".",
+        meta["nombre"].as_str().unwrap_or("el registro"),
+        label(from),
+        label(to)
+    )
 }
 pub fn validate_text(value: &str, max: usize, label: &str) -> Result<()> {
     if value.trim().is_empty() || value.chars().count() > max {
@@ -49,6 +72,15 @@ pub fn csv_cell(value: &serde_json::Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn invalid_transition_explains_in_spanish() {
+        assert_eq!(
+            transition("MAQUINA_DOCUMENTO", "RECHAZADO", "VERIFICADO")
+                .unwrap_err()
+                .1,
+            "No se puede pasar el documento de \"Rechazado\" a \"Aprobado\"."
+        );
+    }
     #[test]
     fn challenge_lifecycle_preserves_terminal_states() {
         assert!(transition("MAQUINA_RETO", "borrador", "en_revision").is_ok());
