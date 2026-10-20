@@ -409,7 +409,34 @@ async fn native_http_lifecycle_and_permissions() {
                 .await
                 .unwrap()
         );
-        ok(&app,&student,"POST","/api/perfil",Some(json!({"first_name":"Estudiante","last_name":"Actualizado","email":"estudiante.actualizado@example.test"}))).await;
+        ok(&app,&student,"POST","/api/perfil",Some(json!({"first_name":"Estudiante","last_name":"Actualizado","email":"estudiante.actualizado@universidadean.edu.co","semestre":7}))).await;
+        // EditarPerfilForm: institutional email for students and teachers; role fields saved.
+        assert_eq!(
+            request(
+                &app,
+                &student,
+                "POST",
+                "/api/perfil",
+                Some(json!({"first_name":"E","last_name":"A","email":"otro@example.test"}))
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            ok(&app, &student, "GET", "/api/perfil", None).await["semestre"],
+            7
+        );
+        ok(&app,&company,"POST","/api/perfil",Some(json!({"first_name":"Empresa","last_name":"Demo","email":"empresa@example.test","razon_social":"","area_responsable":"Innovación","sitio_web":"https://demo.test"}))).await;
+        let (legal, area): (String, String) =
+            sqlx::query_as("SELECT razon_social,area_responsable FROM empresas WHERE id=1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            (legal.as_str(), area.as_str()),
+            ("Empresa Demo S.A.S.", "Innovación")
+        );
         ok(&app,&student,"POST","/api/preferencias",Some(json!({"recibir_email":false,"recibir_recordatorios":true,"eventos_silenciados":["EVENTO_SILENCIADO"]}))).await;
         assert_eq!(request(&app,&administrator,"POST","/api/empresas/1/revisar",Some(json!({"estado_validacion":"VERIFICADA","estado_listas_restrictivas":"APROBADO"}))).await.0,StatusCode::BAD_REQUEST);
         // HU00: every mandatory catalog document must be verified and valid.
@@ -725,7 +752,7 @@ async fn native_http_lifecycle_and_permissions() {
         ok(&app, &teacher, "POST", &format!("/api/integraciones/{integration}/equipo"), Some(json!({
             "participantes": [
                 {"rol":"PROFESOR","nombre":"Profesor Demo","documento":"10","email":"profe.titular@ean.edu.co","facultad":"Ingeniería"},
-                {"rol":"ESTUDIANTE","nombre":"Estudiante","documento":"20","email":"estudiante.actualizado@example.test","programa":"Sistemas"},
+                {"rol":"ESTUDIANTE","nombre":"Estudiante","documento":"20","email":"estudiante.actualizado@universidadean.edu.co","programa":"Sistemas"},
                 {"rol":"EXPERTO","nombre":"Mentora","documento":"30","email":"mentora@externo.co","facultad":"Innovación SAS"}
             ],
             "sesiones": [

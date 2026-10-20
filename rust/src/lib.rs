@@ -97,7 +97,10 @@ pub fn router(state: AppState) -> Router {
             post(import::import).layer(axum::extract::DefaultBodyLimit::max(6 * 1024 * 1024)),
         )
         .route("/api/usuarios/plantilla", get(import::template))
-        .route("/api/perfil", post(accounts::profile))
+        .route(
+            "/api/perfil",
+            get(accounts::show_profile).post(accounts::profile),
+        )
         .route("/api/password", post(accounts::password))
         .route("/api/catalogos/{resource}", post(catalogs::create))
         .route(

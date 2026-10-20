@@ -105,7 +105,6 @@ coverage does not imply every original form or command has been ported.
 ## Remaining work before replacing Django
 
 - Rust requires 12-character passwords; Django has no password validators configured.
-- Complete company registration/contact forms and every legal-onboarding edge case.
 - Generic module exports (a Rust addition; Django has none) are capped at 5,000
   records. Excel stores values as literal strings to preserve identifiers,
   exact decimals and formula safety.

@@ -214,7 +214,7 @@ function buildNav() {
   const perfilButton = el("button", "nav-link");
   perfilButton.type = "button";
   perfilButton.append(icon("person-circle"), " Mi Perfil");
-  perfilButton.onclick = profileForm;
+  perfilButton.onclick = () => profileForm().catch(showError);
   perfil.append(perfilButton);
   nav.append(perfil);
   const salir = el("li", "nav-item");
@@ -2144,7 +2144,7 @@ function simpleForm(title, path, fields, transform = (data) => data) {
     form = document.createElement("form");
   form.className = "form-grid";
   for (const [name, label, type = "text", value = ""] of fields) {
-    if (type === "select" || type === "multiselect") {
+    if (type === "select" || type === "multiselect" || type === "optional") {
       const wrap = document.createElement("div"),
         l = document.createElement("label");
       l.htmlFor = "field-" + name;
@@ -2179,6 +2179,9 @@ function simpleForm(title, path, fields, transform = (data) => data) {
           "nit",
           "razon_social",
           "telefono",
+          "sector_industrial",
+          "area_responsable",
+          "sitio_web",
         ].includes(name),
       );
       if (type === "number") {
@@ -2619,13 +2622,40 @@ function teamFields(heading, url, name, options) {
     }),
   );
 }
-function profileForm() {
-  simpleForm("Mi Perfil", "/api/perfil", [
-    ["first_name", "Nombre", "text", user.first_name],
-    ["last_name", "Apellido", "text", user.last_name],
-    ["email", "Correo", "email", user.email],
-    ["telefono", "Teléfono"],
-  ]);
+async function profileForm() {
+  const [current, options] = await Promise.all([api("/api/perfil"), api("/api/registro/opciones")]);
+  const pick = (list, value) => [{ value: "", label: "Seleccione" }, ...list.map((o) => ({ ...o, selected: String(o.value) === String(value ?? "") }))];
+  const fields = [
+    ["first_name", "Nombre", "text", current.first_name],
+    ["last_name", "Apellido", "text", current.last_name],
+    ["email", "Correo", "email", current.email],
+    ["telefono", "Teléfono", "text", current.telefono],
+  ];
+  // EditarPerfilForm: role fields, all optional.
+  if (user.rol === "ESTUDIANTE")
+    fields.push(
+      ["primera_carrera", "Carrera / Programa", "optional", pick(options.programas, current.primera_carrera)],
+      ["semestre", "Semestre", "optional", pick([...Array(10)].map((_, i) => ({ value: String(i + 1), label: String(i + 1) })), current.semestre)],
+    );
+  if (user.rol === "PROFESOR")
+    fields.push(
+      ["facultad", "Facultad", "optional", pick(options.facultades, current.facultad)],
+      ["especialidad", "Especialidad", "optional", pick(options.especialidades.map((e) => ({ value: e, label: e })), current.especialidad)],
+    );
+  if (user.rol === "EMPRESA")
+    fields.push(
+      ["razon_social", "Razón Social", "text", current.razon_social],
+      ["sector_industrial", "Sector Industrial", "text", current.sector_industrial],
+      ["tipo_convocatoria", "Tipo de convocatoria", "optional", pick([{ value: "RETO", label: "Reto" }, { value: "HACKATHON", label: "Hackathon" }, { value: "AMBOS", label: "Reto y hackathon" }], current.tipo_convocatoria)],
+      ["area_responsable", "Área responsable", "text", current.area_responsable],
+      ["sitio_web", "Sitio web", "url", current.sitio_web],
+    );
+  simpleForm("Mi Perfil", "/api/perfil", fields, (data) => ({
+    ...data,
+    primera_carrera: data.primera_carrera ? Number(data.primera_carrera) : null,
+    semestre: data.semestre ? Number(data.semestre) : null,
+    facultad: data.facultad ? Number(data.facultad) : null,
+  }));
   const extra = el("p", "mt-3 mb-0");
   const change = el("button", "secondary", "Cambiar contraseña");
   change.type = "button";

@@ -106,6 +106,32 @@ pub struct Profile {
     email: String,
     #[serde(default)]
     telefono: String,
+    // EditarPerfilForm role fields; all optional as in Django.
+    primera_carrera: Option<i64>,
+    semestre: Option<i32>,
+    facultad: Option<i64>,
+    #[serde(default)]
+    especialidad: String,
+    #[serde(default)]
+    razon_social: String,
+    #[serde(default)]
+    sector_industrial: String,
+    #[serde(default)]
+    tipo_convocatoria: String,
+    #[serde(default)]
+    area_responsable: String,
+    #[serde(default)]
+    sitio_web: String,
+}
+/// The profile form's initial values, per role (EditarPerfilForm.__init__).
+pub async fn show_profile(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>> {
+    let user = auth::current(&state, &headers, false).await?;
+    let data: Value = sqlx::query_scalar("SELECT jsonb_build_object('first_name',u.first_name,'last_name',u.last_name,'email',u.email,'telefono',u.telefono,'primera_carrera',s.programa_id,'semestre',s.semestre,'facultad',p.facultad_id,'especialidad',COALESCE(p.especialidad,''),'razon_social',e.razon_social,'sector_industrial',e.sector_industrial,'tipo_convocatoria',e.tipo_convocatoria,'area_responsable',e.area_responsable,'sitio_web',e.sitio_web) FROM usuarios u LEFT JOIN estudiantes s ON s.usuario_id=u.id LEFT JOIN profesores p ON p.usuario_id=u.id LEFT JOIN empresas e ON e.usuario_id=u.id WHERE u.id=$1")
+        .bind(user.id).fetch_one(&state.pool).await?;
+    Ok(Json(data))
 }
 pub async fn profile(
     State(state): State<AppState>,
@@ -119,14 +145,60 @@ pub async fn profile(
     {
         return Err(AppError::bad("Datos de contacto inválidos"));
     }
+    if ["ESTUDIANTE", "PROFESOR"].contains(&user.rol.as_str())
+        && !input
+            .email
+            .to_lowercase()
+            .ends_with("@universidadean.edu.co")
+    {
+        return Err(AppError::bad(
+            "Estudiantes y profesores deben usar su correo institucional (@universidadean.edu.co).",
+        ));
+    }
+    if input.semestre.is_some_and(|s| !(1..=10).contains(&s))
+        || (!input.especialidad.is_empty()
+            && !crate::registration::ESPECIALIDADES.contains(&input.especialidad.as_str()))
+        || (!input.tipo_convocatoria.is_empty()
+            && !["RETO", "HACKATHON", "AMBOS"].contains(&input.tipo_convocatoria.as_str()))
+        || input.razon_social.chars().count() > 150
+        || input.sector_industrial.chars().count() > 100
+        || input.area_responsable.chars().count() > 150
+    {
+        return Err(AppError::bad("Revisa los datos del perfil"));
+    }
+    let web = input.sitio_web.trim();
+    if !web.is_empty()
+        && (web.len() > 200 || !(web.starts_with("https://") || web.starts_with("http://")))
+    {
+        return Err(AppError::bad("Introduzca una URL válida."));
+    }
+    let mut tx = state.pool.begin().await?;
     sqlx::query("UPDATE usuarios SET first_name=$2,last_name=$3,email=$4,telefono=$5 WHERE id=$1")
         .bind(user.id)
-        .bind(input.first_name)
-        .bind(input.last_name)
-        .bind(input.email)
-        .bind(input.telefono)
-        .execute(&state.pool)
+        .bind(&input.first_name)
+        .bind(&input.last_name)
+        .bind(&input.email)
+        .bind(&input.telefono)
+        .execute(&mut *tx)
         .await?;
+    match user.rol.as_str() {
+        "ESTUDIANTE" => {
+            // A missing profile is created; an empty program keeps the current one.
+            sqlx::query("INSERT INTO estudiantes(usuario_id,programa_id,semestre) VALUES($1,(SELECT id FROM programas WHERE id=$2),$3) ON CONFLICT(usuario_id) DO UPDATE SET programa_id=COALESCE(excluded.programa_id,estudiantes.programa_id),semestre=excluded.semestre")
+                .bind(user.id).bind(input.primera_carrera).bind(input.semestre.unwrap_or(1)).execute(&mut *tx).await?;
+        }
+        "PROFESOR" => {
+            sqlx::query("INSERT INTO profesores(usuario_id,facultad_id,especialidad) VALUES($1,(SELECT id FROM facultades WHERE id=$2),$3) ON CONFLICT(usuario_id) DO UPDATE SET facultad_id=COALESCE(excluded.facultad_id,profesores.facultad_id),especialidad=excluded.especialidad")
+                .bind(user.id).bind(input.facultad).bind(&input.especialidad).execute(&mut *tx).await?;
+        }
+        "EMPRESA" => {
+            // Blank legal name, sector or call type keep the stored value, as Django.
+            sqlx::query("UPDATE empresas SET razon_social=COALESCE(NULLIF($2,''),razon_social),sector_industrial=COALESCE(NULLIF($3,''),sector_industrial),tipo_convocatoria=COALESCE(NULLIF($4,''),tipo_convocatoria),area_responsable=$5,sitio_web=$6 WHERE usuario_id=$1")
+                .bind(user.id).bind(input.razon_social.trim()).bind(input.sector_industrial.trim()).bind(&input.tipo_convocatoria).bind(input.area_responsable.trim()).bind(web).execute(&mut *tx).await?;
+        }
+        _ => {}
+    }
+    tx.commit().await?;
     Ok(Json(json!({"ok":true})))
 }
 #[derive(Deserialize)]

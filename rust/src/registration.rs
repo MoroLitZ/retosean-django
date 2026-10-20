@@ -13,7 +13,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-const ESPECIALIDADES: [&str; 10] = [
+pub(crate) const ESPECIALIDADES: [&str; 10] = [
     "Ingeniería de Software",
     "Sistemas de Información",
     "Inteligencia Artificial",
