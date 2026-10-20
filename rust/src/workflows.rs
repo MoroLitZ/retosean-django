@@ -199,14 +199,20 @@ pub async fn challenge_state(
     let owner = record["empresa_id"]
         .as_i64()
         .ok_or_else(AppError::not_found)?;
-    let company_action = user.id == owner && user.rol == "EMPRESA" && input.estado == "en_revision";
+    let owner_company = user.id == owner && user.rol == "EMPRESA";
+    if !owner_company && !user.admin() {
+        return Err(AppError::forbidden());
+    }
+    // MAQUINA_RETO.validar comes first, as cambiar_estado_reto: an invalid
+    // change is explained, not reported as a permission problem.
+    domain::transition("MAQUINA_RETO", from, &input.estado)?;
+    let company_action = owner_company && input.estado == "en_revision";
     let admin_action = user.admin()
         && ["aprobado", "rechazado", "en_curso", "pausado", "cancelado"]
             .contains(&input.estado.as_str());
     if !company_action && !admin_action {
         return Err(AppError::forbidden());
     }
-    domain::transition("MAQUINA_RETO", from, &input.estado)?;
     if company_action {
         for name in [
             "titulo",
@@ -236,24 +242,79 @@ pub async fn challenge_state(
     sqlx::query("UPDATE retos SET estado=$2,actualizado_en=now(),fecha_envio_revision=CASE WHEN $2='en_revision' THEN now() ELSE fecha_envio_revision END,comentarios_revision=CASE WHEN $2 IN ('aprobado','rechazado') THEN $3 ELSE comentarios_revision END WHERE id=$1")
         .bind(id).bind(&input.estado).bind(&input.comentario).execute(&mut *tx).await?;
     challenge_history(&mut tx, id, from, &input.estado, user.id, &input.comentario).await?;
-    let message = format!(
-        "El reto {} pasó a {}. {}",
-        record["titulo"].as_str().unwrap_or(""),
-        input.estado,
-        input.comentario
-    );
-    let key = format!("reto:{id}:{from}->{}", input.estado);
+    let title = record["titulo"].as_str().unwrap_or("");
     if company_action {
+        // notificar_admins (no dedupe), excluding the sender.
         let admins: Vec<i64> = sqlx::query_scalar(
-            "SELECT id FROM usuarios WHERE is_active AND (is_superuser OR rol='ADMIN')",
+            "SELECT id FROM usuarios WHERE is_active AND (is_superuser OR rol='ADMIN') AND id<>$1",
         )
+        .bind(user.id)
         .fetch_all(&mut *tx)
         .await?;
+        let message = format!(
+            "La empresa {} envio el reto \"{title}\" para aprobacion.",
+            user.username
+        );
         for admin in admins {
-            notify(&mut tx, admin, "RETO_ENVIADO_REVISION", &message, &key).await?;
+            notify(&mut tx, admin, "RETO_ENVIADO_REVISION", &message, "").await?;
         }
     } else {
+        // _notificar_cambio_estado.
+        let label = crate::dashboard::etiqueta("retos", "estado", &input.estado);
+        let mut message = format!("Tu reto \"{title}\" paso a estado: {label}.");
+        if !input.comentario.is_empty() {
+            message.push_str(&format!(
+                "
+Comentario del administrador: {}",
+                input.comentario
+            ));
+        }
+        if input.estado == "aprobado" {
+            let code: Option<String> = sqlx::query_scalar("SELECT CASE WHEN tipo='hackathon' THEN 'HACK' ELSE 'RETO' END||'-'||anio_consecutivo||'-'||lpad(consecutivo::text,3,'0') FROM retos WHERE id=$1 AND consecutivo IS NOT NULL")
+                .bind(id).fetch_optional(&mut *tx).await?;
+            if let Some(code) = code {
+                message.push_str(&format!(
+                    "
+Numero de reto asignado: {code}."
+                ));
+            }
+        }
+        let key = format!("reto:{id}:{from}->{}", input.estado);
         notify(&mut tx, owner, "RETO_ESTADO_CAMBIADO", &message, &key).await?;
+        let kind = match input.estado.as_str() {
+            "aprobado" | "finalizado" => Some("EXITO"),
+            "rechazado" => Some("ERROR"),
+            "cancelado" => Some("ADVERTENCIA"),
+            _ => None,
+        };
+        if let Some(kind) = kind {
+            sqlx::query(
+                "UPDATE notificaciones SET tipo=$3 WHERE usuario_id=$1 AND clave_dedupe=$2",
+            )
+            .bind(owner)
+            .bind(&key)
+            .bind(kind)
+            .execute(&mut *tx)
+            .await?;
+        }
+        if input.estado == "cancelado" {
+            let teachers: Vec<i64> = sqlx::query_scalar(
+                "SELECT DISTINCT profesor_id FROM integraciones_academicas WHERE reto_id=$1",
+            )
+            .bind(id)
+            .fetch_all(&mut *tx)
+            .await?;
+            for teacher in teachers {
+                notify(
+                    &mut tx,
+                    teacher,
+                    "RETO_ESTADO_CAMBIADO",
+                    &format!("El reto \"{title}\" fue marcado como {label}."),
+                    &format!("reto:{id}:cancelado:profesor"),
+                )
+                .await?;
+            }
+        }
     }
     tx.commit().await?;
     Ok(Json(json!({"id":id,"estado":input.estado})))
@@ -684,4 +745,45 @@ pub async fn mark_applications_in_review(state: &AppState, user: &auth::User) ->
     }
     tx.commit().await?;
     Ok(())
+}
+
+#[derive(Deserialize)]
+pub struct DeliveryFilters {
+    #[serde(default)]
+    estado: String,
+    #[serde(default)]
+    evento: String,
+    #[serde(default)]
+    usuario: String,
+    desde: Option<chrono::NaiveDate>,
+    hasta: Option<chrono::NaiveDate>,
+    page: Option<i64>,
+}
+/// registro_envios (HU15): every notification with its delivery state, for admins.
+pub async fn delivery_log(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Query(filters): axum::extract::Query<DeliveryFilters>,
+) -> Result<Json<Value>> {
+    let user = auth::current(&state, &headers, false).await?;
+    if !user.admin() {
+        return Err(AppError::forbidden());
+    }
+    let condition = match filters.estado.as_str() {
+        "enviado" => "n.enviada_por_correo",
+        "fallido" => "n.error_envio<>''",
+        "leido" => "n.leida",
+        "no_leido" => "NOT n.leida",
+        "solo_app" => "NOT n.enviada_por_correo AND n.error_envio=''",
+        _ => "TRUE",
+    };
+    let page = filters.page.unwrap_or(1).clamp(1, 100000);
+    let records: Value = sqlx::query_scalar(&format!("SELECT COALESCE(jsonb_agg(r ORDER BY r.creada_en DESC, r.id DESC),'[]') FROM (SELECT n.id,n.titulo,n.evento,n.mensaje,n.leida,n.enviada_por_correo,n.error_envio,n.creada_en,u.username FROM notificaciones n JOIN usuarios u ON u.id=n.usuario_id WHERE {condition} AND ($1='' OR n.evento=$1) AND ($2='' OR u.username ILIKE '%'||$2||'%') AND ($3::date IS NULL OR (n.creada_en AT TIME ZONE 'America/Bogota')::date>=$3) AND ($4::date IS NULL OR (n.creada_en AT TIME ZONE 'America/Bogota')::date<=$4) ORDER BY n.creada_en DESC,n.id DESC LIMIT 50 OFFSET $5) r"))
+        .bind(&filters.evento).bind(filters.usuario.trim()).bind(filters.desde).bind(filters.hasta).bind((page - 1) * 50)
+        .fetch_one(&state.pool).await?;
+    let summary: Value = sqlx::query_scalar("SELECT jsonb_build_object('total',count(*),'enviadas',count(*) FILTER (WHERE enviada_por_correo),'fallidas',count(*) FILTER (WHERE error_envio<>''),'leidas',count(*) FILTER (WHERE leida)) FROM notificaciones")
+        .fetch_one(&state.pool).await?;
+    Ok(Json(
+        json!({"registros": records, "resumen": summary, "page": page}),
+    ))
 }

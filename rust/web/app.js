@@ -647,6 +647,8 @@ async function loadRecords() {
     `/api/records/${selected}?page=${page}&q=${encodeURIComponent(query)}${inactive}`,
   );
   $("extra-panel").replaceChildren();
+  if (selected === "notificaciones" && admin())
+    action($("extra-panel"), "Registro de envíos", () => deliveryLog(""));
   if (selected === "certificados") {
     const link = el("a", "secondary", "Descargar mi portafolio (PDF)");
     link.href = "/api/portafolio";
@@ -2347,6 +2349,20 @@ async function permissionsForm(id) {
     await mutate(`/api/usuarios/${id}/permisos`, { codigos });
   };
   parent.append(form);
+}
+// HU15: delivery state of every notification, filterable.
+async function deliveryLog(estado) {
+  const data = await api(`/api/notificaciones/registro?estado=${encodeURIComponent(estado)}`);
+  const parent = modal("Registro de envíos");
+  const r = data.resumen;
+  parent.append(el("p", "small", `Total: ${r.total} · Enviadas por correo: ${r.enviadas} · Fallidas: ${r.fallidas} · Leídas: ${r.leidas}`));
+  const filter = choiceSelect(parent, "estado-envio", "Estado", [["", "Todos"], ["enviado", "Enviado por correo"], ["fallido", "Fallido"], ["leido", "Leído"], ["no_leido", "No leído"], ["solo_app", "Solo en la plataforma"]], estado);
+  filter.onchange = () => deliveryLog(filter.value).catch(showError);
+  parent.append(table(["Fecha", "Usuario", "Evento", "Título", "Correo", "Leída"], data.registros.map((n) => [
+    fecha(n.creada_en, true), n.username, n.evento, n.titulo,
+    n.error_envio ? `Fallido: ${n.error_envio}` : n.enviada_por_correo ? "Enviado" : "Solo plataforma",
+    n.leida ? "Sí" : "No",
+  ])));
 }
 async function changeState(id, estado, comentario = "") {
   await mutate(`/api/retos/${id}/estado`, { estado, comentario });

@@ -138,6 +138,7 @@ pub fn router(state: AppState) -> Router {
             post(workflows::read_notification),
         )
         .route("/api/preferencias", post(workflows::preferences))
+        .route("/api/notificaciones/registro", get(workflows::delivery_log))
         .route("/api/usuarios/{id}/estado", post(workflows::user_status))
         .route("/api/usuarios/{id}/rol", post(permissions::role))
         .route(
