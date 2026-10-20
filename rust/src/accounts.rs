@@ -139,8 +139,10 @@ pub async fn profile(
     Json(input): Json<Profile>,
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, true).await?;
-    domain::validate_text(&input.first_name, 150, "Nombre")?;
-    domain::validate_text(&input.last_name, 150, "Apellido")?;
+    // AbstractUser: first and last name may be blank (a company has no last name).
+    if input.first_name.chars().count() > 150 || input.last_name.chars().count() > 150 {
+        return Err(AppError::bad("Nombre y apellido: máximo 150 caracteres"));
+    }
     if !input.email.contains('@') || input.email.len() > 254 || input.telefono.chars().count() > 20
     {
         return Err(AppError::bad("Datos de contacto inválidos"));
@@ -263,4 +265,31 @@ pub async fn password(
     sqlx::query("INSERT INTO log_actividad(usuario_id,identificador,accion,detalle,realizado_por_id,creado_en) VALUES($1,$2,'CAMBIO_ESTADO','Contraseña actualizada; sesiones revocadas',$1,now())").bind(user.id).bind(&user.username).execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(Json(json!({"ok":true,"login_required":true})))
+}
+
+#[derive(Deserialize)]
+pub struct LogFilters {
+    #[serde(default)]
+    accion: String,
+    #[serde(default)]
+    usuario: String,
+    desde: Option<chrono::NaiveDate>,
+    hasta: Option<chrono::NaiveDate>,
+    page: Option<i64>,
+}
+/// log_actividad (HU13): access and account changes, filterable, for admins.
+pub async fn activity_log(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Query(filters): axum::extract::Query<LogFilters>,
+) -> Result<Json<Value>> {
+    let user = auth::current(&state, &headers, false).await?;
+    if !user.admin() {
+        return Err(AppError::forbidden());
+    }
+    let page = filters.page.unwrap_or(1).clamp(1, 100000);
+    let records: Value = sqlx::query_scalar("SELECT COALESCE(jsonb_agg(r ORDER BY r.creado_en DESC, r.id DESC),'[]') FROM (SELECT l.id,l.identificador,l.accion,l.detalle,host(l.ip) ip,l.creado_en,u.username usuario,p.username realizado_por FROM log_actividad l LEFT JOIN usuarios u ON u.id=l.usuario_id LEFT JOIN usuarios p ON p.id=l.realizado_por_id WHERE ($1='' OR l.accion=$1) AND ($2='' OR l.identificador ILIKE '%'||$2||'%' OR u.username ILIKE '%'||$2||'%' OR p.username ILIKE '%'||$2||'%') AND ($3::date IS NULL OR (l.creado_en AT TIME ZONE 'America/Bogota')::date>=$3) AND ($4::date IS NULL OR (l.creado_en AT TIME ZONE 'America/Bogota')::date<=$4) ORDER BY l.creado_en DESC,l.id DESC LIMIT 50 OFFSET $5) r")
+        .bind(&filters.accion).bind(filters.usuario.trim()).bind(filters.desde).bind(filters.hasta).bind((page - 1) * 50)
+        .fetch_one(&state.pool).await?;
+    Ok(Json(json!({"registros": records, "page": page})))
 }

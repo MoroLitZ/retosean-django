@@ -647,6 +647,8 @@ async function loadRecords() {
     `/api/records/${selected}?page=${page}&q=${encodeURIComponent(query)}${inactive}`,
   );
   $("extra-panel").replaceChildren();
+  if (selected === "log_actividad" && admin())
+    action($("extra-panel"), "Filtrar bitácora", () => activityLog({}));
   if (selected === "notificaciones" && admin())
     action($("extra-panel"), "Registro de envíos", () => deliveryLog(""));
   if (selected === "certificados") {
@@ -2349,6 +2351,25 @@ async function permissionsForm(id) {
     await mutate(`/api/usuarios/${id}/permisos`, { codigos });
   };
   parent.append(form);
+}
+// HU13: the activity log filtered by action, user and dates.
+async function activityLog(filters) {
+  const query = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString();
+  const data = await api(`/api/log-actividad?${query}`);
+  const parent = modal("Registro de actividad");
+  const form = el("form", "form-grid");
+  choiceSelect(form, "accion", "Acción", [["", "Todas"], ...["LOGIN", "LOGIN_FALLIDO", "LOGOUT", "CREACION", "CAMBIO_ROL", "CAMBIO_ESTADO", "CAMBIO_PERMISOS", "IMPORTACION"].map((a) => [a, a])], filters.accion || "");
+  input(form, "usuario", "Usuario", filters.usuario || "");
+  input(form, "desde", "Desde", filters.desde || "", "date");
+  input(form, "hasta", "Hasta", filters.hasta || "", "date");
+  form.append(el("button", "secondary full", "Filtrar"));
+  form.onsubmit = (e) => {
+    e.preventDefault();
+    activityLog(Object.fromEntries(new FormData(form))).catch(showError);
+  };
+  parent.append(form, table(["Fecha", "Acción", "Identificador", "Usuario", "Realizado por", "IP", "Detalle"], data.registros.map((r) => [
+    fecha(r.creado_en, true), r.accion, r.identificador, r.usuario, r.realizado_por, r.ip, r.detalle,
+  ])));
 }
 // HU15: delivery state of every notification, filterable.
 async function deliveryLog(estado) {

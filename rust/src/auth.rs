@@ -117,8 +117,31 @@ pub struct Credentials {
     username: String,
     password: String,
 }
+/// The client address as Django's _ip: the first X-Forwarded-For hop when behind a proxy.
+fn client_ip(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(',').next())
+        .map(|v| v.trim().to_string())
+        .filter(|v| v.parse::<std::net::IpAddr>().is_ok())
+}
+/// usuarios/signals.py: LOGIN, LOGIN_FALLIDO and LOGOUT entries.
+async fn log_access(
+    state: &AppState,
+    user: Option<i64>,
+    identifier: &str,
+    action: &str,
+    headers: &HeaderMap,
+) -> Result<()> {
+    let identifier: String = identifier.chars().take(150).collect();
+    sqlx::query("INSERT INTO log_actividad(usuario_id,identificador,accion,detalle,ip,creado_en) VALUES($1,$2,$3,'',$4::inet,now())")
+        .bind(user).bind(identifier).bind(action).bind(client_ip(headers)).execute(&state.pool).await?;
+    Ok(())
+}
 pub async fn login(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(input): Json<Credentials>,
 ) -> Result<Response> {
     if input.username.len() > 150 || input.password.len() > 1024 || input.username.is_empty() {
@@ -169,6 +192,7 @@ pub async fn login(
                 "Servidor ocupado. Intenta de nuevo".into(),
             )
         })?;
+    let username = input.username.clone();
     let valid = tokio::task::spawn_blocking(move || {
         let _permit = permit;
         verify_password(&input.password, &hash)
@@ -176,11 +200,17 @@ pub async fn login(
     .await
     .map_err(|_| AppError::bad("No se pudo validar la contraseña"))?;
     if !valid || id == 0 {
+        log_access(&state, None, &username, "LOGIN_FALLIDO", &headers).await?;
         return Err(AppError(
             StatusCode::UNAUTHORIZED,
             "Usuario o contraseña incorrectos".into(),
         ));
     }
+    let account: String = sqlx::query_scalar("SELECT username FROM usuarios WHERE id=$1")
+        .bind(id)
+        .fetch_one(&state.pool)
+        .await?;
+    log_access(&state, Some(id), &account, "LOGIN", &headers).await?;
     start_session(&state, id).await
 }
 /// Opens an 8-hour session for `id` and returns the cookie response (login, registration).
@@ -232,7 +262,8 @@ pub async fn me(
     Ok(Json(json!({"user":user,"csrf":csrf,"permisos":permisos})))
 }
 pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Result<Response> {
-    current(&state, &headers, true).await?;
+    let user = current(&state, &headers, true).await?;
+    log_access(&state, Some(user.id), &user.username, "LOGOUT", &headers).await?;
     sqlx::query("DELETE FROM rust_sessions WHERE token_hash=$1")
         .bind(digest(session_token(&headers).unwrap_or("")))
         .execute(&state.pool)
