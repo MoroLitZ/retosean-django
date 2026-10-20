@@ -158,6 +158,9 @@ pub fn router(state: AppState) -> Router {
         .route("/api/retos/{id}/presupuesto", post(finance::set_budget))
         .route("/api/presupuestos/{id}/gastos", post(finance::expense))
         .route("/api/presupuestos/{id}/resumen", get(finance::summary))
+        .route("/api/gastos/{id}/ejecutar", post(finance::execute))
+        .route("/api/gastos/{id}/eliminar", post(finance::delete))
+        .route("/api/retos/{id}/presupuesto/{format}", get(finance::export))
         .route("/api/retos/{id}/integrar", post(academic::integrate))
         .route(
             "/api/integraciones/{id}/estado",

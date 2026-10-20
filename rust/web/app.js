@@ -1062,8 +1062,29 @@ async function openRecord(id) {
   if (selected === "presupuestos") {
     const summary = await api(`/api/presupuestos/${id}/resumen`);
     const p = document.createElement("p");
-    p.textContent = `Ejecutado: $${summary.ejecutado} · Disponible: $${summary.disponible} · ${summary.porcentaje}%${summary.alerta ? " · Umbral de alerta alcanzado" : ""}`;
+    p.textContent = `Comprometido: $${summary.comprometido} · Ejecutado: $${summary.ejecutado} · Disponible: $${summary.disponible} · ${summary.porcentaje}% asignado${summary.alerta ? " · Umbral de alerta alcanzado" : ""}`;
     parent.prepend(p);
+    // HU07: expenses with their state; admins execute commitments or remove them.
+    const list = el("div", "mb-2");
+    list.append(table(["Fecha", "Categoría", "Estado", "Descripción", "Monto"],
+      summary.gastos.map((g) => [fecha(g.creado_en), choiceLabel(g.categoria), choiceLabel(g.estado), g.descripcion, `$${g.monto}`])));
+    if (admin())
+      for (const g of summary.gastos) {
+        const line = el("div", "actions small mb-1");
+        line.append(el("span", "me-2", `${choiceLabel(g.categoria)} $${g.monto}:`));
+        if (g.estado === "COMPROMETIDO")
+          action(line, "Marcar ejecutado", () => mutate(`/api/gastos/${g.id}/ejecutar`, {}));
+        action(line, "Eliminar", async () => {
+          if (confirm("¿Eliminar este gasto?")) await mutate(`/api/gastos/${g.id}/eliminar`, {});
+        });
+        list.append(line);
+      }
+    parent.insertBefore(list, actions);
+    for (const [format, text] of [["xlsx", "Exportar gastos (Excel)"], ["pdf", "Exportar gastos (PDF)"]]) {
+      const a = el("a", "secondary", text);
+      a.href = `/api/retos/${summary.reto}/presupuesto/${format}`;
+      actions.append(a);
+    }
     if (admin())
       action(
         actions,
@@ -1077,6 +1098,7 @@ async function openRecord(id) {
               ["REFRIGERIOS", "MATERIALES", "IMPRESIONES", "ESPACIOS", "OTROS"],
             ],
             ["monto", "Monto (COP)", "number", "0.00"],
+            ["estado", "Estado", "select", [{ value: "EJECUTADO", label: "Ejecutado (pagado)" }, { value: "COMPROMETIDO", label: "Comprometido (reservado)" }]],
             ["descripcion", "Descripción", "textarea"],
           ]),
         true,
