@@ -9,6 +9,7 @@ pub mod domain;
 pub mod error;
 pub mod event;
 pub mod finance;
+pub mod grading;
 pub mod hackathon;
 pub mod lifecycle;
 pub mod mail;
@@ -122,7 +123,7 @@ pub fn router(state: AppState) -> Router {
             "/api/integraciones/{id}/equipo",
             get(team::show).post(team::update),
         )
-        .route("/api/entregables/{id}/calificar", post(academic::grade))
+        .route("/api/entregables/{id}/calificar", post(grading::grade))
         .route(
             "/api/retos/{id}/entregar",
             post(media::submit).layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024)),
@@ -156,6 +157,12 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/hackathons/{id}/votar", post(hackathon::vote))
         .route("/api/hackathons/{id}/ranking", get(hackathon::ranking))
+        .route("/api/retos/{id}/rubrica", post(grading::create_rubric))
+        .route("/api/entregables/{id}/rubricas", get(grading::rubrics))
+        .route(
+            "/api/retos/{id}/publicar-calificaciones",
+            post(grading::publish),
+        )
         .route(
             "/api/hackathons/{id}/logistica",
             get(event::show_logistics).post(event::logistics),

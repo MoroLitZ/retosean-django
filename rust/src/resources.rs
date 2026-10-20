@@ -101,6 +101,17 @@ pub fn scope(table: &str, user: &User) -> Option<String> {
         _ => return None,
     })
 }
+/// Students see a grade and its feedback only after the professor publishes it (HU12).
+pub fn data_expression_for(table: &str, user: &User) -> String {
+    let expr = data_expression(table);
+    if table == "entregables" && user.rol == "ESTUDIANTE" && !user.admin() {
+        format!(
+            "({expr})||CASE WHEN t.calificacion_publicada THEN '{{}}'::jsonb ELSE jsonb_build_object('nota',NULL,'comentario_profesor',NULL) END"
+        )
+    } else {
+        expr
+    }
+}
 pub fn data_expression(table: &str) -> String {
     let mut expr = if table == "usuarios" {
         "to_jsonb(t)-'password'-'is_staff'-'is_superuser'".to_string()
@@ -184,7 +195,7 @@ pub async fn rows(
     let meta = resource(name)?;
     let table = meta["table"].as_str().ok_or_else(AppError::not_found)?;
     let policy = scope(table, user).ok_or_else(AppError::forbidden)?;
-    let expr = data_expression(table);
+    let expr = data_expression_for(table, user);
     let page = filters.page.unwrap_or(1).clamp(1, 100000);
     let limit = if export {
         5000
@@ -245,7 +256,7 @@ pub async fn detail(
 pub async fn visible_record(state: &AppState, user: &User, name: &str, id: i64) -> Result<Value> {
     resource(name)?;
     let policy = scope(name, user).ok_or_else(AppError::forbidden)?;
-    let expression = data_expression(name);
+    let expression = data_expression_for(name, user);
     sqlx::query_scalar(&format!("WITH actor AS (SELECT $1::bigint id) SELECT {expression} FROM \"{name}\" t WHERE t.id=$2 AND ({policy})")).bind(user.id).bind(id).fetch_optional(&state.pool).await?.ok_or_else(AppError::not_found)
 }
 pub async fn export(

@@ -8,7 +8,6 @@ use axum::{
     extract::{Path, State},
     http::HeaderMap,
 };
-use rust_decimal::Decimal;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -227,70 +226,4 @@ pub async fn integration_state(
     }
     tx.commit().await?;
     Ok(Json(json!({"estado":input.estado})))
-}
-#[derive(Deserialize)]
-pub struct GradeInput {
-    nota: String,
-    #[serde(default)]
-    comentario: String,
-}
-pub async fn grade(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(id): Path<i64>,
-    Json(input): Json<GradeInput>,
-) -> Result<Json<Value>> {
-    let user = auth::current(&state, &headers, true).await?;
-    if user.rol != "PROFESOR" {
-        return Err(AppError::forbidden());
-    }
-    let nota = crate::finance::money(&input.nota)?;
-    if input.comentario.len() > 10000 {
-        return Err(AppError::bad("Comentario demasiado largo"));
-    }
-    let mut tx = state.pool.begin().await?;
-    let record:Option<(i64,i64,String,Decimal)>=sqlx::query_as("SELECT reto_id,estudiante_id,estado,puntaje_maximo FROM entregables WHERE id=$1 FOR UPDATE").bind(id).fetch_optional(&mut *tx).await?;
-    let (reto, student, from, max) = record.ok_or_else(AppError::not_found)?;
-    let owns:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2 AND estado='publicada')").bind(reto).bind(user.id).fetch_one(&mut *tx).await?;
-    if !owns {
-        return Err(AppError::forbidden());
-    }
-    if nota > max {
-        return Err(AppError::bad(format!("La nota máxima es {max}")));
-    }
-    // Rubric scoring needs criteria; never silently substitute a free-form score.
-    let rubrics: bool =
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM evaluacion_rubrica WHERE reto_id=$1)")
-            .bind(reto)
-            .fetch_one(&mut *tx)
-            .await?;
-    if rubrics {
-        return Err(AppError::bad(
-            "Este reto usa rúbrica. La evaluación por criterios sigue disponible en Django",
-        ));
-    }
-    domain::transition("MAQUINA_ENTREGABLE", &from, "CALIFICADO")?;
-    sqlx::query("INSERT INTO evaluaciones(entregable_id,profesor_id,nota,comentario,fecha,actualizado_en) VALUES($1,$2,$3,$4,now(),now()) ON CONFLICT(entregable_id,profesor_id) DO UPDATE SET nota=excluded.nota,comentario=excluded.comentario,actualizado_en=now()")
-        .bind(id).bind(user.id).bind(nota).bind(&input.comentario).execute(&mut *tx).await?;
-    sqlx::query("UPDATE entregables SET nota=$2,comentario_profesor=$3,estado='CALIFICADO',actualizado_en=now() WHERE id=$1").bind(id).bind(nota).bind(&input.comentario).execute(&mut *tx).await?;
-    history(
-        &mut tx,
-        ("evaluacion", "entregable"),
-        id,
-        &from,
-        "CALIFICADO",
-        user.id,
-        &input.comentario,
-    )
-    .await?;
-    notify(
-        &mut tx,
-        student,
-        "ENTREGABLE_CALIFICADO",
-        &format!("Entregable {id}: nota {nota} de {max}"),
-        &format!("entregable:{id}:calificado"),
-    )
-    .await?;
-    tx.commit().await?;
-    Ok(Json(json!({"estado":"CALIFICADO","nota":nota.to_string()})))
 }

@@ -513,6 +513,120 @@ async fn native_http_lifecycle_and_permissions() {
             .0,
             StatusCode::BAD_REQUEST
         );
+        // HU12: unpublished grades are hidden from the student.
+        let mine = ok(
+            &app,
+            &student,
+            "GET",
+            &format!("/api/records/entregables/{deliverable}"),
+            None,
+        )
+        .await;
+        assert!(
+            mine["nota"].is_null() && mine["comentario_profesor"].is_null(),
+            "{mine}"
+        );
+        let (status, body, _) = request(
+            &app,
+            &teacher,
+            "POST",
+            &format!("/api/entregables/{deliverable}/calificar"),
+            Some(json!({"nota":"3"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert!(
+            body["error"].as_str().unwrap().contains("Confirma"),
+            "re-grading needs confirmation"
+        );
+        assert_eq!(
+            request(
+                &app,
+                &teacher,
+                "POST",
+                &format!("/api/entregables/{deliverable}/calificar"),
+                Some(json!({"nota":"5.01","confirmar_recalificacion":true}))
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+        // Rubric grading: the score is the sum of the criteria.
+        ok(&app, &teacher, "POST", &format!("/api/retos/{id}/rubrica"), Some(json!({"nombre":"Rúbrica final","criterios":[{"nombre":"Calidad","puntaje_maximo":"2.5"},{"nombre":"Presentación","puntaje_maximo":"2.5"}]}))).await;
+        let rubrics = ok(
+            &app,
+            &teacher,
+            "GET",
+            &format!("/api/entregables/{deliverable}/rubricas"),
+            None,
+        )
+        .await;
+        let rubric = &rubrics["rubricas"][0];
+        let (c1, c2) = (
+            rubric["criterios"][0]["id"].to_string(),
+            rubric["criterios"][1]["id"].to_string(),
+        );
+        assert_eq!(request(&app, &teacher, "POST", &format!("/api/entregables/{deliverable}/calificar"), Some(json!({"rubrica_id":rubric["id"],"criterios":{c1.clone():"3",c2.clone():"1"},"confirmar_recalificacion":true}))).await.0, StatusCode::BAD_REQUEST, "criterion over its maximum");
+        let graded = ok(&app, &teacher, "POST", &format!("/api/entregables/{deliverable}/calificar"), Some(json!({"rubrica_id":rubric["id"],"criterios":{c1:"2.25",c2:"1.75"},"comentario":"Sólido","confirmar_recalificacion":true}))).await;
+        assert_eq!(graded["nota"], "4.00");
+        let notices = |app: Router, student: Session| async move {
+            ok(
+                &app,
+                &student,
+                "GET",
+                "/api/records/notificaciones?q=ENTREGABLE_CALIFICADO",
+                None,
+            )
+            .await["total"]
+                .as_i64()
+                .unwrap()
+        };
+        assert_eq!(
+            notices(
+                app.clone(),
+                Session {
+                    cookie: student.cookie.clone(),
+                    csrf: student.csrf.clone()
+                }
+            )
+            .await,
+            0,
+            "not notified before publishing"
+        );
+        assert_eq!(
+            ok(
+                &app,
+                &teacher,
+                "POST",
+                &format!("/api/retos/{id}/publicar-calificaciones"),
+                Some(json!({}))
+            )
+            .await["publicadas"],
+            1
+        );
+        let mine = ok(
+            &app,
+            &student,
+            "GET",
+            &format!("/api/records/entregables/{deliverable}"),
+            None,
+        )
+        .await;
+        assert_eq!(
+            (mine["nota"].as_f64(), mine["comentario_profesor"].as_str()),
+            (Some(4.0), Some("Sólido"))
+        );
+        assert_eq!(
+            notices(
+                app.clone(),
+                Session {
+                    cookie: student.cookie.clone(),
+                    csrf: student.csrf.clone()
+                }
+            )
+            .await,
+            1
+        );
         assert_eq!(
             request(
                 &app,

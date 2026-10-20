@@ -87,7 +87,7 @@ These are local demonstration credentials. Do not seed an internet-facing system
 | Challenges | Company draft creation/editing, required-field review submission, admin approval/rejection, serialized numbering, audited manual state transitions |
 | Academic integration | Professor proposal with structured team (cédula, email, faculty/program) and dated schedule (HU03), the same review requirements, admin review, publication that opens the challenge and notifies assigned students |
 | Participation | Search, favorites, applications and withdrawal, acceptance/rejection, academic and operational team creation |
-| Deliverables | Private PDF/image/text upload, replacement, free-form grading, grade bounds and professor ownership |
+| Deliverables | Private PDF/image/text upload, replacement; grading by free score or rubric criteria (HU12) with re-grade confirmation; grades hidden from students until the professor publishes them, then notified |
 | Progress | Dated progress entries, 0–100% validation, company notification |
 | Closure | Required deliverable, final artifact linking, state transition, idempotent certificates and satisfaction surveys |
 | Certificates | Owner/admin PDF download and public UUID verification |
@@ -106,8 +106,6 @@ coverage does not imply every original form or command has been ported.
 
 - Account bulk CSV/Excel import and full user-role administration. Rust requires
   12-character passwords; Django has no password validators configured.
-- Rubric creation and criterion-based grading. The native free-form grading
-  endpoint explicitly refuses rubric-backed challenges.
 - Editing the operational student teams of an integration (structured team and schedule are native).
 - Complete company registration/contact forms and every legal-onboarding edge case.
 - Full closure agenda editing, recognition management and final-artifact upload.
@@ -226,6 +224,7 @@ build must be validated in the target deployment environment.
 - `src/companies.rs`, `finance.rs`, `hackathon.rs`: module-specific business rules.
 - `src/dashboard.rs`: port of the Django dashboard indicators (HU05).
 - `src/team.rs`: structured integration team and schedule (HU03).
+- `src/grading.rs`: rubrics, grading and grade publication (HU12).
 - `src/registration.rs`: self-registration and password recovery.
 - `src/mail.rs`, `reminders.rs`: notification email outbox and daily reminders (HU15).
 - `src/event.rs`: hackathon schedule advance, logistics and final report (HU09).
