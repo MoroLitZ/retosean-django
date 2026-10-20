@@ -16,6 +16,8 @@ served locally.
 This is a working migration, not complete Django feature parity. The original
 application remains available for the features listed under remaining work.
 
+To run it as a public site (settings, HTTPS, scheduled jobs, backups and the full endpoint list), see [DEPLOY.md](DEPLOY.md).
+
 ## Start on this computer
 
 PostgreSQL, Rust, a separate `retosean_rust` database and demo records have been

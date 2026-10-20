@@ -4,7 +4,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY sql ./sql
 COPY web ./web
-COPY schema.json states.json ./
+COPY schema.json states.json events.json ./
 RUN cargo build --locked --release
 
 FROM debian:bookworm-slim
