@@ -3,6 +3,7 @@ pub mod accounts;
 pub mod auth;
 pub mod builder;
 pub mod catalogs;
+pub mod closure;
 pub mod companies;
 pub mod config;
 pub mod dashboard;
@@ -154,6 +155,28 @@ pub fn router(state: AppState) -> Router {
         .route("/api/archivo/{resource}/{id}/{field}", get(media::download))
         .route("/api/retos/{id}/seguimiento", post(lifecycle::progress))
         .route("/api/retos/{id}/cerrar", post(lifecycle::close))
+        .route(
+            "/api/retos/{id}/cierre",
+            get(closure::show)
+                .post(closure::save)
+                .layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024)),
+        )
+        .route(
+            "/api/retos/{id}/cierre/entregables",
+            post(closure::artifact).layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024)),
+        )
+        .route(
+            "/api/retos/{id}/cierre/reconocimientos",
+            post(closure::recognition),
+        )
+        .route(
+            "/api/retos/{id}/solicitudes-logistica",
+            post(closure::request),
+        )
+        .route(
+            "/api/solicitudes-logistica/{id}/estado",
+            post(closure::request_state),
+        )
         .route("/api/encuestas/{id}", post(lifecycle::survey))
         .route("/api/empresas/{id}/revisar", post(companies::review))
         .route("/api/empresas/{id}/convenio", post(companies::agreement))

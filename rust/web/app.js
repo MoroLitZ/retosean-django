@@ -921,6 +921,10 @@ async function openRecord(id) {
           ["monto_total", "Monto total (COP)", "number", "0.00"],
         ]),
       );
+    // HU08: agenda, acta, final artifacts, recognitions and logistics.
+    if (["ADMIN", "EMPRESA", "PROFESOR"].includes(user.rol) || admin())
+      if (["aprobado", "abierto", "en_curso", "pausado", "finalizado"].includes(record.estado))
+        action(actions, "Gestionar cierre", () => closurePanel(id));
     if ((admin() || user.rol === "PROFESOR") && record.estado === "en_curso")
       action(
         actions,
@@ -1539,6 +1543,122 @@ async function scheduleForStudent() {
 }
 
 // ── HU09: event logistics (Django LogisticaForm + InvitadoFormSet) ──
+const EVENTOS_LOGISTICA = [["INICIO", "Evento de inicio"], ["CIERRE", "Evento de cierre"]];
+const TIPOS_LOGISTICA = [["ESPACIO", "Espacio físico"], ["COMUNICACIONES", "Apoyo del área de comunicaciones"], ["REFRIGERIOS", "Refrigerios / catering"], ["EQUIPOS_AV", "Equipos audiovisuales"], ["INVITADOS", "Invitados"], ["OTRO", "Otro"]];
+const ESTADOS_LOGISTICA = [["SOLICITADA", "Solicitada"], ["CONFIRMADA", "Confirmada"], ["DESCARTADA", "Descartada"]];
+const IMPACTO = [["", "Sin registrar"], ["SI", "Sí, la aplicó"], ["NO", "No la aplicó"], ["EN_EVALUACION", "En evaluación"]];
+function choiceSelect(parent, name, text, choices, value = "") {
+  const wrap = el("div");
+  const l = el("label", "", text);
+  l.htmlFor = "field-" + name;
+  const select = el("select");
+  select.id = "field-" + name;
+  select.name = name;
+  for (const [v, t] of choices) {
+    const option = el("option", "", t);
+    option.value = v;
+    option.selected = v === value;
+    select.append(option);
+  }
+  wrap.append(l, select);
+  parent.append(wrap);
+  return select;
+}
+async function closurePanel(id) {
+  const data = await api(`/api/retos/${id}/cierre`);
+  const parent = modal("Gestión del cierre");
+  const reload = async (message) => {
+    toast(message);
+    await closurePanel(id);
+  };
+  const sendForm = async (form, url) => {
+    const response = await fetch(url, { method: "POST", headers: { "X-CSRF-Token": csrf }, body: new FormData(form) });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || "No se pudo guardar");
+    return body;
+  };
+  const guard = (form, handler) => {
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const button = form.querySelector("button");
+      button.disabled = true;
+      try {
+        await handler();
+      } catch (error) {
+        toast(error.message);
+      } finally {
+        button.disabled = false;
+      }
+    };
+  };
+
+  parent.append(el("h6", "fw-bold", "Agenda y acta"));
+  const agenda = el("form", "form-grid");
+  input(agenda, "fecha_hora", "Fecha y hora", data.agenda.fecha_hora || "", "datetime-local");
+  input(agenda, "espacio", "Espacio", data.agenda.espacio || "");
+  input(agenda, "recursos", "Recursos", data.agenda.recursos || "", "textarea");
+  input(agenda, "invitados", "Invitados", data.agenda.invitados || "", "textarea");
+  input(agenda, "agenda", "Agenda", data.agenda.agenda || "", "textarea");
+  input(agenda, "notas", "Notas", data.cierre.notas || "", "textarea");
+  choiceSelect(agenda, "impacto", "¿La empresa aplicó la solución?", IMPACTO, data.cierre.impacto || "");
+  input(agenda, "acta_url", data.cierre.acta ? "Reemplazar acta" : "Acta de cierre", "", "file");
+  if (data.cierre.acta) {
+    const a = el("a", "small", "Descargar acta actual");
+    a.href = `/api/archivo/cierres_reto/${data.cierre.id}/acta_url`;
+    agenda.append(a);
+  }
+  agenda.append(el("button", "primary full", "Guardar documentación y agenda"));
+  guard(agenda, async () => reload((await sendForm(agenda, `/api/retos/${id}/cierre`)).mensaje));
+  parent.append(agenda);
+
+  parent.append(el("h6", "fw-bold mt-3", "Entregables finales"));
+  parent.append(table(["Nombre", "Cargado por", "Fecha"], data.entregables_finales.map((f) => [f.nombre, f.cargado_por, fecha(f.creado_en, true)])));
+  const artifact = el("form", "form-grid");
+  input(artifact, "nombre", "Nombre", "", "text", true);
+  input(artifact, "archivo", "Archivo (PDF, PNG, JPG o texto)", "", "file", true);
+  artifact.append(el("button", "secondary full", "Cargar entregable final"));
+  guard(artifact, async () => reload((await sendForm(artifact, `/api/retos/${id}/cierre/entregables`)).mensaje));
+  parent.append(artifact);
+
+  parent.append(el("h6", "fw-bold mt-3", "Reconocimientos"));
+  parent.append(table(["Destinatario", "Descripción"], data.reconocimientos.map((r) => [r.nombre_destinatario, r.descripcion])));
+  const recognition = el("form", "form-grid");
+  choiceSelect(recognition, "usuario_id", "Estudiante (opcional)", [["", "Sin vincular"], ...data.estudiantes.map((s) => [String(s.value), s.label])]);
+  input(recognition, "nombre_destinatario", "Destinatario", "", "text", true);
+  input(recognition, "descripcion", "Descripción", "", "textarea", true);
+  recognition.append(el("button", "secondary full", "Registrar reconocimiento"));
+  guard(recognition, async () => {
+    const values = Object.fromEntries(new FormData(recognition));
+    values.usuario_id = values.usuario_id ? Number(values.usuario_id) : null;
+    reload((await api(`/api/retos/${id}/cierre/reconocimientos`, values)).mensaje);
+  });
+  parent.append(recognition);
+
+  parent.append(el("h6", "fw-bold mt-3", "Solicitudes de logística"));
+  const rows = el("div");
+  rows.append(table(["Evento", "Tipo", "Detalle", "Estado", "Solicitada por"], data.solicitudes_logistica.map((r) => [label(EVENTOS_LOGISTICA, r.evento), label(TIPOS_LOGISTICA, r.tipo), r.descripcion, label(ESTADOS_LOGISTICA, r.estado), r.solicitada_por])));
+  if (admin())
+    for (const r of data.solicitudes_logistica) {
+      const next = r.estado === "SOLICITADA" ? [["CONFIRMADA", "Confirmar"], ["DESCARTADA", "Descartar"]] : [["SOLICITADA", "Reabrir"]];
+      const line = el("div", "actions small mb-1");
+      line.append(el("span", "me-2", `${label(TIPOS_LOGISTICA, r.tipo)}:`));
+      for (const [estado, text] of next)
+        action(line, text, async () => {
+          await api(`/api/solicitudes-logistica/${r.id}/estado`, { estado });
+          await reload(`Solicitud marcada como ${label(ESTADOS_LOGISTICA, estado).toLowerCase()}.`);
+        });
+      rows.append(line);
+    }
+  parent.append(rows);
+  const logistics = el("form", "form-grid");
+  choiceSelect(logistics, "evento", "Evento", EVENTOS_LOGISTICA);
+  choiceSelect(logistics, "tipo", "Tipo de solicitud", TIPOS_LOGISTICA);
+  const detail = input(logistics, "descripcion", "Detalle", "", "textarea", true);
+  detail.placeholder = "Ej.: auditorio para 80 personas, 9:00 a 12:00";
+  logistics.append(el("button", "secondary full", "Solicitar logística"));
+  guard(logistics, async () => reload((await api(`/api/retos/${id}/solicitudes-logistica`, Object.fromEntries(new FormData(logistics)))).mensaje));
+  parent.append(logistics);
+}
 const MODALIDADES = [["presencial", "Presencial"], ["virtual", "Virtual"], ["hibrida", "Híbrida"]];
 const TIPOS_INVITADO = [["INVITADO", "Invitado"], ["MENTOR", "Mentor"], ["PONENTE", "Ponente"], ["PATROCINADOR", "Patrocinador"]];
 function logisticsForm(id, event) {

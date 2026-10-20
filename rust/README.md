@@ -89,7 +89,7 @@ These are local demonstration credentials. Do not seed an internet-facing system
 | Participation | Search, favorites, applications and withdrawal, acceptance/rejection, academic and operational team creation, editing (professors, students, invited experts) and deletion with the operative mirror kept in step as Django's sincronizar_equipo_academico |
 | Deliverables | Private PDF/image/text upload, replacement; grading by free score or rubric criteria (HU12) with re-grade confirmation; grades hidden from students until the professor publishes them, then notified |
 | Progress | Dated progress entries, 0–100% validation, company notification |
-| Closure | Required deliverable, final artifact linking, state transition, idempotent certificates and satisfaction surveys |
+| Closure | Closure management (HU08) for the company, integrated professors and admins: agenda and acta with the solution's impact, final artifact uploads, recognitions limited to participating students, logistics requests for the start and closing events with admin confirm/discard and history; formal close with required deliverable, artifact linking, state transition, idempotent certificates and satisfaction surveys |
 | Certificates | Owner/admin PDF download and public UUID verification |
 | Notifications | Django's event catalog (titles, types), in-app bell, preferences and deduplication, email outbox within 20 s using Django's template and EMAIL_* settings (sent/failed recorded), daily reminders (`send-reminders`, same rules as `enviar_recordatorios`) |
 | Finance | Exact decimal budgets/expenses, role-scoped summaries, 80% threshold notifications |
@@ -225,6 +225,7 @@ build must be validated in the target deployment environment.
 - `src/builder.rs`: report builder (HU06).
 - `src/grading.rs`: rubrics, grading and grade publication (HU12).
 - `src/import.rs`: bulk user import (HU13).
+- `src/closure.rs`: closure agenda, acta, final artifacts, recognitions and logistics requests (HU08).
 - `src/permissions.rs`: roles, module permissions, participation block and the company operating gate (HU13/HU00).
 - `src/registration.rs`: self-registration and password recovery.
 - `src/mail.rs`, `reminders.rs`: notification email outbox and daily reminders (HU15).

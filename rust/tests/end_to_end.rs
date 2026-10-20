@@ -90,6 +90,44 @@ async fn legal_upload(
         serde_json::from_slice(&bytes).unwrap_or(Value::Null),
     )
 }
+async fn form_upload(
+    app: &Router,
+    session: &Session,
+    uri: &str,
+    fields: &[(&str, &str)],
+    file: (&str, &[u8]),
+) -> (StatusCode, Value) {
+    let mut body = Vec::new();
+    for (name, value) in fields {
+        body.extend(
+            format!("--FRM\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n")
+                .into_bytes(),
+        );
+    }
+    body.extend(format!("--FRM\r\nContent-Disposition: form-data; name=\"{}\"; filename=\"f.pdf\"\r\nContent-Type: application/pdf\r\n\r\n", file.0).into_bytes());
+    body.extend(file.1);
+    body.extend(b"\r\n--FRM--\r\n");
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header("cookie", &session.cookie)
+                .header("x-csrf-token", &session.csrf)
+                .header("content-type", "multipart/form-data; boundary=FRM")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
+}
 async fn login(app: &Router, name: &str) -> Session {
     let (status, body, cookie) = request(
         app,
@@ -1133,6 +1171,118 @@ async fn native_http_lifecycle_and_permissions() {
             .0,
             StatusCode::FORBIDDEN
         );
+        // HU08 closure management: agenda and acta, final artifacts, recognitions, logistics.
+        assert_eq!(
+            request(
+                &app,
+                &student,
+                "GET",
+                &format!("/api/retos/{id}/cierre"),
+                None
+            )
+            .await
+            .0,
+            StatusCode::FORBIDDEN
+        );
+        let (status, saved) = form_upload(
+            &app,
+            &company,
+            &format!("/api/retos/{id}/cierre"),
+            &[
+                ("fecha_hora", "2099-12-01T09:30"),
+                ("espacio", "Auditorio principal"),
+                ("agenda", "Presentación de resultados"),
+                ("notas", "Acta firmada"),
+                ("impacto", "SI"),
+            ],
+            ("acta_url", b"%PDF-1.4 acta"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{saved}");
+        let (status, _) = form_upload(
+            &app,
+            &company,
+            &format!("/api/retos/{id}/cierre/entregables"),
+            &[("nombre", "Informe final")],
+            ("archivo", b"%PDF-1.4 informe"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            request(
+                &app,
+                &teacher,
+                "POST",
+                &format!("/api/retos/{id}/cierre/reconocimientos"),
+                Some(json!({"usuario_id":3,"nombre_destinatario":"Profesor","descripcion":"x"}))
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+        ok(&app,&teacher,"POST",&format!("/api/retos/{id}/cierre/reconocimientos"),Some(json!({"usuario_id":4,"nombre_destinatario":"Estudiante Demo","descripcion":"Mejor prototipo"}))).await;
+        let logistics = ok(&app,&teacher,"POST",&format!("/api/retos/{id}/solicitudes-logistica"),Some(json!({"evento":"CIERRE","tipo":"ESPACIO","descripcion":"Auditorio para 80 personas"}))).await["id"].as_i64().unwrap();
+        let notice: String = sqlx::query_scalar(
+            "SELECT mensaje FROM notificaciones WHERE usuario_id=1 AND clave_dedupe=$1",
+        )
+        .bind(format!("logistica:{logistics}:solicitada"))
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert!(
+            notice.starts_with("Espacio físico para el evento de cierre del reto"),
+            "{notice}"
+        );
+        assert_eq!(
+            request(
+                &app,
+                &teacher,
+                "POST",
+                &format!("/api/solicitudes-logistica/{logistics}/estado"),
+                Some(json!({"estado":"CONFIRMADA"}))
+            )
+            .await
+            .0,
+            StatusCode::FORBIDDEN
+        );
+        ok(
+            &app,
+            &administrator,
+            "POST",
+            &format!("/api/solicitudes-logistica/{logistics}/estado"),
+            Some(json!({"estado":"CONFIRMADA"})),
+        )
+        .await;
+        assert_eq!(
+            request(
+                &app,
+                &administrator,
+                "POST",
+                &format!("/api/solicitudes-logistica/{logistics}/estado"),
+                Some(json!({"estado":"DESCARTADA"}))
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+        let panel = ok(
+            &app,
+            &company,
+            "GET",
+            &format!("/api/retos/{id}/cierre"),
+            None,
+        )
+        .await;
+        assert_eq!(panel["agenda"]["fecha_hora"], "2099-12-01T09:30");
+        assert_eq!(panel["cierre"]["impacto"], "SI");
+        assert_eq!(panel["cierre"]["acta"], true);
+        assert_eq!(panel["entregables_finales"][0]["nombre"], "Informe final");
+        assert_eq!(
+            panel["reconocimientos"][0]["descripcion"],
+            "Mejor prototipo"
+        );
+        assert_eq!(panel["solicitudes_logistica"][0]["estado"], "CONFIRMADA");
+        assert_eq!(panel["puede_finalizar"], false);
         ok(&app,&teacher,"POST",&format!("/api/retos/{id}/seguimiento"),Some(json!({"fecha_sesion":"2026-10-14","porcentaje_avance":100,"avances":"Prototipo entregado"}))).await;
         let closed = ok(
             &app,
