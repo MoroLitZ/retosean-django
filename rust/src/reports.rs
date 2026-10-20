@@ -260,6 +260,27 @@ pub fn pdf_table(
     rows: &[Vec<String>],
     total: &str,
 ) -> Vec<u8> {
+    let section = Section {
+        heading: None,
+        columns,
+        rows,
+        empty: "No hay registros que cumplan los filtros seleccionados.",
+    };
+    pdf_document(title, meta, &[section], total)
+}
+/// One titled table of a branded document (the portfolio has two).
+pub struct Section<'a> {
+    pub heading: Option<&'a str>,
+    pub columns: &'a [(&'a str, f32)],
+    pub rows: &'a [Vec<String>],
+    pub empty: &'a str,
+}
+pub fn pdf_document(
+    title: &str,
+    meta: &[String],
+    sections: &[Section<'_>],
+    total: &str,
+) -> Vec<u8> {
     let (left, right, bottom) = (15. * MM, PAGE_W - 15. * MM, 18. * MM);
     let mut w = Writer {
         pages: Vec::new(),
@@ -276,107 +297,114 @@ pub fn pdf_table(
         }
     }
     w.y -= 10.;
-    if rows.is_empty() {
-        w.y -= 12.;
-        w.text(
-            left,
-            w.y,
-            b"F1",
-            10.,
-            NEGRO,
-            "No hay registros que cumplan los filtros seleccionados.",
-        );
-    } else {
-        let sum: f32 = columns.iter().map(|c| c.1).sum::<f32>().max(1.);
-        let widths: Vec<f32> = columns.iter().map(|c| (right - left) * c.1 / sum).collect();
-        let cells = |values: Vec<&str>, size: f32| -> (Vec<Vec<String>>, f32, f32) {
-            let lines: Vec<Vec<String>> = values
-                .iter()
-                .zip(&widths)
-                .map(|(v, cw)| {
-                    wrap(
-                        v,
-                        if size >= 8. {
-                            (cw - 8.) / 1.06
-                        } else {
-                            cw - 8.
-                        },
-                        size,
-                    )
-                })
-                .collect();
-            let leading = if size >= 8. { 10. } else { 9.5 };
-            let height = lines.iter().map(Vec::len).max().unwrap_or(1) as f32 * leading + 6.;
-            (lines, height, leading)
-        };
-        let draw = |w: &mut Writer,
-                    lines: &[Vec<String>],
-                    height: f32,
-                    leading: f32,
-                    header: bool,
-                    shade: bool| {
-            let top = w.y;
-            if header {
-                w.rect(left, top - height, right - left, height, VERDE);
-            } else if shade {
-                w.rect(left, top - height, right - left, height, SUAVE);
+    for section in sections {
+        let (columns, rows) = (section.columns, section.rows);
+        if let Some(heading) = section.heading {
+            if w.y - 40. < bottom {
+                w.new_page();
             }
-            let mut x = left;
-            for (cell, cw) in lines.iter().zip(&widths) {
-                for (n, line) in cell.iter().enumerate() {
-                    let baseline = top - 3. - (n as f32 + 1.) * leading + 2.;
-                    if header {
-                        w.text(x + 4., baseline, b"F2", 8., (1., 1., 1.), line);
-                    } else {
-                        w.text(x + 4., baseline, b"F1", 7.5, NEGRO, line);
-                    }
+            w.y -= 14.;
+            w.text(left, w.y, b"F2", 11., NEGRO, heading);
+            w.y -= 6.;
+        }
+        if rows.is_empty() {
+            w.y -= 12.;
+            w.text(left, w.y, b"F1", 10., NEGRO, section.empty);
+        } else {
+            let sum: f32 = columns.iter().map(|c| c.1).sum::<f32>().max(1.);
+            let widths: Vec<f32> = columns.iter().map(|c| (right - left) * c.1 / sum).collect();
+            let cells = |values: Vec<&str>, size: f32| -> (Vec<Vec<String>>, f32, f32) {
+                let lines: Vec<Vec<String>> = values
+                    .iter()
+                    .zip(&widths)
+                    .map(|(v, cw)| {
+                        wrap(
+                            v,
+                            if size >= 8. {
+                                (cw - 8.) / 1.06
+                            } else {
+                                cw - 8.
+                            },
+                            size,
+                        )
+                    })
+                    .collect();
+                let leading = if size >= 8. { 10. } else { 9.5 };
+                let height = lines.iter().map(Vec::len).max().unwrap_or(1) as f32 * leading + 6.;
+                (lines, height, leading)
+            };
+            let draw = |w: &mut Writer,
+                        lines: &[Vec<String>],
+                        height: f32,
+                        leading: f32,
+                        header: bool,
+                        shade: bool| {
+                let top = w.y;
+                if header {
+                    w.rect(left, top - height, right - left, height, VERDE);
+                } else if shade {
+                    w.rect(left, top - height, right - left, height, SUAVE);
                 }
-                x += cw;
-            }
-            let page = w.pages.last_mut().unwrap();
-            page.set_stroke_rgb(BORDE.0, BORDE.1, BORDE.2);
-            page.set_line_width(0.4);
-            page.rect(left, top - height, right - left, height);
-            let mut x = left;
-            for cw in &widths[..widths.len() - 1] {
-                x += cw;
-                page.move_to(x, top);
-                page.line_to(x, top - height);
-            }
-            page.stroke();
-            w.y = top - height;
-        };
-        let (head, head_h, head_lead) = cells(columns.iter().map(|c| c.0).collect(), 8.);
-        draw(&mut w, &head, head_h, head_lead, true, false);
-        for (i, row) in rows.iter().enumerate() {
-            let (mut lines, mut height, leading) =
-                cells(row.iter().map(String::as_str).collect(), 7.5);
-            let room = PAGE_H - 22. * MM - head_h - bottom;
-            if height > room {
-                // A single row taller than a page is clipped, never lost silently.
-                let keep = ((room - 6.) / leading).floor().max(1.) as usize;
-                for cell in &mut lines {
-                    if cell.len() > keep {
-                        cell.truncate(keep);
-                        if let Some(last) = cell.last_mut() {
-                            last.push_str(" ...");
+                let mut x = left;
+                for (cell, cw) in lines.iter().zip(&widths) {
+                    for (n, line) in cell.iter().enumerate() {
+                        let baseline = top - 3. - (n as f32 + 1.) * leading + 2.;
+                        if header {
+                            w.text(x + 4., baseline, b"F2", 8., (1., 1., 1.), line);
+                        } else {
+                            w.text(x + 4., baseline, b"F1", 7.5, NEGRO, line);
                         }
                     }
+                    x += cw;
                 }
-                height = keep as f32 * leading + 6.;
+                let page = w.pages.last_mut().unwrap();
+                page.set_stroke_rgb(BORDE.0, BORDE.1, BORDE.2);
+                page.set_line_width(0.4);
+                page.rect(left, top - height, right - left, height);
+                let mut x = left;
+                for cw in &widths[..widths.len() - 1] {
+                    x += cw;
+                    page.move_to(x, top);
+                    page.line_to(x, top - height);
+                }
+                page.stroke();
+                w.y = top - height;
+            };
+            let (head, head_h, head_lead) = cells(columns.iter().map(|c| c.0).collect(), 8.);
+            draw(&mut w, &head, head_h, head_lead, true, false);
+            for (i, row) in rows.iter().enumerate() {
+                let (mut lines, mut height, leading) =
+                    cells(row.iter().map(String::as_str).collect(), 7.5);
+                let room = PAGE_H - 22. * MM - head_h - bottom;
+                if height > room {
+                    // A single row taller than a page is clipped, never lost silently.
+                    let keep = ((room - 6.) / leading).floor().max(1.) as usize;
+                    for cell in &mut lines {
+                        if cell.len() > keep {
+                            cell.truncate(keep);
+                            if let Some(last) = cell.last_mut() {
+                                last.push_str(" ...");
+                            }
+                        }
+                    }
+                    height = keep as f32 * leading + 6.;
+                }
+                if w.y - height < bottom {
+                    w.new_page();
+                    draw(&mut w, &head, head_h, head_lead, true, false);
+                }
+                draw(&mut w, &lines, height, leading, false, i % 2 == 1);
             }
-            if w.y - height < bottom {
-                w.new_page();
-                draw(&mut w, &head, head_h, head_lead, true, false);
-            }
-            draw(&mut w, &lines, height, leading, false, i % 2 == 1);
         }
+        w.y -= 10.;
     }
     if w.y - 20. < bottom {
         w.new_page();
     }
-    w.y -= 16.;
-    w.text(right - width(total, 8.5), w.y, b"F1", 8.5, GRIS, total);
+    if !total.is_empty() {
+        w.y -= 6.;
+        w.text(right - width(total, 8.5), w.y, b"F1", 8.5, GRIS, total);
+    }
 
     let mut pdf = Pdf::new();
     let pages = Ref::new(2);
@@ -514,11 +542,12 @@ pub async fn certificate(
     let person: i64 = certificate["usuario_id"]
         .as_i64()
         .ok_or_else(AppError::not_found)?;
-    let name: String =
-        sqlx::query_scalar("SELECT trim(first_name||' '||last_name) FROM usuarios WHERE id=$1")
-            .bind(person)
-            .fetch_one(&state.pool)
-            .await?;
+    // nombre_participante: a company is certified with its legal name.
+    let name: String = sqlx::query_scalar("SELECT CASE WHEN $2='EMPRESA' AND COALESCE(e.razon_social,'')<>'' THEN e.razon_social ELSE COALESCE(NULLIF(trim(u.first_name||' '||u.last_name),''),u.username) END FROM usuarios u LEFT JOIN empresas e ON e.usuario_id=u.id WHERE u.id=$1")
+        .bind(person)
+        .bind(text(&certificate["rol_participacion"]))
+        .fetch_one(&state.pool)
+        .await?;
     let reto: i64 = certificate["reto_id"]
         .as_i64()
         .ok_or_else(AppError::not_found)?;
@@ -566,6 +595,92 @@ pub async fn certificate(
             ),
         ],
         pdf_lines("Certificado de participación", &lines),
+    )
+        .into_response())
+}
+/// academico:portafolio: the user's certificates and deliverables as a PDF.
+pub async fn portfolio(State(state): State<AppState>, headers: HeaderMap) -> Result<Response> {
+    let user = auth::current(&state, &headers, false).await?;
+    let name = {
+        let full = format!("{} {}", user.first_name, user.last_name)
+            .trim()
+            .to_string();
+        if full.is_empty() {
+            user.username.clone()
+        } else {
+            full
+        }
+    };
+    let certificates: Vec<(String, String, String, String, String)> = sqlx::query_as("SELECT r.titulo,COALESCE(NULLIF(trim(e.first_name||' '||e.last_name),''),e.username),c.rol_participacion,to_char(c.emitido_en AT TIME ZONE 'America/Bogota','DD/MM/YYYY'),upper(split_part(c.codigo_verificacion::text,'-',1)) FROM certificados c JOIN retos r ON r.id=c.reto_id JOIN usuarios e ON e.id=r.empresa_id WHERE c.usuario_id=$1 ORDER BY c.emitido_en DESC")
+        .bind(user.id).fetch_all(&state.pool).await?;
+    // Grades only once published (HU12); Django prints them unconditionally.
+    let deliverables: Vec<(String, String, String, String, String)> = sqlx::query_as("SELECT r.titulo,e.titulo,CASE WHEN e.nota IS NOT NULL AND e.calificacion_publicada THEN e.nota::text||' / '||e.puntaje_maximo::text ELSE '-' END,e.estado,to_char(e.fecha_entrega AT TIME ZONE 'America/Bogota','DD/MM/YYYY') FROM entregables e JOIN retos r ON r.id=e.reto_id WHERE e.estudiante_id=$1 ORDER BY e.fecha_entrega DESC")
+        .bind(user.id).fetch_all(&state.pool).await?;
+    let label =
+        |table: &str, field: &str, value: &str| crate::dashboard::etiqueta(table, field, value);
+    let certificate_rows: Vec<Vec<String>> = certificates
+        .into_iter()
+        .map(|c| {
+            vec![
+                c.0,
+                c.1,
+                label("certificados", "rol_participacion", &c.2),
+                c.3,
+                c.4,
+            ]
+        })
+        .collect();
+    let deliverable_rows: Vec<Vec<String>> = deliverables
+        .into_iter()
+        .map(|d| vec![d.0, d.1, d.2, label("entregables", "estado", &d.3), d.4])
+        .collect();
+    let today = chrono::Utc::now()
+        .with_timezone(&chrono::FixedOffset::west_opt(5 * 3600).unwrap())
+        .format("%d/%m/%Y");
+    let sections = [
+        Section {
+            heading: Some("Certificados obtenidos"),
+            columns: &[
+                ("Reto", 30.),
+                ("Empresa", 24.),
+                ("Rol", 14.),
+                ("Emitido", 14.),
+                ("Codigo", 18.),
+            ],
+            rows: &certificate_rows,
+            empty: "Todavia no hay certificados emitidos.",
+        },
+        Section {
+            heading: Some("Entregables evaluados"),
+            columns: &[
+                ("Reto", 30.),
+                ("Entregable", 28.),
+                ("Nota", 14.),
+                ("Estado", 14.),
+                ("Fecha", 14.),
+            ],
+            rows: &deliverable_rows,
+            empty: "Todavia no hay entregables registrados.",
+        },
+    ];
+    let meta = [
+        user.email.clone(),
+        format!("Portafolio generado el {today}"),
+    ];
+    let filename: String = name
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    Ok((
+        [
+            (header::CONTENT_TYPE, "application/pdf".to_string()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=portafolio-{filename}.pdf"),
+            ),
+        ],
+        pdf_document(&name, &meta, &sections, ""),
     )
         .into_response())
 }

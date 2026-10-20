@@ -647,6 +647,11 @@ async function loadRecords() {
     `/api/records/${selected}?page=${page}&q=${encodeURIComponent(query)}${inactive}`,
   );
   $("extra-panel").replaceChildren();
+  if (selected === "certificados") {
+    const link = el("a", "secondary", "Descargar mi portafolio (PDF)");
+    link.href = "/api/portafolio";
+    $("extra-panel").append(link);
+  }
   if (selected === "unidades_estudio") {
     const wrap = el("div", "form-check mb-2");
     const box = el("input", "form-check-input");

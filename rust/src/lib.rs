@@ -119,6 +119,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/export/{resource}", get(resources::export))
         .route("/api/export/{resource}/{format}", get(reports::export))
         .route("/api/certificados/{id}/pdf", get(reports::certificate))
+        .route("/api/portafolio", get(reports::portfolio))
         .route("/api/dashboard", get(dashboard::panel))
         .route("/api/retos", post(workflows::create_challenge))
         .route("/api/retos/{id}", post(workflows::edit_challenge))
