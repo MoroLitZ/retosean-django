@@ -243,7 +243,117 @@ async fn native_http_lifecycle_and_permissions() {
         .await["id"]
             .as_i64()
             .unwrap();
-        ok(&app,&administrator,"POST","/api/catalogos/unidades_estudio",Some(json!({"nombre":"Sistemas seguros","codigo":"RS-01","programa_id":program,"periodo":"2026-2","ciclo":"6"}))).await;
+        // Study units: professors manage them too, with an optional PDF and CSV bulk load.
+        let program_text = program.to_string();
+        let unit_fields = [
+            ("codigo", "RS-01"),
+            ("nombre", "Sistemas seguros"),
+            ("programa", program_text.as_str()),
+            ("periodo", "2026-2"),
+            ("ciclo", "6"),
+        ];
+        let (status, unit) = form_upload(
+            &app,
+            &teacher,
+            "/api/unidades",
+            &unit_fields,
+            ("archivo", b"%PDF-1.4 unidad"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{unit}");
+        let unit = unit["id"].as_i64().unwrap();
+        let (status, taken) = form_upload(
+            &app,
+            &teacher,
+            "/api/unidades",
+            &unit_fields,
+            ("archivo", b""),
+        )
+        .await;
+        assert_eq!(
+            (status, taken["error"].as_str()),
+            (
+                StatusCode::BAD_REQUEST,
+                Some("Ese código ya está vinculado a otra materia.")
+            )
+        );
+        assert_eq!(
+            form_upload(
+                &app,
+                &student,
+                "/api/unidades",
+                &unit_fields,
+                ("archivo", b"")
+            )
+            .await
+            .0,
+            StatusCode::FORBIDDEN
+        );
+        let renamed = [
+            ("codigo", "RS-01"),
+            ("nombre", "Sistemas seguros II"),
+            ("programa", program_text.as_str()),
+            ("periodo", "2026-2"),
+            ("ciclo", "7"),
+        ];
+        assert_eq!(
+            form_upload(
+                &app,
+                &teacher,
+                &format!("/api/unidades/{unit}"),
+                &renamed,
+                ("archivo", b"")
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+        let off = ok(
+            &app,
+            &teacher,
+            "POST",
+            &format!("/api/unidades/{unit}/activo"),
+            Some(json!({"activo":false})),
+        )
+        .await;
+        assert_eq!(
+            off["mensaje"],
+            "Unidad de estudio 'RS-01' desactivada correctamente."
+        );
+        ok(
+            &app,
+            &teacher,
+            "POST",
+            &format!("/api/unidades/{unit}/activo"),
+            Some(json!({"activo":true})),
+        )
+        .await;
+        let (name, file): (String, Option<String>) =
+            sqlx::query_as("SELECT nombre,archivo FROM unidades_estudio WHERE id=$1")
+                .bind(unit)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(name, "Sistemas seguros II");
+        assert!(
+            file.is_some_and(|f| f.ends_with(".pdf")),
+            "the PDF survives an edit without a new file"
+        );
+        let csv = "codigo;nombre;programa;periodo\nRS-02;Datos;ingeniería de sistemas;2026-2\nRS-01;Repetida;Ingeniería de Sistemas;\nRS-03;Sin programa;No existe;\n"
+        .as_bytes();
+        let (status, loaded) = form_upload(
+            &app,
+            &teacher,
+            "/api/unidades",
+            &[("accion", "cargar_csv")],
+            ("archivo_csv", csv),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{loaded}");
+        assert_eq!(
+            (loaded["creadas"].as_i64(), loaded["omitidas"].as_i64()),
+            (Some(1), Some(2))
+        );
         ok(
             &app,
             &administrator,

@@ -23,6 +23,7 @@ pub mod registration;
 pub mod reminders;
 pub mod reports;
 pub mod resources;
+pub mod study_units;
 pub mod team;
 pub mod workflows;
 
@@ -98,6 +99,15 @@ pub fn router(state: AppState) -> Router {
         .route("/api/perfil", post(accounts::profile))
         .route("/api/password", post(accounts::password))
         .route("/api/catalogos/{resource}", post(catalogs::create))
+        .route(
+            "/api/unidades",
+            post(study_units::create).layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024)),
+        )
+        .route(
+            "/api/unidades/{id}",
+            post(study_units::edit).layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024)),
+        )
+        .route("/api/unidades/{id}/activo", post(study_units::set_active))
         .route("/api/resources", get(resources::catalog))
         .route("/api/records/{resource}", get(resources::list))
         .route("/api/records/{resource}/{id}", get(resources::detail))

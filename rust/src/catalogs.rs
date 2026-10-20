@@ -18,11 +18,6 @@ pub struct CatalogInput {
     #[serde(default)]
     descripcion: String,
     facultad_id: Option<i64>,
-    programa_id: Option<i64>,
-    #[serde(default)]
-    periodo: String,
-    #[serde(default)]
-    ciclo: String,
 }
 pub async fn create(
     State(state): State<AppState>,
@@ -34,16 +29,8 @@ pub async fn create(
     if !user.admin() {
         return Err(AppError::forbidden());
     }
-    domain::validate_text(
-        &input.nombre,
-        if name == "unidades_estudio" { 200 } else { 150 },
-        "Nombre",
-    )?;
-    if input.codigo.chars().count() > 20
-        || input.descripcion.len() > 10000
-        || input.periodo.chars().count() > 20
-        || input.ciclo.chars().count() > 50
-    {
+    domain::validate_text(&input.nombre, 150, "Nombre")?;
+    if input.codigo.chars().count() > 20 || input.descripcion.len() > 10000 {
         return Err(AppError::bad("Datos de catálogo demasiado largos"));
     }
     let id: i64 = match name.as_str() {
@@ -75,14 +62,6 @@ pub async fn create(
             .bind(&input.descripcion)
             .fetch_one(&state.pool)
             .await?
-        }
-        "unidades_estudio" => {
-            domain::validate_text(&input.codigo, 20, "Código")?;
-            domain::validate_text(&input.periodo, 20, "Periodo")?;
-            let program = input
-                .programa_id
-                .ok_or_else(|| AppError::bad("Selecciona el programa"))?;
-            sqlx::query_scalar("INSERT INTO unidades_estudio(codigo,nombre,programa_id,periodo,ciclo,activo,creado_en,actualizado_en) VALUES($1,$2,$3,$4,$5,true,now(),now()) RETURNING id").bind(&input.codigo).bind(&input.nombre).bind(program).bind(&input.periodo).bind(&input.ciclo).fetch_one(&state.pool).await?
         }
         _ => return Err(AppError::not_found()),
     };

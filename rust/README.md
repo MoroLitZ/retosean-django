@@ -96,7 +96,7 @@ These are local demonstration credentials. Do not seed an internet-facing system
 | Hackathons | Creation, stages/time windows, jurors (experts included), team registration/review, voting, ranking, automatic advance and result publication at close, event logistics with guests, final report in PDF/Excel (HU09) |
 | Reports | Django's report builder (HU06): the same five reports, columns, filters and roles, with preview, PDF/Excel generation logged in the history, and sending by email as an attachment; verified cell by cell against Django's catalog. Also role-scoped CSV/PDF/Excel exports of any module |
 | Dashboard | Port of `apps/dashboard`: the same per-role KPIs, charts, quick links and period/faculty/program filters, including the expert juror panel, ecosystem filter and impact indicators; verified to return identical numbers to the Django services on the same database |
-| Catalogs | Native creation of faculties, programs, ecosystems and study units; role-scoped browsing |
+| Catalogs | Native creation of faculties, programs and ecosystems; study units managed by admins and professors (create, edit, optional PDF, deactivate/activate, CSV bulk load matched by program name); role-scoped browsing |
 
 All 49 domain tables have authenticated, paginated read access with an explicit
 role policy. Unmapped tables default to administrator-only access. This read
@@ -226,6 +226,7 @@ build must be validated in the target deployment environment.
 - `src/grading.rs`: rubrics, grading and grade publication (HU12).
 - `src/import.rs`: bulk user import (HU13).
 - `src/closure.rs`: closure agenda, acta, final artifacts, recognitions and logistics requests (HU08).
+- `src/study_units.rs`: study-unit management and CSV load.
 - `src/permissions.rs`: roles, module permissions, participation block and the company operating gate (HU13/HU00).
 - `src/registration.rs`: self-registration and password recovery.
 - `src/mail.rs`, `reminders.rs`: notification email outbox and daily reminders (HU15).

@@ -34,7 +34,7 @@ fn headers_of(row: &[String]) -> Vec<String> {
 }
 
 /// RFC 4180 CSV with the delimiter sniffed among , ; and tab (Excel in Spanish uses ;).
-fn parse_csv(text: &str) -> Vec<Vec<String>> {
+pub(crate) fn parse_csv(text: &str) -> Vec<Vec<String>> {
     let first = text.lines().next().unwrap_or("");
     let delimiter = [',', ';', '\t']
         .into_iter()

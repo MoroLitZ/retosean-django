@@ -317,7 +317,8 @@ async function route() {
       "ecosistemas",
       "unidades_estudio",
     ].includes(selected) &&
-      admin())
+      admin()) ||
+    (selected === "unidades_estudio" && user.rol === "PROFESOR")
   );
   $("new-label").textContent =
     selected === "usuarios"
@@ -1218,6 +1219,15 @@ async function openRecord(id) {
           await mutate(`/api/equipos-academicos/${id}/eliminar`, {});
       });
     }
+  }
+  if (selected === "unidades_estudio" && (admin() || user.rol === "PROFESOR")) {
+    action(actions, "Editar unidad", () => unitForm(record));
+    action(actions, record.activo ? "Desactivar unidad" : "Activar unidad", async () => {
+      const data = await api(`/api/unidades/${id}/activo`, { activo: !record.activo });
+      $("detail-dialog").close();
+      toast(data.mensaje);
+      await loadRecords();
+    });
   }
   if (selected === "documentos_empresas" && admin())
     action(actions, "Revisar documento", () =>
@@ -2534,8 +2544,7 @@ $("new-challenge").onclick = () => {
 };
 async function catalogForm() {
   const fields = [["nombre", "Nombre"]];
-  if (["facultades", "unidades_estudio"].includes(selected))
-    fields.push(["codigo", "Código"]);
+  if (selected === "facultades") fields.push(["codigo", "Código"]);
   if (selected === "ecosistemas")
     fields.push(["descripcion", "Descripción", "textarea"]);
   if (selected === "programas") {
@@ -2547,19 +2556,7 @@ async function catalogForm() {
       data.records.map((r) => ({ value: r.id, label: r.nombre })),
     ]);
   }
-  if (selected === "unidades_estudio") {
-    const data = await api("/api/records/programas?limit=100");
-    fields.push(
-      [
-        "programa_id",
-        "Programa",
-        "select",
-        data.records.map((r) => ({ value: r.id, label: r.nombre })),
-      ],
-      ["periodo", "Periodo (ej. 2026-2)"],
-      ["ciclo", "Ciclo o semestre"],
-    );
-  }
+  if (selected === "unidades_estudio") return unitForm();
   simpleForm(
     "Agregar a " + title(selected),
     `/api/catalogos/${selected}`,
@@ -2570,6 +2567,52 @@ async function catalogForm() {
       facultad_id: data.facultad_id ? Number(data.facultad_id) : null,
     }),
   );
+}
+async function unitForm(record = null) {
+  const programs = await api("/api/records/programas?limit=100");
+  const parent = modal(record ? "Editar Unidad de Estudio" : "Crear Unidad de Estudio");
+  const form = el("form", "form-grid");
+  input(form, "codigo", "Código", record?.codigo || "", "text", true);
+  input(form, "nombre", "Nombre de la unidad", record?.nombre || "", "text", true);
+  choiceSelect(form, "programa", "Programa académico", [["", "Selecciona"], ...programs.records.map((p) => [String(p.id), p.nombre])], record ? String(record.programa_id) : "");
+  input(form, "periodo", "Periodo (ej: 2026-2)", record?.periodo || "");
+  input(form, "ciclo", "Ciclo / Semestre", record?.ciclo || "");
+  const file = input(form, "archivo", record?.archivo ? "Reemplazar archivo (PDF)" : "Archivo (PDF con info completa)", "", "file");
+  file.accept = ".pdf";
+  form.append(el("button", "primary full", "Guardar"));
+  form.onsubmit = (e) => sendUnit(e, form, record ? `/api/unidades/${record.id}` : "/api/unidades");
+  parent.append(form);
+  if (!record) {
+    parent.append(el("h6", "fw-bold mt-3", "Carga masiva (CSV)"));
+    parent.append(el("p", "small text-muted", "Columnas: codigo, nombre, programa (nombre exacto del catálogo), periodo y ciclo opcionales."));
+    const bulk = el("form", "form-grid");
+    const accion = el("input");
+    accion.type = "hidden";
+    accion.name = "accion";
+    accion.value = "cargar_csv";
+    bulk.append(accion);
+    input(bulk, "archivo_csv", "Archivo CSV", "", "file", true).accept = ".csv";
+    bulk.append(el("button", "secondary full", "Cargar CSV"));
+    bulk.onsubmit = (e) => sendUnit(e, bulk, "/api/unidades");
+    parent.append(bulk);
+  }
+}
+async function sendUnit(e, form, url) {
+  e.preventDefault();
+  const button = form.querySelector("button");
+  button.disabled = true;
+  try {
+    const response = await fetch(url, { method: "POST", headers: { "X-CSRF-Token": csrf }, body: new FormData(form) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "No se pudo guardar");
+    $("detail-dialog").close();
+    toast(data.mensaje);
+    await loadRecords();
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    button.disabled = false;
+  }
 }
 function profileForm() {
   simpleForm("Mi Perfil", "/api/perfil", [
