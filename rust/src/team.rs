@@ -177,16 +177,20 @@ pub async fn missing(
 }
 
 /// On publication, linked students are told once (Django notificar_participantes_integracion).
+/// notificar_participantes_integracion: once per student with an account.
 pub async fn notify_students(
     tx: &mut Transaction<'_, Postgres>,
     integration: i64,
     title: &str,
+    teacher: &str,
 ) -> Result<()> {
     let pending: Vec<(i64, i64)> = sqlx::query_as("UPDATE participantes_integracion SET notificado_en=now() WHERE integracion_id=$1 AND rol='ESTUDIANTE' AND usuario_id IS NOT NULL AND notificado_en IS NULL RETURNING id,usuario_id")
         .bind(integration)
         .fetch_all(&mut **tx)
         .await?;
-    let message = format!("Fuiste asignado al reto \"{title}\". Revisa el cronograma de sesiones.");
+    let message = format!(
+        "Fuiste asignado al reto \"{title}\" en el curso de {teacher}. Revisa el cronograma de sesiones."
+    );
     for (_, student) in pending {
         notify(
             tx,
@@ -244,7 +248,15 @@ pub async fn update(
     }
     save(&mut tx, id, reto, &team).await?;
     if estado == "publicada" {
-        notify_students(&mut tx, id, &titulo).await?;
+        let teacher = format!("{} {}", user.first_name, user.last_name)
+            .trim()
+            .to_string();
+        let teacher = if teacher.is_empty() {
+            user.username.clone()
+        } else {
+            teacher
+        };
+        notify_students(&mut tx, id, &titulo, &teacher).await?;
     }
     tx.commit().await?;
     Ok(Json(json!({"ok": true})))

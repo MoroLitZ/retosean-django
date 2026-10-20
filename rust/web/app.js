@@ -899,34 +899,15 @@ async function openRecord(id) {
     // Only the integrating professor (crear_rubrica); the server checks ownership.
     if (user.rol === "PROFESOR" && ["abierto", "en_curso", "pausado"].includes(record.estado))
       action(actions, "Crear rúbrica", () => rubricForm(id));
-    if (
-      (admin() || user.rol === "PROFESOR") &&
-      ["abierto", "en_curso", "pausado"].includes(record.estado)
-    )
-      action(actions, "Registrar seguimiento", () =>
-        simpleForm(
-          "Seguimiento",
-          `/api/retos/${id}/seguimiento`,
-          [
-            [
-              "fecha_sesion",
-              "Fecha",
-              "date",
-              new Date().toLocaleDateString("en-CA", {
-                timeZone: "America/Bogota",
-              }),
-            ],
-            ["porcentaje_avance", "Avance (%)", "number", "0"],
-            ["avances", "Avances", "textarea"],
-            ["observaciones", "Observaciones", "textarea"],
-            ["acuerdos", "Acuerdos", "textarea"],
-          ],
-          (data) => ({
-            ...data,
-            porcentaje_avance: Number(data.porcentaje_avance),
-          }),
-        ),
-      );
+    // _puede_ver_seguimiento: admin, the owning company or the integrated professor.
+    if (admin() || user.rol === "PROFESOR" || (user.rol === "EMPRESA" && record.empresa_id === user.id))
+      action(actions, "Registrar seguimiento", () => progressForm(id));
+    if (user.rol === "EMPRESA" && record.empresa_id === user.id && record.estado === "borrador")
+      action(actions, "Eliminar reto", async () => {
+        if (confirm("¿Eliminar este reto en borrador?")) await mutate(`/api/retos/${id}/eliminar`, {});
+      });
+    if (admin() || (user.rol === "EMPRESA" && record.empresa_id === user.id && ["borrador", "rechazado"].includes(record.estado)))
+      action(actions, "Adjuntar archivos de soporte", () => filesForm(`/api/retos/${id}/archivos`, "Archivos de soporte"));
     if (admin() && !["borrador", "cancelado"].includes(record.estado))
       action(actions, "Definir presupuesto", () =>
         simpleForm("Presupuesto", `/api/retos/${id}/presupuesto`, [
@@ -1020,8 +1001,10 @@ async function openRecord(id) {
     const editable =
       ["borrador", "rechazada"].includes(record.estado) ||
       ["abierto", "en_curso"].includes(record.reto_estado);
-    if (user.rol === "PROFESOR" && record.profesor_id === user.id && editable)
+    if (user.rol === "PROFESOR" && record.profesor_id === user.id && editable) {
+      action(actions, "Editar integración", () => integrationForm(record.reto_id, record));
       action(actions, "Editar equipo y cronograma", () => teamForm(id, team));
+    }
     if (user.rol === "PROFESOR" && record.profesor_id === user.id) {
       if (record.estado === "borrador")
         action(
@@ -1041,16 +1024,19 @@ async function openRecord(id) {
             mutate(`/api/integraciones/${id}/estado`, { estado: "publicada" }),
           true,
         );
-      if (record.estado === "rechazada")
-        action(actions, "Volver a borrador", () =>
-          mutate(`/api/integraciones/${id}/estado`, { estado: "borrador" }),
-        );
     }
-    if (admin() && record.estado === "en_revision") {
+    // Admins and the company that owns the reto review it (HU14).
+    if ((admin() || user.rol === "EMPRESA") && record.estado === "en_revision") {
       action(
         actions,
         "Aprobar integración",
-        () => mutate(`/api/integraciones/${id}/estado`, { estado: "aprobada" }),
+        () =>
+          simpleForm(
+            "Aprobar integración",
+            `/api/integraciones/${id}/estado`,
+            [["comentario", "Comentario", "textarea"]],
+            (data) => ({ ...data, estado: "aprobada" }),
+          ),
         true,
       );
       action(actions, "Rechazar integración", () =>
@@ -1526,27 +1512,100 @@ function submitForm(form, button, path, collect, done) {
     }
   };
 }
-function integrationForm(retoId) {
-  const parent = modal("Integración académica");
+async function integrationForm(retoId, record = null, faculty = null) {
+  const current = faculty ?? record?.facultad ?? "";
+  const options = await api(`/api/integraciones/opciones?facultad=${encodeURIComponent(current)}`);
+  const parent = modal(record ? "Editar integración académica" : "Integración académica");
   const form = el("form");
   const grid = el("div", "form-grid");
-  input(grid, "facultad", "Facultad", "", "text", true);
-  input(grid, "nivel_formacion", "Nivel de formación", "Pregrado", "text", true);
-  input(grid, "programa_academico", "Programa", "", "text", true);
-  input(grid, "ecosistema", "Ecosistema");
-  input(grid, "descripcion", "Descripción", "", "textarea", true);
-  input(grid, "alcance", "Alcance", "", "textarea", true);
-  input(grid, "entregable_esperado", "Entregable esperado", "", "text", true);
-  input(grid, "cronograma_sesiones", "Notas del cronograma", "", "textarea");
+  // IntegracionAcademicaForm: catalog selects; a stored older value stays selectable.
+  const withCurrent = (list, value) => [["", "Selecciona"], ...list.map((v) => [v, v]), ...(value && !list.includes(value) ? [[value, `${value} (actual)`]] : [])];
+  const facultySelect = choiceSelect(grid, "facultad", "Facultad", withCurrent(options.facultades, record?.facultad), current);
+  facultySelect.onchange = () => integrationForm(retoId, record, facultySelect.value).catch(showError);
+  choiceSelect(grid, "nivel_formacion", "Nivel de formación", withCurrent(options.niveles, record?.nivel_formacion), record?.nivel_formacion || "");
+  choiceSelect(grid, "unidad_estudio", "Unidad de estudio", [["", "Selecciona una unidad de estudio"], ...options.unidades.map((u) => [String(u.value), u.label])]);
+  choiceSelect(grid, "ecosistema", "Ecosistema", withCurrent(options.ecosistemas, record?.ecosistema), record?.ecosistema || "");
+  input(grid, "descripcion", "Descripción", record?.descripcion || "", "textarea");
+  input(grid, "alcance", "Alcance", record?.alcance || "", "textarea");
+  input(grid, "entregable_esperado", "Entregable esperado", record?.entregable_esperado || "");
+  input(grid, "espacio_fisico", "Espacio físico", record?.espacio_fisico || "");
+  input(grid, "cronograma_sesiones", "Notas del cronograma", record?.cronograma_sesiones || "", "textarea");
+  input(grid, "requerimientos_empresa", "Requerimientos a la empresa", record?.requerimientos_empresa || "", "textarea");
+  input(grid, "requerimientos_internos", "Requerimientos internos", record?.requerimientos_internos || "", "textarea");
   form.append(grid);
-  const collectTeam = teamEditor(form);
-  const button = el("button", "primary", "Guardar borrador");
-  form.append(el("div", "mt-3"), button);
-  submitForm(form, button, `/api/retos/${retoId}/integrar`, () => ({
-    ...Object.fromEntries([...grid.querySelectorAll("input,textarea")].map((f) => [f.name, f.value])),
-    ...collectTeam(),
-  }));
+  const collectTeam = record ? () => ({}) : teamEditor(form);
+  const collect = (accion) => {
+    const data = Object.fromEntries([...grid.querySelectorAll("input,textarea,select")].map((f) => [f.name, f.value]));
+    data.unidad_estudio = data.unidad_estudio ? Number(data.unidad_estudio) : null;
+    if (record && !data.unidad_estudio) data.programa_academico = record.programa_academico || "";
+    return { ...data, ...collectTeam(), accion };
+  };
+  const url = record ? `/api/integraciones/${record.id}` : `/api/retos/${retoId}/integrar`;
+  const save = el("button", "secondary", "Guardar borrador");
+  const send = el("button", "primary", "Guardar y enviar a revisión");
+  save.type = send.type = "button";
+  for (const [button, accion] of [[save, "guardar"], [send, "enviar"]])
+    button.onclick = async () => {
+      button.disabled = true;
+      try {
+        const result = await api(url, collect(accion));
+        $("detail-dialog").close();
+        toast(result.estado === "en_revision" ? "Integración enviada a aprobación del administrador." : "Integración académica guardada como borrador.");
+        await loadRecords();
+      } catch (error) {
+        toast(error.message);
+      } finally {
+        button.disabled = false;
+      }
+    };
+  const buttons = el("div", "actions mt-3");
+  buttons.append(save, send);
+  form.append(buttons);
   parent.append(form);
+}
+// SeguimientoRetoForm: session type, progress and optional files.
+function progressForm(retoId) {
+  const parent = modal("Seguimiento");
+  const form = el("form", "form-grid");
+  choiceSelect(form, "tipo_sesion", "Tipo de sesión", [["seguimiento", "Seguimiento"], ["inicio", "Inicio"], ["preseleccion", "Preselección"], ["evaluacion", "Evaluación / reconocimiento"], ["otro", "Otro"]], "seguimiento");
+  input(form, "fecha_sesion", "Fecha", new Date().toLocaleDateString("en-CA", { timeZone: "America/Bogota" }), "date");
+  const pct = input(form, "porcentaje_avance", "Avance (%)", "0", "number");
+  pct.min = 0;
+  pct.max = 100;
+  input(form, "avances", "Avances", "", "textarea");
+  input(form, "observaciones", "Observaciones", "", "textarea");
+  input(form, "acuerdos", "Acuerdos", "", "textarea");
+  const files = input(form, "archivos", "Archivos (opcional, máximo 50 MB cada uno)", "", "file");
+  files.multiple = true;
+  form.append(el("button", "primary full", "Registrar seguimiento"));
+  form.onsubmit = (e) => sendMultipart(e, form, `/api/retos/${retoId}/seguimiento`, "Seguimiento registrado.");
+  parent.append(form);
+}
+function filesForm(url, title) {
+  const parent = modal(title);
+  const form = el("form", "form-grid");
+  const files = input(form, "archivos", "Archivos (uno o varios, máximo 50 MB cada uno)", "", "file", true);
+  files.multiple = true;
+  form.append(el("button", "primary full", "Cargar archivos"));
+  form.onsubmit = (e) => sendMultipart(e, form, url, "Archivos cargados.");
+  parent.append(form);
+}
+async function sendMultipart(e, form, url, done) {
+  e.preventDefault();
+  const button = form.querySelector("button");
+  button.disabled = true;
+  try {
+    const response = await fetch(url, { method: "POST", headers: { "X-CSRF-Token": csrf }, body: new FormData(form) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "No se pudo guardar");
+    $("detail-dialog").close();
+    toast(done);
+    await loadRecords();
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    button.disabled = false;
+  }
 }
 function teamForm(integrationId, team) {
   const parent = modal("Equipo y cronograma");

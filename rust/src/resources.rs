@@ -61,7 +61,8 @@ pub fn scope(table: &str, user: &User) -> Option<String> {
         "contactos_empresa" | "documentos_empresas" if user.rol == "EMPRESA" => format!("EXISTS(SELECT 1 FROM empresas e WHERE e.id=t.empresa_id AND e.usuario_id={actor})"),
         "retos" => match user.rol.as_str() {
             "EMPRESA" => format!("t.eliminado_en IS NULL AND t.empresa_id={actor}"),
-            "PROFESOR" => "t.eliminado_en IS NULL AND t.estado IN ('aprobado','abierto','en_curso','pausado','finalizado')".into(),
+            // Any approved reto, and a professor's own integrated one in any state.
+            "PROFESOR" => format!("t.eliminado_en IS NULL AND (t.estado IN ('aprobado','abierto','en_curso','pausado','finalizado') OR EXISTS(SELECT 1 FROM integraciones_academicas i WHERE i.reto_id=t.id AND i.profesor_id={actor}))"),
             "ESTUDIANTE" => "t.eliminado_en IS NULL AND t.estado IN ('abierto','en_curso','pausado','finalizado')".into(),
             _ => return None,
         },
@@ -77,6 +78,12 @@ pub fn scope(table: &str, user: &User) -> Option<String> {
         "cierre_agendacierre" => via_challenge("reto_id"),
         "cierre_entregablefinal" => format!("EXISTS(SELECT 1 FROM cierres_reto c JOIN retos r ON r.id=c.reto_id WHERE c.id=t.cierre_id AND ({challenge}))"),
         "equipos" | "equipos_reto_academico" | "seguimientos_reto" => via_challenge("reto_id"),
+        // Support files follow the reto; follow-up files follow the follow-up.
+        "retos_retoarchivo" => {
+            let reto = scope("retos", user)?.replace("t.", "x.");
+            format!("EXISTS(SELECT 1 FROM retos x WHERE x.id=t.reto_id AND ({reto}))")
+        }
+        "seguimiento_seguimientoarchivo" => format!("EXISTS(SELECT 1 FROM seguimientos_reto s WHERE s.id=t.seguimiento_id AND {})", via_challenge("reto_id").replace("t.reto_id", "s.reto_id")),
         // HU03: the schedule is visible to every party, including assigned participants.
         "sesiones_reto_academico" => format!("({}) OR EXISTS(SELECT 1 FROM participantes_integracion p WHERE p.integracion_id=t.integracion_id AND p.usuario_id={actor})", via_challenge("reto_id")),
         "participantes_integracion" => match user.rol.as_str() {

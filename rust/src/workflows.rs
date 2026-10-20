@@ -787,3 +787,38 @@ pub async fn delivery_log(
         json!({"registros": records, "resumen": summary, "page": page}),
     ))
 }
+
+/// eliminar_reto_borrador: logical delete of the company's own draft, in the history.
+pub async fn delete_challenge(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+) -> Result<Json<Value>> {
+    let user = auth::current(&state, &headers, true).await?;
+    let mut tx = state.pool.begin().await?;
+    let estado: Option<String> = sqlx::query_scalar("SELECT estado FROM retos WHERE id=$1 AND empresa_id=$2 AND $3='EMPRESA' AND eliminado_en IS NULL FOR UPDATE")
+        .bind(id)
+        .bind(user.id)
+        .bind(&user.rol)
+        .fetch_optional(&mut *tx)
+        .await?;
+    let estado = estado.ok_or_else(AppError::not_found)?;
+    if estado != "borrador" {
+        return Err(AppError::bad("Solo puedes eliminar retos en borrador."));
+    }
+    sqlx::query("UPDATE retos SET eliminado_en=now(),actualizado_en=now() WHERE id=$1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    challenge_history(
+        &mut tx,
+        id,
+        &estado,
+        &estado,
+        user.id,
+        "Reto eliminado por la empresa.",
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(Json(json!({"ok":true,"mensaje":"Reto eliminado."})))
+}

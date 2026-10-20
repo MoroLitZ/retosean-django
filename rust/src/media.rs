@@ -32,9 +32,8 @@ pub fn safe_key(key: &str) -> bool {
     };
     name.len() == 32
         && name.bytes().all(|c| c.is_ascii_hexdigit())
-        // xlsx: generated reports (HU06); zip: deliverables imported from Django.
-        // Neither is accepted as a Rust upload.
-        && ["pdf", "png", "jpg", "txt", "xlsx", "zip"].contains(&ext)
+        // xlsx: generated reports (HU06); zip, docx, pptx, csv: support files.
+        && ["pdf", "png", "jpg", "txt", "xlsx", "zip", "docx", "pptx", "csv"].contains(&ext)
 }
 fn file_error(error: std::io::Error) -> AppError {
     tracing::error!(%error,"private storage failure");
@@ -415,4 +414,138 @@ mod tests {
         assert_eq!(extension(b"text").unwrap(), "txt");
         assert!(extension(b"\0\xff\0").is_err());
     }
+}
+
+/// MultipleFileField: up to 50 MB per file (retos and follow-ups).
+pub const ATTACHMENT_LIMIT: usize = 50 * 1024 * 1024;
+/// Support files keep a served extension; Django accepts any file, Rust only
+/// the types its download endpoint serves.
+pub fn attachment_extension(name: &str) -> Result<&'static str> {
+    let ext = name
+        .rsplit_once('.')
+        .map(|(_, e)| e.to_lowercase())
+        .unwrap_or_default();
+    Ok(match ext.as_str() {
+        "pdf" => "pdf",
+        "png" => "png",
+        "jpg" | "jpeg" => "jpg",
+        "txt" => "txt",
+        "xlsx" => "xlsx",
+        "zip" => "zip",
+        "docx" => "docx",
+        "pptx" => "pptx",
+        "csv" => "csv",
+        _ => {
+            return Err(AppError::bad(format!(
+                "{name}: tipo de archivo no permitido (PDF, imagen, texto, Excel, Word, PowerPoint, CSV o ZIP)."
+            )));
+        }
+    })
+}
+/// Writes validated attachments; returns (key, original name, size, path).
+pub async fn save_attachments(
+    state: &AppState,
+    files: &[(String, axum::body::Bytes)],
+) -> Result<Vec<(String, String, i64, std::path::PathBuf)>> {
+    for (name, data) in files {
+        if data.len() > ATTACHMENT_LIMIT {
+            return Err(AppError::bad(format!("{name} supera el limite de 50 MB.")));
+        }
+        attachment_extension(name)?;
+    }
+    tokio::fs::create_dir_all(&state.config.media_root)
+        .await
+        .map_err(file_error)?;
+    let mut saved = Vec::new();
+    for (name, data) in files {
+        let key = format!(
+            "{}.{}",
+            uuid::Uuid::new_v4().simple(),
+            attachment_extension(name)?
+        );
+        let path = state.config.media_root.join(&key);
+        if let Err(error) = tokio::fs::write(&path, data).await {
+            for (_, _, _, written) in &saved {
+                let _ = tokio::fs::remove_file(written).await;
+            }
+            return Err(file_error(error));
+        }
+        let original: String = name.chars().take(255).collect();
+        saved.push((key, original, data.len() as i64, path));
+    }
+    Ok(saved)
+}
+/// Text fields plus every file under `file_field` (retos and follow-ups).
+pub async fn read_with_files(
+    mut multipart: Multipart,
+    file_field: &str,
+) -> Result<(
+    std::collections::HashMap<String, String>,
+    Vec<(String, axum::body::Bytes)>,
+)> {
+    let mut fields = std::collections::HashMap::new();
+    let mut files = Vec::new();
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|_| AppError::bad("Carga inválida"))?
+    {
+        let name = field.name().unwrap_or("").to_string();
+        if name == file_field {
+            let original = field.file_name().unwrap_or("archivo").to_string();
+            let bytes = field
+                .bytes()
+                .await
+                .map_err(|_| AppError::bad(format!("{original} supera el limite de 50 MB.")))?;
+            if !bytes.is_empty() {
+                files.push((original, bytes));
+            }
+        } else {
+            let text = field
+                .text()
+                .await
+                .map_err(|_| AppError::bad("Campo inválido"))?;
+            fields.insert(name, text);
+        }
+    }
+    Ok((fields, files))
+}
+/// RetoForm.archivos: the owning company while it can edit the reto, or an admin.
+pub async fn reto_files(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(reto): Path<i64>,
+    multipart: Multipart,
+) -> Result<Json<Value>> {
+    let user = auth::current(&state, &headers, true).await?;
+    let (_, files) = read_with_files(multipart, "archivos").await?;
+    if files.is_empty() {
+        return Err(AppError::bad("Adjunta al menos un archivo"));
+    }
+    let mut tx = state.pool.begin().await?;
+    let row: Option<(i64, String)> = sqlx::query_as(
+        "SELECT empresa_id,estado FROM retos WHERE id=$1 AND eliminado_en IS NULL FOR UPDATE",
+    )
+    .bind(reto)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let (owner, estado) = row.ok_or_else(AppError::not_found)?;
+    let editable = user.rol == "EMPRESA"
+        && owner == user.id
+        && ["borrador", "rechazado"].contains(&estado.as_str());
+    if !user.admin() && !editable {
+        return Err(AppError::forbidden());
+    }
+    let saved = save_attachments(&state, &files).await?;
+    for (key, original, size, _) in &saved {
+        sqlx::query("INSERT INTO retos_retoarchivo(reto_id,archivo,nombre_original,tamano,creado_en) VALUES($1,$2,$3,$4,now())")
+            .bind(reto).bind(key).bind(original).bind(size).execute(&mut *tx).await?;
+    }
+    if let Err(error) = tx.commit().await {
+        for (_, _, _, path) in saved {
+            let _ = tokio::fs::remove_file(path).await;
+        }
+        return Err(error.into());
+    }
+    Ok(Json(json!({"archivos": saved.len()})))
 }

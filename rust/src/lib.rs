@@ -167,6 +167,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/gastos/{id}/eliminar", post(finance::delete))
         .route("/api/retos/{id}/presupuesto/{format}", get(finance::export))
         .route("/api/retos/{id}/integrar", post(academic::integrate))
+        .route("/api/integraciones/opciones", get(academic::options))
+        .route("/api/integraciones/{id}", post(academic::edit))
         .route(
             "/api/integraciones/{id}/estado",
             post(academic::integration_state),
@@ -181,7 +183,19 @@ pub fn router(state: AppState) -> Router {
             post(media::submit).layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024)),
         )
         .route("/api/archivo/{resource}/{id}/{field}", get(media::download))
-        .route("/api/retos/{id}/seguimiento", post(lifecycle::progress))
+        .route(
+            "/api/retos/{id}/seguimiento",
+            post(lifecycle::progress)
+                .layer(axum::extract::DefaultBodyLimit::max(110 * 1024 * 1024)),
+        )
+        .route(
+            "/api/retos/{id}/archivos",
+            post(media::reto_files).layer(axum::extract::DefaultBodyLimit::max(110 * 1024 * 1024)),
+        )
+        .route(
+            "/api/retos/{id}/eliminar",
+            post(workflows::delete_challenge),
+        )
         .route("/api/retos/{id}/cerrar", post(lifecycle::close))
         .route(
             "/api/retos/{id}/cierre",

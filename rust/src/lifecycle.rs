@@ -11,9 +11,12 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 pub struct ProgressInput {
-    pub fecha_sesion: chrono::NaiveDate,
+    #[serde(default)]
+    pub tipo_sesion: String,
+    pub fecha_sesion: Option<chrono::NaiveDate>,
+    #[serde(default)]
     pub porcentaje_avance: i32,
     #[serde(default)]
     pub avances: String,
@@ -22,14 +25,58 @@ pub struct ProgressInput {
     #[serde(default)]
     pub acuerdos: String,
 }
+/// agregar_seguimiento: admin, the owning company or the integrated professor;
+/// JSON, or multipart with optional files (SeguimientoRetoForm.archivos).
 pub async fn progress(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(reto): Path<i64>,
-    Json(input): Json<ProgressInput>,
+    request: axum::extract::Request,
 ) -> Result<Json<Value>> {
+    use axum::extract::FromRequest;
+    let headers = request.headers().clone();
     let user = auth::current(&state, &headers, true).await?;
+    let multipart = headers
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.starts_with("multipart/"));
+    let (input, files) = if multipart {
+        let form = axum::extract::Multipart::from_request(request, &state)
+            .await
+            .map_err(|_| AppError::bad("Carga inválida"))?;
+        let (fields, files) = crate::media::read_with_files(form, "archivos").await?;
+        let get = |k: &str| fields.get(k).cloned().unwrap_or_default();
+        let input = ProgressInput {
+            tipo_sesion: get("tipo_sesion"),
+            fecha_sesion: match get("fecha_sesion").trim() {
+                "" => None,
+                d => Some(d.parse().map_err(|_| AppError::bad("Fecha inválida"))?),
+            },
+            porcentaje_avance: get("porcentaje_avance").trim().parse().unwrap_or(0),
+            avances: get("avances"),
+            observaciones: get("observaciones"),
+            acuerdos: get("acuerdos"),
+        };
+        (input, files)
+    } else {
+        let Json(input) = Json::<ProgressInput>::from_request(request, &state)
+            .await
+            .map_err(|_| AppError::bad("Avance inválido"))?;
+        (input, Vec::new())
+    };
+    let kind = if input.tipo_sesion.is_empty() {
+        "seguimiento"
+    } else {
+        input.tipo_sesion.as_str()
+    };
     if !(0..=100).contains(&input.porcentaje_avance)
+        || ![
+            "inicio",
+            "seguimiento",
+            "preseleccion",
+            "evaluacion",
+            "otro",
+        ]
+        .contains(&kind)
         || input.avances.len() + input.observaciones.len() + input.acuerdos.len() > 20000
     {
         return Err(AppError::bad(
@@ -37,27 +84,41 @@ pub async fn progress(
         ));
     }
     let mut tx = state.pool.begin().await?;
-    let owner:Option<i64>=sqlx::query_scalar("SELECT empresa_id FROM retos WHERE id=$1 AND eliminado_en IS NULL AND estado IN ('abierto','en_curso','pausado') FOR UPDATE").bind(reto).fetch_optional(&mut *tx).await?;
-    let owner = owner.ok_or_else(|| AppError::bad("El reto no admite seguimiento"))?;
-    let teacher:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2 AND estado='publicada')").bind(reto).bind(user.id).fetch_one(&mut *tx).await?;
-    if !user.admin() && !(user.rol == "PROFESOR" && teacher) {
+    let owner: Option<i64> = sqlx::query_scalar(
+        "SELECT empresa_id FROM retos WHERE id=$1 AND eliminado_en IS NULL FOR UPDATE",
+    )
+    .bind(reto)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let owner = owner.ok_or_else(AppError::not_found)?;
+    let teacher: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2)",
+    )
+    .bind(reto)
+    .bind(user.id)
+    .fetch_one(&mut *tx)
+    .await?;
+    // _puede_ver_seguimiento.
+    let allowed = user.admin()
+        || (user.rol == "EMPRESA" && owner == user.id)
+        || (user.rol == "PROFESOR" && teacher);
+    if !allowed {
         return Err(AppError::forbidden());
     }
-    let id:i64=sqlx::query_scalar("INSERT INTO seguimientos_reto(reto_id,tipo_sesion,fecha_sesion,porcentaje_avance,avances,observaciones,acuerdos,creado_por_id,creado_en) VALUES($1,'seguimiento',$2,$3,$4,$5,$6,$7,now()) RETURNING id")
-        .bind(reto).bind(input.fecha_sesion).bind(input.porcentaje_avance as i16).bind(&input.avances).bind(&input.observaciones).bind(&input.acuerdos).bind(user.id).fetch_one(&mut *tx).await?;
-    notify(
-        &mut tx,
-        owner,
-        "SEGUIMIENTO_REGISTRADO",
-        &format!(
-            "Reto {reto}: avance {}%. {}",
-            input.porcentaje_avance, input.avances
-        ),
-        &format!("seguimiento:{id}"),
-    )
-    .await?;
-    tx.commit().await?;
-    Ok(Json(json!({"id":id})))
+    let id: i64 = sqlx::query_scalar("INSERT INTO seguimientos_reto(reto_id,tipo_sesion,fecha_sesion,porcentaje_avance,avances,observaciones,acuerdos,creado_por_id,creado_en) VALUES($1,$2,COALESCE($3,(now() AT TIME ZONE 'America/Bogota')::date),$4,$5,$6,$7,$8,now()) RETURNING id")
+        .bind(reto).bind(kind).bind(input.fecha_sesion).bind(input.porcentaje_avance as i16).bind(&input.avances).bind(&input.observaciones).bind(&input.acuerdos).bind(user.id).fetch_one(&mut *tx).await?;
+    let saved = crate::media::save_attachments(&state, &files).await?;
+    for (key, original, size, _) in &saved {
+        sqlx::query("INSERT INTO seguimiento_seguimientoarchivo(seguimiento_id,archivo,nombre_original,tamano,creado_en) VALUES($1,$2,$3,$4,now())")
+            .bind(id).bind(key).bind(original).bind(size).execute(&mut *tx).await?;
+    }
+    if let Err(error) = tx.commit().await {
+        for (_, _, _, path) in saved {
+            let _ = tokio::fs::remove_file(path).await;
+        }
+        return Err(error.into());
+    }
+    Ok(Json(json!({"id":id,"archivos":files.len()})))
 }
 #[derive(Deserialize)]
 pub struct CloseInput {
