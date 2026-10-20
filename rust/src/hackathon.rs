@@ -52,11 +52,16 @@ pub async fn options(
         Vec::new()
     };
     let teams: Vec<Value> = if user.rol == "ESTUDIANTE" {
-        sqlx::query_scalar("SELECT jsonb_build_object('value',e.id,'label',e.nombre) FROM equipos e JOIN miembros_equipo m ON m.equipo_id=e.id WHERE e.reto_id=$1 AND m.estudiante_id=$2 ORDER BY e.nombre").bind(reto).bind(user.id).fetch_all(&mut *tx).await?
+        sqlx::query_scalar("SELECT jsonb_build_object('value',e.id,'label',e.nombre) FROM equipos e JOIN miembros_equipo m ON m.equipo_id=e.id WHERE e.reto_id=$1 AND m.estudiante_id=$2 AND NOT EXISTS(SELECT 1 FROM inscripciones_hackaton i WHERE i.hackathon_id=$3 AND i.equipo_id=e.id) ORDER BY e.nombre").bind(reto).bind(user.id).bind(id).fetch_all(&mut *tx).await?
     } else {
         sqlx::query_scalar("SELECT jsonb_build_object('value',e.id,'label',e.nombre) FROM equipos e JOIN inscripciones_hackaton i ON i.equipo_id=e.id WHERE i.hackathon_id=$1 AND i.estado='ACEPTADA' ORDER BY e.nombre").bind(id).fetch_all(&mut *tx).await?
     };
-    Ok(Json(json!({"jurors":jurors,"teams":teams})))
+    // equipos_sin_votar for the juror asking.
+    let pending: Vec<Value> = sqlx::query_scalar("SELECT jsonb_build_object('value',e.id,'label',e.nombre) FROM inscripciones_hackaton i JOIN equipos e ON e.id=i.equipo_id WHERE i.hackathon_id=$1 AND i.estado='ACEPTADA' AND EXISTS(SELECT 1 FROM jurados_hackaton j WHERE j.hackathon_id=$1 AND j.usuario_id=$2) AND NOT EXISTS(SELECT 1 FROM votaciones_hackaton v JOIN jurados_hackaton j ON j.id=v.jurado_id WHERE v.hackathon_id=$1 AND j.usuario_id=$2 AND v.equipo_id=e.id) ORDER BY e.nombre")
+        .bind(id).bind(user.id).fetch_all(&mut *tx).await?;
+    Ok(Json(
+        json!({"jurors":jurors,"teams":teams,"sin_votar":pending}),
+    ))
 }
 use axum::{
     Json,
@@ -407,6 +412,11 @@ pub async fn create(
         return Err(AppError::bad("El reto debe ser de tipo hackathon"));
     }
     let id:i64=sqlx::query_scalar("INSERT INTO hackathons(reto_id,reglas,estado,resultados_publicados,creado_en,actualizado_en) VALUES($1,$2,'borrador',false,now(),now()) RETURNING id").bind(reto).bind(&input.reglas).fetch_one(&mut *tx).await?;
+    // crear_etapas_por_defecto: the backlog's four stages, without dates.
+    sqlx::query("INSERT INTO etapas_hackaton(hackathon_id,tipo,titulo,orden) SELECT $1,t,initcap(t),n FROM unnest(ARRAY['inscripcion','desarrollo','presentacion','premiacion']) WITH ORDINALITY k(t,n) WHERE NOT EXISTS(SELECT 1 FROM etapas_hackaton WHERE hackathon_id=$1)")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
     history(
         &mut tx,
         ("hackaton", "hackathon"),
@@ -439,31 +449,53 @@ pub async fn state(
     if !valid || input.comentario.len() > 4000 {
         return Err(AppError::bad("Transición de hackathon inválida"));
     }
-    sqlx::query("UPDATE hackathons SET estado=$2,resultados_publicados=($2='finalizado'),actualizado_en=now() WHERE id=$1").bind(id).bind(&input.estado).execute(&mut *tx).await?;
-    history(
-        &mut tx,
-        ("hackaton", "hackathon"),
-        id,
-        &from,
-        &input.estado,
-        user.id,
-        &input.comentario,
-    )
-    .await?;
-    let members:Vec<i64>=sqlx::query_scalar("SELECT DISTINCT m.estudiante_id FROM miembros_equipo m JOIN inscripciones_hackaton i ON i.equipo_id=m.equipo_id WHERE i.hackathon_id=$1 AND i.estado='ACEPTADA'").bind(id).fetch_all(&mut *tx).await?;
-    for member in members {
-        notify(
+    if input.estado == "finalizado" {
+        let comment = if input.comentario.is_empty() {
+            "Resultados publicados."
+        } else {
+            input.comentario.as_str()
+        };
+        crate::event::publish_results(&mut tx, id, &from, user.id, comment).await?;
+    } else {
+        sqlx::query("UPDATE hackathons SET estado=$2,actualizado_en=now() WHERE id=$1")
+            .bind(id)
+            .bind(&input.estado)
+            .execute(&mut *tx)
+            .await?;
+        history(
             &mut tx,
-            member,
-            match input.estado.as_str() {
-                "publicado" => "HACKATON_PUBLICADO",
-                "finalizado" => "HACKATON_RESULTADOS",
-                _ => "HACKATON_ESTADO_CAMBIADO",
-            },
-            &format!("Hackathon {id}: {}", input.estado),
-            &format!("hackathon:{id}:{}", input.estado),
+            ("hackaton", "hackathon"),
+            id,
+            &from,
+            &input.estado,
+            user.id,
+            &input.comentario,
         )
         .await?;
+    }
+    if input.estado == "publicado" {
+        // publicar: the reto's accepted applicants are invited to register.
+        let title: String = sqlx::query_scalar("SELECT titulo FROM retos WHERE id=$1")
+            .bind(reto)
+            .fetch_one(&mut *tx)
+            .await?;
+        let students: Vec<i64> = sqlx::query_scalar("SELECT DISTINCT p.estudiante_id FROM postulaciones p JOIN usuarios u ON u.id=p.estudiante_id WHERE p.reto_id=$1 AND p.estado='ACEPTADA' AND u.is_active")
+            .bind(reto)
+            .fetch_all(&mut *tx)
+            .await?;
+        let message = format!(
+            "El hackathon del reto '{title}' ya esta publicado. Inscribe a tu equipo desde la plataforma."
+        );
+        for student in students {
+            notify(
+                &mut tx,
+                student,
+                "HACKATON_PUBLICADO",
+                &message,
+                &format!("hackaton:{id}:publicado"),
+            )
+            .await?;
+        }
     }
     tx.commit().await?;
     Ok(Json(json!({"estado":input.estado})))
@@ -570,6 +602,16 @@ pub async fn register(
     let member:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM miembros_equipo m JOIN equipos e ON e.id=m.equipo_id WHERE m.equipo_id=$1 AND m.estudiante_id=$2 AND e.reto_id=$3)").bind(input.equipo_id).bind(user.id).bind(reto).fetch_one(&mut *tx).await?;
     if !member {
         return Err(AppError::forbidden());
+    }
+    let registered: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM inscripciones_hackaton WHERE hackathon_id=$1 AND equipo_id=$2)")
+        .bind(id)
+        .bind(input.equipo_id)
+        .fetch_one(&mut *tx)
+        .await?;
+    if registered {
+        return Err(AppError::bad(
+            "Este equipo ya esta inscrito en el hackathon.",
+        ));
     }
     let registration:i64=sqlx::query_scalar("INSERT INTO inscripciones_hackaton(hackathon_id,equipo_id,estado,inscrito_por_id,creado_en) VALUES($1,$2,'PENDIENTE',$3,now()) RETURNING id").bind(id).bind(input.equipo_id).bind(user.id).fetch_one(&mut *tx).await?;
     history(
@@ -688,6 +730,8 @@ pub async fn ranking(
     if !published && !user.admin() {
         return Err(AppError::forbidden());
     }
-    let rows:Vec<Value>=sqlx::query_scalar("SELECT jsonb_build_object('equipo_id',e.id,'equipo',e.nombre,'promedio',round(avg(v.puntaje),2),'votos',count(v.id)) FROM votaciones_hackaton v JOIN equipos e ON e.id=v.equipo_id JOIN inscripciones_hackaton i ON i.equipo_id=e.id AND i.hackathon_id=v.hackathon_id WHERE v.hackathon_id=$1 AND i.estado='ACEPTADA' GROUP BY e.id ORDER BY avg(v.puntaje) DESC,count(v.id) DESC,e.nombre").bind(id).fetch_all(&state.pool).await?;
+    // services.ranking: by average, then more votes, then name; position from 1.
+    let rows: Vec<Value> = sqlx::query_scalar("SELECT jsonb_build_object('posicion',row_number() OVER (ORDER BY avg(v.puntaje) DESC,count(v.id) DESC,e.nombre),'equipo_id',e.id,'equipo',e.nombre,'promedio',round(avg(v.puntaje),2),'total',sum(v.puntaje),'votos',count(v.id)) FROM votaciones_hackaton v JOIN equipos e ON e.id=v.equipo_id WHERE v.hackathon_id=$1 GROUP BY e.id ORDER BY avg(v.puntaje) DESC,count(v.id) DESC,e.nombre")
+        .bind(id).fetch_all(&state.pool).await?;
     Ok(Json(json!({"ranking":rows})))
 }

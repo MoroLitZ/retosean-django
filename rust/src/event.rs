@@ -19,9 +19,13 @@ use sqlx::PgPool;
 /// Same rules as services.avanzar_por_calendario. Idempotent; returns what changed.
 pub async fn advance(pool: &PgPool, id: i64) -> Result<Vec<&'static str>> {
     let mut tx = pool.begin().await?;
-    let row: Option<(String, bool, String)> = sqlx::query_as("SELECT h.estado,h.resultados_publicados,r.titulo FROM hackathons h JOIN retos r ON r.id=h.reto_id WHERE h.id=$1 FOR UPDATE OF h")
-        .bind(id).fetch_optional(&mut *tx).await?;
-    let Some((mut estado, published, title)) = row else {
+    let row: Option<(String, bool)> = sqlx::query_as(
+        "SELECT estado,resultados_publicados FROM hackathons WHERE id=$1 FOR UPDATE",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some((mut estado, published)) = row else {
         return Ok(vec![]);
     };
     let mut changes = vec![];
@@ -49,41 +53,75 @@ pub async fn advance(pool: &PgPool, id: i64) -> Result<Vec<&'static str>> {
     let closed: bool = sqlx::query_scalar("SELECT COALESCE(COALESCE((SELECT min(inicia_en) FROM etapas_hackaton WHERE hackathon_id=$1 AND tipo='premiacion'),(SELECT max(termina_en) FROM etapas_hackaton WHERE hackathon_id=$1)) <= now(), false)")
         .bind(id).fetch_one(&mut *tx).await?;
     if ["publicado", "en_curso"].contains(&estado.as_str()) && !published && closed {
-        sqlx::query("UPDATE hackathons SET estado='finalizado',resultados_publicados=true,actualizado_en=now() WHERE id=$1").bind(id).execute(&mut *tx).await?;
-        history(
+        publish_results(
             &mut tx,
-            ("hackaton", "hackathon"),
             id,
             &estado,
-            "finalizado",
             0,
             "Cierre automatico segun el calendario: resultados publicados.",
         )
         .await?;
-        let winner: Option<String> = sqlx::query_scalar("SELECT e.nombre FROM votaciones_hackaton v JOIN equipos e ON e.id=v.equipo_id WHERE v.hackathon_id=$1 GROUP BY e.id ORDER BY avg(v.puntaje) DESC,count(v.id) DESC,e.nombre LIMIT 1")
-            .bind(id).fetch_optional(&mut *tx).await?;
-        let mut message = format!("Ya estan publicados los resultados del hackathon '{title}'.");
-        if let Some(w) = winner {
-            message.push_str(&format!(" Equipo ganador: {w}."));
-        }
-        let members: Vec<i64> = sqlx::query_scalar("SELECT DISTINCT m.estudiante_id FROM miembros_equipo m JOIN inscripciones_hackaton i ON i.equipo_id=m.equipo_id WHERE i.hackathon_id=$1")
-            .bind(id).fetch_all(&mut *tx).await?;
-        for member in members {
-            notify(
-                &mut tx,
-                member,
-                "HACKATON_RESULTADOS",
-                &message,
-                &format!("hackaton:{id}:resultados"),
-            )
-            .await?;
-        }
         changes.push("resultados_publicados");
     }
     tx.commit().await?;
     Ok(changes)
 }
 
+/// publicar_resultados: results public, the hackathon finished, and every
+/// registered team member told the winner.
+pub async fn publish_results(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    id: i64,
+    from: &str,
+    user: i64,
+    comment: &str,
+) -> Result<()> {
+    sqlx::query("UPDATE hackathons SET estado='finalizado',resultados_publicados=true,actualizado_en=now() WHERE id=$1")
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
+    if from != "finalizado" {
+        history(
+            tx,
+            ("hackaton", "hackathon"),
+            id,
+            from,
+            "finalizado",
+            user,
+            comment,
+        )
+        .await?;
+    }
+    let title: String = sqlx::query_scalar(
+        "SELECT r.titulo FROM hackathons h JOIN retos r ON r.id=h.reto_id WHERE h.id=$1",
+    )
+    .bind(id)
+    .fetch_one(&mut **tx)
+    .await?;
+    let winner: Option<String> = sqlx::query_scalar("SELECT e.nombre FROM votaciones_hackaton v JOIN equipos e ON e.id=v.equipo_id WHERE v.hackathon_id=$1 GROUP BY e.id ORDER BY avg(v.puntaje) DESC,count(v.id) DESC,e.nombre LIMIT 1")
+        .bind(id)
+        .fetch_optional(&mut **tx)
+        .await?;
+    let mut message = format!("Ya estan publicados los resultados del hackathon '{title}'.");
+    if let Some(w) = winner {
+        message.push_str(&format!(" Equipo ganador: {w}."));
+    }
+    let members: Vec<i64> = sqlx::query_scalar("SELECT DISTINCT m.estudiante_id FROM miembros_equipo m JOIN inscripciones_hackaton i ON i.equipo_id=m.equipo_id JOIN usuarios u ON u.id=m.estudiante_id WHERE i.hackathon_id=$1 AND u.is_active")
+        .bind(id)
+        .fetch_all(&mut **tx)
+        .await?;
+    for member in members {
+        notify(
+            tx,
+            member,
+            "HACKATON_RESULTADOS",
+            &message,
+            &format!("hackaton:{id}:resultados"),
+        )
+        .await?;
+    }
+    Ok(())
+}
 /// Advances every published or running hackathon (CLI `advance-hackathons`).
 pub async fn advance_all(pool: &PgPool) -> Result<usize> {
     let ids: Vec<i64> =
