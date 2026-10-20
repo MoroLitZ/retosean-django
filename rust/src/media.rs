@@ -104,7 +104,8 @@ pub async fn submit(
     if eligible.is_none() {
         return Err(AppError::bad("El reto no admite entregas"));
     }
-    let accepted:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM postulaciones WHERE reto_id=$1 AND estudiante_id=$2 AND estado='ACEPTADA')").bind(reto).bind(user.id).fetch_one(&mut *tx).await?;
+    // _estudiante_participa_en: accepted, on an academic team, or already submitted.
+    let accepted:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM postulaciones WHERE reto_id=$1 AND estudiante_id=$2 AND estado='ACEPTADA') OR EXISTS(SELECT 1 FROM equipos_reto_academico_estudiantes m JOIN equipos_reto_academico q ON q.id=m.equiporetoacademico_id WHERE q.reto_id=$1 AND m.usuario_id=$2) OR EXISTS(SELECT 1 FROM entregables WHERE reto_id=$1 AND estudiante_id=$2)").bind(reto).bind(user.id).fetch_one(&mut *tx).await?;
     if !accepted {
         return Err(AppError::forbidden());
     }

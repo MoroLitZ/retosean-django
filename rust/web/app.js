@@ -2469,34 +2469,45 @@ function challengeForm(record = {}) {
   };
   parent.append(form);
 }
-function applicationForm(id) {
+async function applicationForm(id) {
+  // PostulacionForm: catalog program, optional PDF CV, required terms.
+  const options = await api("/api/registro/opciones");
   const parent = modal("Postularme al reto");
-  const form = document.createElement("form");
-  input(
-    form,
-    "motivacion",
-    "¿Por qué quieres participar?",
-    "",
-    "textarea",
-    true,
-  );
+  const form = el("form", "form-grid");
+  input(form, "motivacion", "¿Por qué quieres participar?", "", "textarea", true);
   input(form, "habilidades", "Habilidades", "", "textarea");
-  input(form, "programa", "Programa académico");
+  choiceSelect(form, "programa", "Programa académico", [["", "Selecciona tu programa académico"], ...options.programas.map((p) => [p.nombre, p.label])]);
   const semester = input(form, "semestre", "Semestre", "1", "number", true);
   semester.min = 1;
-  semester.max = 20;
-  const button = document.createElement("button");
-  button.className = "primary";
-  button.textContent = "Enviar postulación";
+  semester.max = 12;
+  const cv = input(form, "hoja_de_vida", "Hoja de vida o portafolio (PDF, opcional)", "", "file");
+  cv.accept = ".pdf";
+  const terms = el("div", "form-check full");
+  const box = el("input", "form-check-input");
+  box.type = "checkbox";
+  box.name = "acepta_terminos";
+  box.id = "field-acepta_terminos";
+  box.required = true;
+  const label = el("label", "form-check-label", "Acepto los términos y condiciones del reto y el tratamiento de mis datos personales");
+  label.htmlFor = box.id;
+  terms.append(box, label);
+  form.append(terms);
+  const button = el("button", "primary full", "Enviar postulación");
   form.append(button);
   form.onsubmit = async (e) => {
     e.preventDefault();
+    button.disabled = true;
     try {
-      const data = Object.fromEntries(new FormData(form));
-      data.semestre = Number(data.semestre);
-      await mutate(`/api/retos/${id}/postular`, data);
+      const response = await fetch(`/api/retos/${id}/postular`, { method: "POST", headers: { "X-CSRF-Token": csrf }, body: new FormData(form) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo enviar la postulación");
+      $("detail-dialog").close();
+      toast("¡Tu postulación fue enviada! La empresa fue notificada y revisará tu solicitud.");
+      await loadRecords();
     } catch (error) {
       toast(error.message);
+    } finally {
+      button.disabled = false;
     }
   };
   parent.append(form);

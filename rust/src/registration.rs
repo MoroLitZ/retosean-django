@@ -32,7 +32,7 @@ fn site() -> String {
 
 /// GET (public): catalogs the registration forms need.
 pub async fn options(State(state): State<AppState>) -> Result<Json<Value>> {
-    let programas: Value = sqlx::query_scalar("SELECT coalesce(jsonb_agg(jsonb_build_object('value',p.id,'label',p.nombre||' ('||f.nombre||')') ORDER BY p.nombre),'[]') FROM programas p JOIN facultades f ON f.id=p.facultad_id")
+    let programas: Value = sqlx::query_scalar("SELECT coalesce(jsonb_agg(jsonb_build_object('value',p.id,'nombre',p.nombre,'label',p.nombre||' ('||f.nombre||')') ORDER BY p.nombre),'[]') FROM programas p JOIN facultades f ON f.id=p.facultad_id")
         .fetch_one(&state.pool).await?;
     let facultades: Value = sqlx::query_scalar("SELECT coalesce(jsonb_agg(jsonb_build_object('value',id,'label',nombre) ORDER BY nombre),'[]') FROM facultades")
         .fetch_one(&state.pool).await?;

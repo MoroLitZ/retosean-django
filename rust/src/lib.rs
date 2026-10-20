@@ -125,7 +125,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/retos/{id}", post(workflows::edit_challenge))
         .route("/api/retos/{id}/estado", post(workflows::challenge_state))
         .route("/api/retos/{id}/favorito", post(workflows::favorite))
-        .route("/api/retos/{id}/postular", post(workflows::apply))
+        .route(
+            "/api/retos/{id}/postular",
+            post(workflows::apply).layer(axum::extract::DefaultBodyLimit::max(6 * 1024 * 1024)),
+        )
         .route(
             "/api/postulaciones/{id}/estado",
             post(workflows::application_state),

@@ -827,7 +827,7 @@ async fn native_http_lifecycle_and_permissions() {
             &student,
             "POST",
             &format!("/api/retos/{id}/postular"),
-            Some(json!({"motivacion":"Quiero aprender Rust","semestre":6})),
+            Some(json!({"motivacion":"Quiero aprender Rust","semestre":6,"acepta_terminos":true})),
         )
         .await;
         let application = application["id"].as_i64().unwrap();
@@ -845,7 +845,7 @@ async fn native_http_lifecycle_and_permissions() {
                 &student,
                 "POST",
                 &format!("/api/retos/{id}/postular"),
-                Some(json!({"motivacion":"Intento de reapertura"}))
+                Some(json!({"motivacion":"Intento de reapertura","acepta_terminos":true}))
             )
             .await
             .0,

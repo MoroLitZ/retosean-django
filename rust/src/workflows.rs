@@ -289,25 +289,100 @@ pub async fn favorite(
     tx.commit().await?;
     Ok(Json(json!({"favorito":deleted==0})))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 pub struct ApplicationInput {
+    #[serde(default)]
     motivacion: String,
     #[serde(default)]
     habilidades: String,
     semestre: Option<i32>,
     #[serde(default)]
     programa: String,
+    #[serde(default)]
+    acepta_terminos: bool,
 }
+/// The application as JSON, or multipart when it carries the CV (hoja_de_vida).
+async fn application_form(
+    state: &AppState,
+    request: axum::extract::Request,
+) -> Result<(ApplicationInput, Option<axum::body::Bytes>)> {
+    use axum::extract::FromRequest;
+    let multipart = request
+        .headers()
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.starts_with("multipart/"));
+    if !multipart {
+        let Json(input) = Json::<ApplicationInput>::from_request(request, state)
+            .await
+            .map_err(|_| AppError::bad("Datos de postulación inválidos"))?;
+        return Ok((input, None));
+    }
+    let mut form = axum::extract::Multipart::from_request(request, state)
+        .await
+        .map_err(|_| AppError::bad("Carga inválida"))?;
+    let mut input = ApplicationInput::default();
+    let mut cv = None;
+    while let Some(field) = form
+        .next_field()
+        .await
+        .map_err(|_| AppError::bad("Carga inválida"))?
+    {
+        let name = field.name().unwrap_or("").to_string();
+        if name == "hoja_de_vida" {
+            let filename = field.file_name().unwrap_or("").to_lowercase();
+            let bytes = field
+                .bytes()
+                .await
+                .map_err(|_| AppError::bad("La hoja de vida no puede superar 5 MB."))?;
+            if bytes.is_empty() {
+                continue;
+            }
+            // PostulacionForm.clean_hoja_de_vida: PDF only, 5 MB.
+            if !filename.ends_with(".pdf") || !bytes.starts_with(b"%PDF") {
+                return Err(AppError::bad("La hoja de vida debe ser un archivo PDF."));
+            }
+            if bytes.len() > 5 * 1024 * 1024 {
+                return Err(AppError::bad("La hoja de vida no puede superar 5 MB."));
+            }
+            cv = Some(bytes);
+            continue;
+        }
+        let text = field
+            .text()
+            .await
+            .map_err(|_| AppError::bad("Datos de postulación inválidos"))?;
+        match name.as_str() {
+            "motivacion" => input.motivacion = text,
+            "habilidades" => input.habilidades = text,
+            "programa" => input.programa = text.trim().to_string(),
+            "semestre" if !text.trim().is_empty() => {
+                input.semestre = Some(
+                    text.trim()
+                        .parse()
+                        .map_err(|_| AppError::bad("Semestre inválido"))?,
+                )
+            }
+            "acepta_terminos" => {
+                input.acepta_terminos = ["on", "true", "1"].contains(&text.as_str())
+            }
+            _ => {}
+        }
+    }
+    Ok((input, cv))
+}
+/// postular_a_reto (HU10/HU11).
 pub async fn apply(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(id): Path<i64>,
-    Json(input): Json<ApplicationInput>,
+    request: axum::extract::Request,
 ) -> Result<Json<Value>> {
+    let headers = request.headers().clone();
     let user = auth::current(&state, &headers, true).await?;
     if user.rol != "ESTUDIANTE" {
         return Err(AppError::forbidden());
     }
+    let (input, cv) = application_form(&state, request).await?;
     domain::validate_text(&input.motivacion, 5000, "Motivación")?;
     if input.habilidades.len() > 5000
         || input.programa.chars().count() > 150
@@ -315,47 +390,144 @@ pub async fn apply(
     {
         return Err(AppError::bad("Datos de postulación inválidos"));
     }
+    if !input.acepta_terminos {
+        return Err(AppError::bad(
+            "Debes aceptar los términos y condiciones para postularte.",
+        ));
+    }
     let mut tx = state.pool.begin().await?;
-    let owner: Option<i64> = sqlx::query_scalar("SELECT empresa_id FROM retos WHERE id=$1 AND estado='abierto' AND eliminado_en IS NULL AND (fecha_limite_postulacion IS NULL OR fecha_limite_postulacion >= (now() at time zone 'America/Bogota')::date) FOR UPDATE").bind(id).fetch_optional(&mut *tx).await?;
-    let owner = owner
+    let row: Option<(i64, String)> = sqlx::query_as("SELECT empresa_id,titulo FROM retos WHERE id=$1 AND estado='abierto' AND eliminado_en IS NULL AND (fecha_limite_postulacion IS NULL OR fecha_limite_postulacion >= (now() at time zone 'America/Bogota')::date) FOR UPDATE").bind(id).fetch_optional(&mut *tx).await?;
+    let (owner, title) = row
         .ok_or_else(|| AppError::bad("El reto no está abierto o venció la fecha de postulación"))?;
-    let previous: Option<(i64, String)> = sqlx::query_as(
-        "SELECT id,estado FROM postulaciones WHERE reto_id=$1 AND estudiante_id=$2 FOR UPDATE",
+    let previous: Option<(i64, String, String)> = sqlx::query_as(
+        "SELECT id,estado,programa FROM postulaciones WHERE reto_id=$1 AND estudiante_id=$2 FOR UPDATE",
     )
     .bind(id)
     .bind(user.id)
     .fetch_optional(&mut *tx)
     .await?;
-    if previous
-        .as_ref()
-        .is_some_and(|(_, s)| ["ACEPTADA", "RECHAZADA"].contains(&s.as_str()))
-    {
-        return Err(AppError::bad(
-            "Una postulación resuelta no se puede reenviar",
-        ));
+    match previous.as_ref().map(|p| p.1.as_str()) {
+        Some("ACEPTADA") => {
+            return Err(AppError::bad(
+                "Ya fuiste aceptado en este reto. No es necesario volver a postularte.",
+            ));
+        }
+        Some("RECHAZADA") => {
+            return Err(AppError::bad(
+                "Tu postulacion a este reto fue rechazada y no puede reenviarse.",
+            ));
+        }
+        _ => {}
     }
-    let application: i64 = sqlx::query_scalar("INSERT INTO postulaciones(reto_id,estudiante_id,fecha_postulacion,estado,motivacion,habilidades,semestre,programa) VALUES($1,$2,now(),'PENDIENTE',$3,$4,$5,$6) ON CONFLICT(reto_id,estudiante_id) DO UPDATE SET estado='PENDIENTE',motivacion=excluded.motivacion,habilidades=excluded.habilidades,semestre=excluded.semestre,programa=excluded.programa RETURNING id")
-        .bind(id).bind(user.id).bind(&input.motivacion).bind(&input.habilidades).bind(input.semestre).bind(&input.programa).fetch_one(&mut *tx).await?;
-    history(
-        &mut tx,
-        ("participaciones", "postulacion"),
-        application,
-        previous.as_ref().map(|(_, s)| s.as_str()).unwrap_or(""),
-        "PENDIENTE",
-        user.id,
-        "Postulación registrada",
-    )
-    .await?;
+    // The program comes from the catalog; an older value already saved stays valid.
+    if !input.programa.is_empty() && previous.as_ref().is_none_or(|p| p.2 != input.programa) {
+        let known: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM programas WHERE nombre=$1)")
+                .bind(&input.programa)
+                .fetch_one(&mut *tx)
+                .await?;
+        if !known {
+            return Err(AppError::bad(
+                "Escoja una opción válida. El programa no está entre las opciones disponibles.",
+            ));
+        }
+    }
+    let key = cv
+        .as_ref()
+        .map(|_| format!("{}.pdf", uuid::Uuid::new_v4().simple()));
+    let (application, estado): (i64, String) = match &previous {
+        None => {
+            let id = sqlx::query_scalar("INSERT INTO postulaciones(reto_id,estudiante_id,fecha_postulacion,estado,motivacion,habilidades,semestre,programa,hoja_de_vida,acepta_terminos) VALUES($1,$2,now(),'PENDIENTE',$3,$4,$5,$6,$7,true) RETURNING id")
+                .bind(id).bind(user.id).bind(&input.motivacion).bind(&input.habilidades).bind(input.semestre).bind(&input.programa).bind(key.as_deref().unwrap_or("")).fetch_one(&mut *tx).await?;
+            history(
+                &mut tx,
+                ("participaciones", "postulacion"),
+                id,
+                "",
+                "PENDIENTE",
+                user.id,
+                "Postulacion enviada.",
+            )
+            .await?;
+            (id, "PENDIENTE".into())
+        }
+        Some((existing, from, _)) => {
+            // Editing keeps the state; a withdrawn application is re-submitted.
+            let to = if from == "RETIRADA" {
+                "PENDIENTE"
+            } else {
+                from.as_str()
+            };
+            sqlx::query("UPDATE postulaciones SET motivacion=$2,habilidades=$3,semestre=$4,programa=$5,hoja_de_vida=COALESCE($6,hoja_de_vida),acepta_terminos=true,estado=$7 WHERE id=$1")
+                .bind(existing).bind(&input.motivacion).bind(&input.habilidades).bind(input.semestre).bind(&input.programa).bind(key.as_deref()).bind(to).execute(&mut *tx).await?;
+            if from == "RETIRADA" {
+                domain::transition("MAQUINA_POSTULACION", from, "PENDIENTE")?;
+                history(
+                    &mut tx,
+                    ("participaciones", "postulacion"),
+                    *existing,
+                    from,
+                    "PENDIENTE",
+                    user.id,
+                    "Postulacion reenviada.",
+                )
+                .await?;
+            }
+            (*existing, to.to_string())
+        }
+    };
+    let name = {
+        let full = format!("{} {}", user.first_name, user.last_name)
+            .trim()
+            .to_string();
+        if full.is_empty() {
+            user.username.clone()
+        } else {
+            full
+        }
+    };
+    let new_key = format!("postulacion-nueva:{id}:{}", user.id);
     notify(
         &mut tx,
         owner,
-        "NUEVA_POSTULACION",
-        &format!("{} se postuló al reto {id}", user.username),
-        &format!("postulacion:{application}:pendiente"),
+        "POSTULACION_NUEVA",
+        &format!("{name} se ha postulado a tu reto \"{title}\"."),
+        &new_key,
     )
     .await?;
-    tx.commit().await?;
-    Ok(Json(json!({"id":application,"estado":"PENDIENTE"})))
+    sqlx::query("UPDATE notificaciones SET titulo='Nueva postulacion recibida',tipo='EXITO' WHERE usuario_id=$1 AND clave_dedupe=$2")
+        .bind(owner)
+        .bind(&new_key)
+        .execute(&mut *tx)
+        .await?;
+    notify(
+        &mut tx,
+        user.id,
+        "POSTULACION_RECIBIDA",
+        &format!("Recibimos tu postulacion al reto \"{title}\". Te avisaremos cuando la empresa la revise."),
+        &format!("postulacion-recibida:{application}:{estado}"),
+    )
+    .await?;
+    let path = match (&key, &cv) {
+        (Some(key), Some(bytes)) => {
+            tokio::fs::create_dir_all(&state.config.media_root)
+                .await
+                .map_err(|_| AppError::bad("No se pudo guardar la hoja de vida"))?;
+            let path = state.config.media_root.join(key);
+            tokio::fs::write(&path, bytes)
+                .await
+                .map_err(|_| AppError::bad("No se pudo guardar la hoja de vida"))?;
+            Some(path)
+        }
+        _ => None,
+    };
+    if let Err(error) = tx.commit().await {
+        if let Some(path) = path {
+            let _ = tokio::fs::remove_file(path).await;
+        }
+        return Err(error.into());
+    }
+    Ok(Json(json!({"id":application,"estado":estado})))
 }
 pub async fn application_state(
     State(state): State<AppState>,
@@ -487,4 +659,29 @@ pub async fn user_status(
         .await?;
     tx.commit().await?;
     Ok(Json(json!({"ok":true})))
+}
+
+/// The company opening its applications moves pending ones to EN_REVISION
+/// (participaciones.services, "La empresa abrio la postulacion.").
+pub async fn mark_applications_in_review(state: &AppState, user: &auth::User) -> Result<()> {
+    if user.rol != "EMPRESA" {
+        return Ok(());
+    }
+    let mut tx = state.pool.begin().await?;
+    let opened: Vec<i64> = sqlx::query_scalar("UPDATE postulaciones SET estado='EN_REVISION' WHERE estado='PENDIENTE' AND reto_id IN (SELECT id FROM retos WHERE empresa_id=$1) RETURNING id")
+        .bind(user.id).fetch_all(&mut *tx).await?;
+    for id in opened {
+        history(
+            &mut tx,
+            ("participaciones", "postulacion"),
+            id,
+            "PENDIENTE",
+            "EN_REVISION",
+            user.id,
+            "La empresa abrio la postulacion.",
+        )
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
 }

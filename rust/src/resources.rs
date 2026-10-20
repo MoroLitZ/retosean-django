@@ -188,6 +188,8 @@ pub struct Filters {
     pub limit: Option<u32>,
     /// unidades_estudio: Django lists active units unless activo=0.
     pub activo: Option<String>,
+    /// retos: the explorer's ecosystem filter (academico:explorar_retos).
+    pub ecosistema: Option<i64>,
 }
 pub async fn rows(
     state: &AppState,
@@ -218,10 +220,11 @@ pub async fn rows(
     );
     let base = format!(
         "WITH actor AS (SELECT $1::bigint id) SELECT {expr} data FROM \"{table}\" t WHERE ({policy}) AND ({expr})::text ILIKE $2{}",
-        if table == "unidades_estudio" && filters.activo.as_deref() != Some("0") {
-            " AND t.activo"
-        } else {
-            ""
+        match (table, filters.ecosistema) {
+            ("unidades_estudio", _) if filters.activo.as_deref() != Some("0") =>
+                " AND t.activo".to_string(),
+            ("retos", Some(ecosystem)) => format!(" AND t.ecosistema_id={ecosystem}"),
+            _ => String::new(),
         }
     );
     let count: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM ({base}) visible"))
@@ -252,6 +255,9 @@ pub async fn list(
     let user = auth::current(&state, &headers, false).await?;
     if name == "entregables" {
         crate::grading::mark_in_review(&state, &user).await?;
+    }
+    if name == "postulaciones" {
+        crate::workflows::mark_applications_in_review(&state, &user).await?;
     }
     Ok(Json(rows(&state, &user, &name, &filters, false).await?))
 }
