@@ -104,25 +104,41 @@ coverage does not imply every original form or command has been ported.
 
 ## Remaining work before replacing Django
 
-- Full user-role administration (role changes, per-module permissions). Rust
-  requires 12-character passwords; Django has no password validators configured.
-- Editing the operational student teams of an integration (structured team and schedule are native).
+- Rust requires 12-character passwords; Django has no password validators configured.
 - Complete company registration/contact forms and every legal-onboarding edge case.
-- Full closure agenda editing, recognition management and final-artifact upload.
 - Report PDFs list rows as labelled text rather than Django's landscape table.
   Generic module exports are capped at 5,000 records; Excel stores values as
   literal strings to preserve identifiers, exact decimals and formula safety.
-- Full CRUD and file management for study-unit catalogs (creation is native).
-- Automated migration/import of an existing Django database and its media.
-  Django migration history is not synthesized by `init-db`; do not run Django
+- The study-unit list shows inactive units too (Django hides them by default).
+- Django migration history is not synthesized by `init-db`; do not run Django
   migrations against a Rust-initialized database. A later schema change needs
   an explicit incremental migration, not another `init-db`.
 - Production hardening, Unicode font embedding beyond Windows-1252 in PDFs,
   accessibility review and exhaustive parity with the original test suite.
 
+## Importing an existing Django database
+
+On the same PostgreSQL server, create an empty Rust database and copy Django's
+rows and media into it:
+
+```powershell
+$env:RUST_DB_NAME = "retosean_rust_prod"
+.\target\debug\retosean.exe init-db
+.\target\debug\retosean.exe import-django retosean_django ..\media
+```
+
+The import runs in one transaction and refuses any database that already has
+rows. Every shared table is copied (sessions and migration history excluded),
+sequences are reset, and each referenced file under Django's `MEDIA_ROOT` is
+copied to `RUST_MEDIA_DIR` with a random name. Files missing on disk or of an
+unsupported type are listed and keep their old path. Accounts keep their Django
+password hashes, so users sign in with the same passwords. On the development
+database this copied 962 rows from 59 tables and 52 files, row counts matched
+table by table, and the dashboard parity check gave 0 mismatches.
+
 Rust uploads are stored under `RUST_MEDIA_DIR` using random names and are served
-only through authorization-checked download endpoints. Existing Django media
-paths are deliberately not exposed through the Rust file server. File replacement
+only through authorization-checked download endpoints. Django media is
+served only after `import-django` copies it under new names. File replacement
 leaves old blobs for a future retention/garbage-collection policy. It clears old
 evaluation scores rather than treating a changed file as already graded.
 
@@ -227,6 +243,7 @@ build must be validated in the target deployment environment.
 - `src/import.rs`: bulk user import (HU13).
 - `src/closure.rs`: closure agenda, acta, final artifacts, recognitions and logistics requests (HU08).
 - `src/study_units.rs`: study-unit management and CSV load.
+- `src/migrate.rs`: `import-django`, the Django database and media import.
 - `src/permissions.rs`: roles, module permissions, participation block and the company operating gate (HU13/HU00).
 - `src/registration.rs`: self-registration and password recovery.
 - `src/mail.rs`, `reminders.rs`: notification email outbox and daily reminders (HU15).

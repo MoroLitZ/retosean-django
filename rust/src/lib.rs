@@ -17,6 +17,7 @@ pub mod import;
 pub mod lifecycle;
 pub mod mail;
 pub mod media;
+pub mod migrate;
 pub mod models;
 pub mod permissions;
 pub mod registration;

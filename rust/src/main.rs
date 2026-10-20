@@ -86,6 +86,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("{sent} reminder(s) generated");
         return Ok(());
     }
+    if command == "import-django" {
+        // Copy an existing Django database (same server) and its MEDIA_ROOT.
+        let args: Vec<String> = std::env::args().skip(2).collect();
+        let [source, media] = args.as_slice() else {
+            return Err("Usage: import-django <django_db_name> <django_media_dir>".into());
+        };
+        let summary =
+            retosean::migrate::import_django(&pool, &config, source, std::path::Path::new(media))
+                .await?;
+        println!(
+            "Imported {} row(s) from {} table(s) and {} file(s) into {}",
+            summary.rows, summary.tables, summary.files, config.database_name
+        );
+        for (label, list) in [
+            ("missing on disk", &summary.missing),
+            ("unsupported type", &summary.skipped),
+        ] {
+            if !list.is_empty() {
+                println!("{} file(s) {label}:", list.len());
+                for item in list.iter().take(20) {
+                    println!("  {item}");
+                }
+            }
+        }
+        return Ok(());
+    }
     if command == "advance-hackathons" {
         // Schedule hourly, like Django's avanzar_hackathones (HU09).
         let changed = retosean::event::advance_all(&pool)
@@ -96,7 +122,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if command != "serve" {
         return Err(
-            "Commands: serve | init-db | seed-demo | advance-hackathons | send-reminders [days...]"
+            "Commands: serve | init-db | seed-demo | import-django <db> <media_dir> | advance-hackathons | send-reminders [days...]"
                 .into(),
         );
     }

@@ -32,8 +32,9 @@ pub fn safe_key(key: &str) -> bool {
     };
     name.len() == 32
         && name.bytes().all(|c| c.is_ascii_hexdigit())
-        // xlsx: generated reports (HU06); never accepted as an upload.
-        && ["pdf", "png", "jpg", "txt", "xlsx"].contains(&ext)
+        // xlsx: generated reports (HU06); zip: deliverables imported from Django.
+        // Neither is accepted as a Rust upload.
+        && ["pdf", "png", "jpg", "txt", "xlsx", "zip"].contains(&ext)
 }
 fn file_error(error: std::io::Error) -> AppError {
     tracing::error!(%error,"private storage failure");
