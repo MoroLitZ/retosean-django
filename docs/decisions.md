@@ -1,5 +1,9 @@
 # Decisiones de diseño
 
+> **Nota histórica:** estas decisiones se tomaron para la versión Django, que ya
+> fue retirada del repositorio. La aplicación vigente es la de Rust en `rust/`;
+> las reglas de negocio descritas aquí se conservaron en ese port.
+
 Registro de las decisiones tomadas donde el brief del proyecto era ambiguo, se
 contradecía o donde nos apartamos de él. Cada entrada dice qué se decidió y por qué.
 

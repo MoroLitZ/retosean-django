@@ -1,5 +1,9 @@
 # Informe de QA — RetosEAN
 
+> **Nota:** este informe auditó la versión Django, ya retirada del repositorio.
+> Sus hallazgos se portaron a la aplicación Rust (`rust/`) con pruebas de regresión
+> en `rust/tests/`.
+
 - **Fecha:** 2026-11-06
 - **Alcance:** app Django `retosean-django` (14 apps + config)
 - **Fuera de alcance:** port Rust (solo se incluye como puerta de CI sugerida)

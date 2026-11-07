@@ -1,214 +1,66 @@
 # RetosEAN — Sistema de Control de Retos Universidad–Empresa
 
-**Rust-attempt:** the native Rust implementation is in [`rust/`](rust/README.md).
-Start it with `.\rust\Start-Retos.ps1` and open http://127.0.0.1:8080.
-Its README documents native coverage, remaining parity work and its separate database.
-The instructions below describe the original Django application.
-
-Plataforma Django + PostgreSQL que conecta empresas, docentes y estudiantes de la
-Universidad EAN alrededor de retos empresariales: la empresa publica el reto, el
-administrador lo aprueba, un docente lo integra a su curso, los estudiantes se
-postulan y entregan, el docente evalúa y el administrador cierra el ciclo emitiendo
-certificados.
+Plataforma nativa en Rust (Axum + SQLx + PostgreSQL) que conecta empresas,
+docentes y estudiantes de la Universidad EAN alrededor de retos empresariales:
+la empresa publica el reto, el administrador lo aprueba, un docente lo integra
+a su curso, los estudiantes se postulan y entregan, el docente evalúa y el
+administrador cierra el ciclo emitiendo certificados.
 
 ## Estado por historia de usuario
 
-| Sprint | HU | Módulo | Estado |
+| Sprint | HU | Módulo (Rust) | Estado |
 |---|---|---|---|
-| 1 | HU13 Usuarios y roles | `usuarios` | Registro multirol, login, decoradores compartidos, importación masiva CSV/Excel, bitácora de actividad |
-| 2 | HU01 / HU00 Empresas y documentación | `empresas` | Registro, carga de documentos con validación de vigencia, verificación por admin, listas restrictivas |
-| 3 | HU02 / HU04 Ciclo del reto | `retos` | Borrador → revisión → aprobación con consecutivo e historial de estados |
-| 4 | HU03 Integración académica | `retos` + `seguimiento` | Integración por docente, equipos, sesiones y flujo de publicación |
-| 5 | HU10 / HU11 Participación | `academico` + `participaciones` | Explorador filtrable, favoritos, postulación con validaciones |
-| 6 | HU12 / HU14 Evaluación y seguimiento | `evaluacion` + `seguimiento` | Rúbricas o puntaje libre, historial de comentarios, avance visible para la empresa |
-| 7 | HU08 Cierre | `cierre` | Agenda, acta, entregables finales, reconocimientos y encuesta |
-| 8 | HU15 Notificaciones | `notificaciones` | Motor central, campana in-app, correo, preferencias y recordatorios |
-| 9 | HU05 / HU06 / HU07 | `dashboard`, `reportes`, `presupuesto` | KPIs con Chart.js, reportes PDF/Excel y control presupuestal con alerta al 80% |
-| 10 | HU09 / HU16 | `hackaton`, `academico` | Hackathon completo (etapas, inscripción, jurados, ranking) y certificados con verificación pública |
+| 1 | HU13 Usuarios y roles | `accounts.rs`, `import.rs`, `registration.rs` | Registro multirol, login, importación masiva CSV/Excel, bitácora de actividad |
+| 2 | HU01 / HU00 Empresas y documentación | `companies.rs`, `media.rs` | Registro, carga de documentos con validación de vigencia, verificación por admin, listas restrictivas |
+| 3 | HU02 / HU04 Ciclo del reto | `lifecycle.rs` | Borrador → revisión → aprobación con consecutivo e historial de estados |
+| 4 | HU03 Integración académica | `academic.rs`, `team.rs` | Integración por docente, equipos, sesiones y flujo de publicación |
+| 5 | HU10 / HU11 Participación | `workflows.rs`, `resources.rs` | Explorador filtrable, favoritos, postulación con validaciones |
+| 6 | HU12 / HU14 Evaluación y seguimiento | `grading.rs`, `workflows.rs` | Rúbricas o puntaje libre, historial de comentarios, avance visible para la empresa |
+| 7 | HU08 Cierre | `closure.rs` | Agenda, acta, entregables finales, reconocimientos y encuesta |
+| 8 | HU15 Notificaciones | `mail.rs`, `reminders.rs`, `workflows.rs` | Motor central, campana in-app, correo, preferencias y recordatorios |
+| 9 | HU05 / HU06 / HU07 | `dashboard.rs`, `reports.rs`, `builder.rs`, `finance.rs` | KPIs con Chart.js, reportes PDF/Excel y control presupuestal con alerta al 80% |
+| 10 | HU09 / HU16 | `hackathon.rs`, `event.rs` | Hackathon completo (etapas, inscripción, jurados, ranking) y certificados con verificación pública |
 
 ## Puesta en marcha
 
-```bash
-python -m venv venv
-venv\Scripts\activate            # Windows
-pip install -r requirements.txt
-copy .env.example .env           # y edita las credenciales
-python manage.py migrate
-python manage.py createsuperuser
-python manage.py runserver
+La documentación completa está en [`rust/README.md`](rust/README.md). El arranque
+rápido desde la raíz del repositorio (PowerShell) es:
+
+```powershell
+.\rust\Start-Retos.ps1
 ```
 
-Requiere PostgreSQL (es la única base de datos soportada; no hay configuración SQLite).
-Todas las credenciales salen de `.env`; nunca se comitean.
+Abre http://127.0.0.1:8080. La configuración se toma del `.env` de la raíz del
+repositorio (ver `.env.example`). La inicialización de la base de datos, la
+semilla de demostración y el resto de comandos están documentados en
+[`rust/README.md`](rust/README.md).
 
-Crear el rol y la base de datos una sola vez, como superusuario `postgres`:
-
-```sql
-CREATE ROLE retosean LOGIN CREATEDB PASSWORD 'tu-contraseña';
-CREATE DATABASE retosean_django OWNER retosean ENCODING 'UTF8' TEMPLATE template0;
-```
-
-`CREATEDB` es necesario para `python manage.py test`, que crea y destruye la base
-temporal `test_retosean_django`. Para tener datos de prueba después de migrar:
-
-```bash
-python manage.py sembrar_catalogo --demo
-python manage.py sembrar_demo_completa
-```
-
-### Con Docker
-
-```bash
-docker compose up --build
-docker compose exec web python manage.py sembrar_catalogo --demo
-docker compose exec web python manage.py sembrar_demo_completa
-```
-
-Levanta Django en http://localhost:8000, PostgreSQL 18 (puerto 5433 en el equipo,
-para no chocar con una instalación local) y Mailpit en http://localhost:8025, donde
-llegan todos los correos de la plataforma. El código se monta como volumen, así que
-los cambios se recargan sin reconstruir la imagen.
-
-### Variables de entorno
-
-| Variable | Uso |
-|---|---|
-| `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS` | Configuración base de Django |
-| `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` | Conexión a PostgreSQL |
-| `SITE_URL` | URL pública, usada para los enlaces absolutos de los correos |
-| `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, `DEFAULT_FROM_EMAIL` | Envío de correo (HU15) |
-| `CSRF_TRUSTED_ORIGINS`, `SECURE_SSL_REDIRECT` | Solo producción |
-
-En desarrollo los correos se imprimen en la consola: no hace falta configurar SMTP.
-
-## Arquitectura
-
-Las decisiones tomadas sobre puntos ambiguos del brief (ciclos de vida, documentos
-de empresa, permisos, stack) están en [`docs/decisions.md`](docs/decisions.md).
+## Estructura del repositorio
 
 ```
-apps/
-  usuarios/        roles.py, decorators.py, context_processors.py, importacion.py, signals.py
-  empresas/        onboarding y documentación legal
-  retos/           ciclo de vida del reto e integración académica
-  academico/       facultades, programas, exploración y certificados
-  participaciones/ postulaciones, equipos operativos y entregables
-  evaluacion/      rúbricas, calificación y comentarios
-  seguimiento/     IntegracionAcademica y avances del reto
-  cierre/          agenda, acta, reconocimientos y encuestas
-  notificaciones/  motor de eventos, bandeja, preferencias y recordatorios
-  dashboard/       KPIs, series para Chart.js y filtros de periodo
-  reportes/        catálogo de reportes y exportación PDF/Excel
-  presupuesto/     presupuesto y gastos por reto
-  hackaton/        modalidad hackathon
-  unidades_estudio/ unidades por programa académico
+rust/
+  src/                      aplicación Axum + SQLx (módulos por dominio)
+  web/                      interfaz JavaScript vanilla (SPA), sistema de diseño propio, DESIGN.md
+  sql/                      esquema y migraciones SQL
+  tests/                    pruebas unitarias, end-to-end y de paridad
+docs/
+  QA_REPORT.md              informe de aseguramiento de calidad
+  decisions.md              decisiones de diseño
+.github/workflows/rust.yml  integración continua
 ```
 
-Convenciones que conviene respetar (ver `constitution.md`):
+## Migrar datos desde la versión Django
 
-- **Roles**: usa `apps.usuarios.roles.es_admin` y los decoradores de
-  `apps.usuarios.decorators`. En plantillas, los flags `es_admin`, `es_empresa`,
-  `es_profesor`, `es_estudiante` los inyecta un context processor.
-- **Notificaciones**: siempre a través de
-  `apps.notificaciones.services.notificar` / `notificar_muchos` / `notificar_admins`.
-  El servicio aplica las preferencias del usuario, deduplica por `clave_dedupe` y
-  envía el correo en `transaction.on_commit`.
-- **Cross-app**: nunca importes de otro `views.py`; usa su `services.py`,
-  `models.py` o `decorators.py`.
+El comando `import-django` copia en una sola transacción una base de datos
+PostgreSQL de Django y sus archivos `media/` a la base de datos de Rust; los
+usuarios conservan sus contraseñas. Los pasos exactos están en
+[`rust/README.md`](rust/README.md).
 
-## Recordatorios automáticos
+## Pruebas
 
-No se usa Celery. Los recordatorios (7, 3 y 1 día antes de las fechas clave) son un
-comando de gestión idempotente que se programa una vez al día:
-
-```bash
-python manage.py enviar_recordatorios --dias 7 3 1
-python manage.py enviar_recordatorios --dry-run     # ver qué se enviaría
+```powershell
+cd rust
+cargo test --locked -- --include-ignored
 ```
 
-Cubre: cierre de postulaciones, entrega final pendiente, entregables sin calificar,
-etapas de hackathon y vencimiento de documentos de empresa.
-
-**Programador de tareas de Windows**: crea una tarea diaria que ejecute
-`C:\ruta\al\proyecto\venv\Scripts\python.exe manage.py enviar_recordatorios`
-con el directorio de trabajo en la raíz del proyecto. En Linux, la línea de cron
-equivalente es `0 7 * * *`.
-
-Los hackathones avanzan solos según sus etapas (HU09): pasan a *En curso* al
-iniciar la etapa de desarrollo y, al llegar la premiación (o el fin de la última
-etapa con fecha), se finalizan y se publican resultados y ganadores. La vista de
-detalle lo aplica al abrirse; para que ocurra aunque nadie entre, programa cada hora:
-
-```bash
-python manage.py avanzar_hackathones
-```
-
-## Rutas principales
-
-| Ruta | Descripción |
-|---|---|
-| `/dashboard/` | Panel de indicadores según el rol |
-| `/retos/mis-retos/`, `/retos/crear/` | Gestión de retos por la empresa |
-| `/retos/admin/panel/` | Revisión y aprobación de retos |
-| `/retos/integraciones/` | Integraciones académicas del docente |
-| `/academico/explorar-retos/` | Explorador de retos del estudiante |
-| `/academico/certificados/`, `/academico/portafolio/` | Certificados y portafolio |
-| `/academico/verificar/<codigo>/` | Verificación pública de un certificado (sin login) |
-| `/participaciones/entregables/` | Entregables del estudiante |
-| `/evaluacion/` | Panel de calificación del docente |
-| `/cierre/` | Cierre formal de retos |
-| `/notificaciones/` | Bandeja y preferencias |
-| `/reportes/` | Constructor de informes PDF/Excel |
-| `/presupuesto/` | Presupuesto y gastos por reto |
-| `/hackatones/` | Hackathones, inscripción, votación y ranking |
-
-## Verificación
-
-```bash
-python manage.py check
-python manage.py makemigrations --check --dry-run      # debe decir "No changes"
-python manage.py migrate --plan
-python manage.py test
-python manage.py check --deploy --settings=config.settings.production
-```
-
-Toda la suite debe pasar antes de mergear. Los cambios de modelo van siempre con su
-migración en el mismo commit.
-
-## Settings
-
-- Desarrollo: `config.settings.development` (correo a consola, `DEBUG=True`)
-- Producción: `config.settings.production` (HSTS, cookies seguras, redirección HTTPS,
-  `ALLOWED_HOSTS` obligatorio desde entorno)
-
-## Despliegue a producción
-
-```bash
-pip install -r requirements.txt
-copy .env.example .env                # edita SECRET_KEY, DEBUG=False, ALLOWED_HOSTS y la BD
-python manage.py migrate
-python manage.py sembrar_catalogo     # siembra facultades/programas/ecosistemas (idempotente)
-python manage.py sembrar_catalogo --demo   # opcional: usuarios por rol + un reto de ejemplo
-python manage.py collectstatic --noinput
-python manage.py check --deploy --settings=config.settings.production
-gunicorn config.wsgi:application      # wsgi.py usa config.settings.production
-```
-
-- **Estáticos**: Whitenoise sirve `/static/` directamente desde el proceso Django
-  (no requiere nginx para los estáticos). Ejecuta `collectstatic` en cada despliegue.
-- **Archivos subidos (`/media/`)**: no los sirve Django en producción. Expón la
-  carpeta `media/` a través de nginx, S3 o un almacenamiento compatible; los
-  `FileField` siguen escribiendo en `MEDIA_ROOT`.
-- **Correo**: en producción define `EMAIL_*` con un SMTP real. La recuperación de
-  contraseña (`/usuarios/recuperar-contrasena/`) y las notificaciones dependen de él.
-- **Correo de respaldo del admin**: crea el superusuario antes de arrancar
-  (`python manage.py createsuperuser`).
-
-### Ajustes de seguridad recomendados
-
-| Check | Cómo se cubre |
-|---|---|
-| `SECURE_SSL_REDIRECT` | `SECURE_SSL_REDIRECT=1` en `.env` |
-| `SECURE_HSTS_SECONDS` | Ya configurado en `production.py` |
-| `CSRF_TRUSTED_ORIGINS` | Lista de orígenes separados por coma en `.env` |
-| `SESSION_COOKIE_SECURE` / `CSRF_COOKIE_SECURE` | Ya configurados en `production.py` |
+Requiere PostgreSQL; cada prueba crea su propio esquema y lo elimina al terminar.

@@ -2,64 +2,60 @@
 
 ## Objective
 
-This repository hosts the Retos EAN platform. The codebase must stay modular, easy to grow, and safe for multiple contributors working in parallel.
+This repository hosts the Retos EAN platform as a native Rust application. The codebase must stay modular, easy to grow, and safe for multiple contributors working in parallel. The only supported stack is the Axum 0.8 + SQLx 0.8 + PostgreSQL service under `rust/` and its embedded vanilla-JS single-page app.
 
 ## Architectural Rules
 
-1. Django settings must live under `config/settings/`.
-2. Runtime secrets and environment-specific configuration must come from environment variables.
-3. Business capabilities must be separated into domain apps under `apps/`.
-4. Shared templates and static assets stay at the project level only when they are reused across apps.
-5. Each app owns its own models, forms, admin, tests, templates, and future services.
+1. The application is Rust edition 2024 under `rust/`. No Python/Django code is authoritative.
+2. Runtime configuration and secrets must come from environment variables or a `.env` file (`rust/.env` or the repository root `.env`), loaded through `src/config.rs`. Secrets must never be committed, and `.env.example` must document every required variable.
+3. PostgreSQL is the default and only supported relational database.
+4. One Rust module per business domain lives in `rust/src`; domain responsibilities are listed below.
+5. Schema changes must be added only as new numbered files in `rust/sql/migrations` and listed in `src/schema_migrations.rs`. Applied migrations must never be edited.
+6. The browser UI is a vanilla-JS SPA split per area in `rust/web/js` and `rust/web/css`, following `rust/web/DESIGN.md`. Assets are embedded in the binary; no CDN, Bootstrap, or other external frontend resources are allowed.
+7. CSP must be `self` only. No inline styles, inline scripts, or external resources are allowed.
 
-## App Boundaries
+## Module Boundaries
 
-- `usuarios`: authentication, registration, profiles, role management, bulk import, and the activity log. Role helpers live in `usuarios/roles.py` and the shared access decorators in `usuarios/decorators.py`; no other app should define its own.
-- `empresas`: company records, legal onboarding, and company-specific administration.
-- `retos`: challenge creation, publication, challenge lifecycle, and academic integration (teams and sessions).
-- `academico`: faculties, programs, student/teacher profiles, challenge discovery, and certificates.
-- `participaciones`: applications, operational teams, and student deliverable submission.
-- `evaluacion`: rubrics, scoring, and review decisions.
-- `seguimiento`: progress tracking, milestones, and audit trail. Owns `IntegracionAcademica`.
-- `notificaciones`: the notification engine (`services.notificar`), preferences, in-app inbox, and the reminder command.
-- `presupuesto`: per-challenge budget and expense tracking, with the 80% execution alert.
-- `reportes`: exports (PDF/Excel), analytics summaries, and reporting endpoints.
-- `dashboard`: role-based dashboards, KPIs, charts, and the shared period filters.
-- `cierre`: closure, archival, and final outcome workflows.
-- `unidades_estudio`: study units per academic program.
-- `hackaton`: hackathon-specific logic that should not leak into the generic challenge flow.
+- `accounts`: user profiles, contact editing, passwords, activation/deactivation, role changes, and account audit.
+- `registration`: self-registration and password recovery.
+- `import`: bulk user import from CSV/Excel with preview and set-password emails.
+- `companies`: company records, legal onboarding, document catalog, document decisions, restrictive-list checks, and the publishing gate.
+- `media`: private uploads, downloads, file replacement, and authorization-checked serving.
+- `lifecycle`: challenge creation, publication, lifecycle state transitions, and audit.
+- `academic`: faculties, programs, student/teacher profiles, academic integration proposals, and certificates.
+- `team`: structured academic/operational teams and schedules, kept synchronized.
+- `study_units`: study units per academic program and CSV load.
+- `workflows`: transactional participation, deliverable submission, and cross-domain business workflows.
+- `grading`: rubrics, scoring, review decisions, and grade publication.
+- `closure`: closure, archival, final artifacts, recognitions, surveys, and logistics requests.
+- `dashboard`: role-based dashboards, KPIs, charts, and shared filters.
+- `reports`: module exports, PDF/Excel/CSV generation, analytics, and export history.
+- `builder`: report builder definitions, filters, and preview/generation flow.
+- `finance`: budgets, expenses, and the 80% execution alert.
+- `hackathon`: hackathon-specific logic that must not leak into the generic challenge flow.
+- `event`: hackathon stage advancement, logistics, and final report.
+- `mail`: notification email outbox and delivery status tracking.
+- `reminders`: daily reminder scheduling and rules.
+- `permissions`: roles, module permissions, participation block, and the company operating gate.
+- `auth`: sessions, login throttling, CSRF, and password-compatibility handling.
 
-### Naming exceptions
+No other module may define its own role helpers, access policies, or notification delivery. There is no `estudiantes` module: student data lives in `academic` and in `workflows`/`team`.
 
-- The hackathon app is `apps/hackaton` (no `h`), not `hackathon`. Its app label is
-  recorded in `django_migrations`, `django_content_type`, and the permission rows of
-  every developer's database, so renaming it would require a data migration for a
-  purely cosmetic gain.
-- There is no `estudiantes` app: student data lives in `academico` (profiles,
-  certificates) and `participaciones` (applications, teams, deliverables).
+## Testing/Quality Rules
 
-## Environment Rules
+1. Every behaviour change must include a test in `rust/tests`, either `parity_<area>.rs` or `end_to_end.rs`.
+2. CI in `.github/workflows/rust.yml` must stay green: `cargo fmt --check`, `cargo clippy`, `cargo test --locked -- --include-ignored`, and `node --check` over `rust/web/js/*.js`.
+3. Database tests must create isolated schemas in the configured Rust database and drop them afterward; they must never touch demonstration or production rows.
+4. Migrations are committed with schema changes and are never edited after being applied.
+5. Cross-module imports must be intentional and minimal. Workflows should move into the owning module's service/use-case code as complexity grows.
+6. Notifications and reminders must go through the centralized `mail`/`reminders` modules, never by writing notification records directly.
+7. Access decisions must use `permissions`, never ad-hoc role checks.
 
-1. Local development uses `config.settings.development`.
-2. Production deployments use `config.settings.production`.
-3. A `.env.example` file must document every required variable.
-4. Secrets must never be committed.
-5. PostgreSQL is the default and only supported relational database for this project.
-
-## Branching Strategy
+## Collaboration Rules
 
 1. `main` is the stable branch.
 2. `develop` is the integration branch for ongoing work.
 3. Feature work branches from `develop` using `feature/<ticket-or-scope>`.
 4. Hotfixes branch from `main` using `hotfix/<scope>`.
 5. Every branch should be tied to a ticket, HU, or clearly named scope.
-
-## Quality Rules
-
-1. New behavior should include focused tests.
-2. `python manage.py check` must pass before merging, and `python manage.py makemigrations --check --dry-run` must report "No changes".
-3. Migrations must be committed with model changes.
-4. Cross-app imports should be kept intentional and minimal. Never import from another app's `views.py`; import from its `services.py`, `models.py`, or `decorators.py` instead.
-5. Large business workflows should move toward service or use-case modules inside the owning app once complexity grows.
-6. Notifications must go through `apps.notificaciones.services.notificar` / `notificar_muchos` / `notificar_admins`, never by creating `Notificacion` objects directly: the service handles preferences, deduplication, and email.
-7. Admin checks use `apps.usuarios.roles.es_admin` (superuser OR `rol == "ADMIN"`), never a bare `is_superuser`. Templates use the `es_admin` / `es_empresa` / `es_profesor` / `es_estudiante` flags from the context processor.
+6. Never apply Django migrations to a Rust database. Existing Django data may only enter through the supported import path.
