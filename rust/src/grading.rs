@@ -137,14 +137,21 @@ pub async fn grade(
     let user = auth::current(&state, &headers, true).await?;
     domain::max_chars(&input.comentario, 10000, "Comentario")?;
     let mut tx = state.pool.begin().await?;
-    let record: Option<(i64, String, Decimal, String, Option<Decimal>)> = sqlx::query_as(
-        "SELECT reto_id,estado,puntaje_maximo,titulo,nota FROM entregables WHERE id=$1 FOR UPDATE",
+    let record: Option<(i64, String, Decimal, String, Option<Decimal>, bool)> = sqlx::query_as(
+        "SELECT reto_id,estado,puntaje_maximo,titulo,nota,calificacion_publicada FROM entregables WHERE id=$1 FOR UPDATE",
     )
     .bind(id)
     .fetch_optional(&mut *tx)
     .await?;
-    let (reto, mut from, max, title, previous) = record.ok_or_else(AppError::not_found)?;
+    let (reto, mut from, max, title, previous, published) =
+        record.ok_or_else(AppError::not_found)?;
     owns(&state, &user, reto).await?;
+    // BIZ-7: a published grade is final; re-grading would silently unpublish it.
+    if published {
+        return Err(AppError::bad(
+            "La calificación de este entregable ya fue publicada y no se puede recalificar.",
+        ));
+    }
     // PAR-07: EN_REVISION se alcanza solo al calificar, no en lectura.
     if from == "ENVIADO" {
         domain::transition("MAQUINA_ENTREGABLE", "ENVIADO", "EN_REVISION")?;
@@ -180,6 +187,11 @@ pub async fn grade(
         }
         let rubric_max: Decimal = criteria.iter().map(|c| c.1).sum();
         if rubric_max <= Decimal::ZERO {
+            return Err(invalid());
+        }
+        // BIZ-6: the rubric total must fit the deliverable's scale, otherwise the
+        // scaled nota (sum / rubric_max * max) can never reach the full score.
+        if rubric_max > max {
             return Err(invalid());
         }
         let mut scores = vec![];

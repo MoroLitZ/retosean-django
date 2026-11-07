@@ -11,6 +11,33 @@ use axum::{
 };
 use serde_json::{Value, json};
 
+/// Allowed content-derived extensions. HTML/SVG/XML active content is rejected
+/// even when disguised as plain text, so uploads cannot be served inline as a
+/// browser-rendered page (ACA-12 / MED-4 follow-up).
+/// Stream a multipart field up to `limit` bytes and abort as soon as the
+/// per-file cap is exceeded, instead of buffering the whole field first.
+async fn limited_bytes(
+    field: &mut axum::extract::multipart::Field<'_>,
+    limit: usize,
+    name: &str,
+) -> Result<axum::body::Bytes> {
+    let mut buf: Vec<u8> = Vec::new();
+    while let Some(chunk) = field
+        .chunk()
+        .await
+        .map_err(|_| AppError::bad(format!("{name}: error leyendo el archivo")))?
+    {
+        if buf.len() + chunk.len() > limit {
+            return Err(AppError::bad(format!(
+                "{name} supera el límite de {} MB",
+                limit / 1024 / 1024
+            )));
+        }
+        buf.extend_from_slice(&chunk);
+    }
+    Ok(axum::body::Bytes::from(buf))
+}
+
 pub fn extension(data: &[u8]) -> Result<&'static str> {
     if data.starts_with(b"%PDF-") {
         Ok("pdf")
@@ -19,6 +46,25 @@ pub fn extension(data: &[u8]) -> Result<&'static str> {
     } else if data.starts_with(b"\xff\xd8\xff") {
         Ok("jpg")
     } else if std::str::from_utf8(data).is_ok() && !data.contains(&0) {
+        // Reject HTML/SVG/XML disguised as text (case-insensitive, allowing BOM
+        // and leading whitespace). Keep plain text and CSV safe.
+        let head = data
+            .split(|&b| b == b'\n')
+            .next()
+            .unwrap_or(data)
+            .split(|&b| b == b' ')
+            .next()
+            .unwrap_or(data);
+        let lower = head.to_ascii_lowercase();
+        if lower.starts_with(b"<!doctype html")
+            || lower.starts_with(b"<html")
+            || lower.starts_with(b"<svg")
+            || lower.starts_with(b"<?xml")
+        {
+            return Err(AppError::bad(
+                "Solo se admiten archivos PDF, PNG, JPG o texto UTF-8",
+            ));
+        }
         Ok("txt")
     } else {
         Err(AppError::bad(
@@ -56,7 +102,7 @@ pub async fn submit(
     let mut comment = String::new();
     let mut data = None;
     let mut final_file = false;
-    while let Some(field) = multipart
+    while let Some(mut field) = multipart
         .next_field()
         .await
         .map_err(|_| AppError::bad("Carga multipart inválida"))?
@@ -67,11 +113,10 @@ pub async fn submit(
                 if data.is_some() {
                     return Err(AppError::bad("Adjunta un solo archivo"));
                 }
-                let bytes = field
-                    .bytes()
-                    .await
-                    .map_err(|_| AppError::bad("Archivo demasiado grande"))?;
-                if bytes.is_empty() || bytes.len() > 9 * 1024 * 1024 {
+                let original = field.file_name().unwrap_or("archivo").to_string();
+                let limit = 9 * 1024 * 1024;
+                let bytes = limited_bytes(&mut field, limit, &original).await?;
+                if bytes.is_empty() || bytes.len() > limit {
                     return Err(AppError::bad("El archivo debe tener entre 1 byte y 9 MB"));
                 }
                 data = Some(bytes);
@@ -268,7 +313,7 @@ type Upload = (axum::body::Bytes, Option<chrono::NaiveDate>);
 async fn read_document(mut multipart: Multipart) -> Result<Upload> {
     let mut data = None;
     let mut issued = None;
-    while let Some(field) = multipart
+    while let Some(mut field) = multipart
         .next_field()
         .await
         .map_err(|_| AppError::bad("Carga inválida"))?
@@ -278,11 +323,10 @@ async fn read_document(mut multipart: Multipart) -> Result<Upload> {
                 if data.is_some() {
                     return Err(AppError::bad("Adjunta un solo archivo"));
                 }
-                let bytes = field
-                    .bytes()
-                    .await
-                    .map_err(|_| AppError::bad("Archivo demasiado grande"))?;
-                if bytes.is_empty() || bytes.len() > 9 * 1024 * 1024 {
+                let original = field.file_name().unwrap_or("archivo").to_string();
+                let limit = 9 * 1024 * 1024;
+                let bytes = limited_bytes(&mut field, limit, &original).await?;
+                if bytes.is_empty() || bytes.len() > limit {
                     return Err(AppError::bad("Archivo de máximo 9 MB"));
                 }
                 data = Some(bytes);
@@ -532,7 +576,7 @@ pub async fn read_with_files(
 )> {
     let mut fields = std::collections::HashMap::new();
     let mut files = Vec::new();
-    while let Some(field) = multipart
+    while let Some(mut field) = multipart
         .next_field()
         .await
         .map_err(|_| AppError::bad("Carga inválida"))?
@@ -540,10 +584,7 @@ pub async fn read_with_files(
         let name = field.name().unwrap_or("").to_string();
         if name == file_field {
             let original = field.file_name().unwrap_or("archivo").to_string();
-            let bytes = field
-                .bytes()
-                .await
-                .map_err(|_| AppError::bad(format!("{original} supera el límite de 50 MB.")))?;
+            let bytes = limited_bytes(&mut field, ATTACHMENT_LIMIT, &original).await?;
             if !bytes.is_empty() {
                 files.push((original, bytes));
             }
@@ -596,12 +637,15 @@ pub async fn reto_files(
         return Err(AppError::forbidden());
     }
     let saved = save_attachments(&state, &files).await?;
-    for (key, original, size, _) in &saved {
-        sqlx::query("INSERT INTO retos_retoarchivo(reto_id,archivo,nombre_original,tamano,creado_en) VALUES($1,$2,$3,$4,now())")
-            .bind(reto).bind(key).bind(original).bind(size).execute(&mut *tx).await?;
-    }
-    if let Err(error) = tx.commit().await {
-        for (_, _, _, path) in saved {
+    let commit_result = async {
+        for (key, original, size, _) in &saved {
+            sqlx::query("INSERT INTO retos_retoarchivo(reto_id,archivo,nombre_original,tamano,creado_en) VALUES($1,$2,$3,$4,now())")
+                .bind(reto).bind(key).bind(original).bind(size).execute(&mut *tx).await?;
+        }
+        tx.commit().await
+    }.await;
+    if let Err(error) = commit_result {
+        for (_, _, _, path) in &saved {
             let _ = tokio::fs::remove_file(path).await;
         }
         return Err(error.into());

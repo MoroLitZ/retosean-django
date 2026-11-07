@@ -19,6 +19,20 @@ function wf_formatSize(bytes) {
   if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + " MB";
   return Math.max(1, Math.round(bytes / 1024)) + " KB";
 }
+// Adjuntos de retos y seguimientos: los mismos tipos que admite el servidor
+// (media::attachment_extension, 50 MB por archivo) para no subir nada que
+// luego se rechace (FEB-6).
+const WF_ACCEPT_ADJUNTOS = ".pdf,.png,.jpg,.jpeg,.txt,.xlsx,.zip,.docx,.pptx,.csv";
+// Extensión del archivo contra la lista `accept` del input (".pdf,.png" o MIME).
+function wf_extOk(input, file) {
+  const exts = (input.accept || "")
+    .split(",")
+    .map((s) => s.trim().replace(/^\./, ""))
+    .filter((e) => e && !e.includes("/"));
+  if (!exts.length) return true;
+  const ext = String(file.name.split(".").pop() || "").toLowerCase();
+  return exts.some((e) => e.toLowerCase() === ext);
+}
 function wf_section(title, iconName) {
   const h = el("h3", "wf-section");
   if (iconName) h.append(icon(iconName));
@@ -82,6 +96,9 @@ function wf_fileSummary(fileInput, maxMB = 50) {
       if (file.size > maxMB * 1048576) {
         li.classList.add("text-danger");
         wf_showFieldError(fileInput, `“${file.name}” supera el máximo de ${maxMB} MB.`);
+      } else if (!wf_extOk(fileInput, file)) {
+        li.classList.add("text-danger");
+        wf_showFieldError(fileInput, `“${file.name}”: formato no admitido.`);
       }
       list.append(li);
     }
@@ -93,12 +110,16 @@ function wf_fileSummary(fileInput, maxMB = 50) {
 function wf_checkFiles(form, maxMB = 50) {
   let ok = true;
   for (const f of form.querySelectorAll('input[type="file"]'))
-    for (const file of f.files)
+    for (const file of f.files) {
       if (file.size > maxMB * 1048576) {
         wf_showFieldError(f, `“${file.name}” supera el máximo de ${maxMB} MB.`);
         ok = false;
+      } else if (!wf_extOk(f, file)) {
+        wf_showFieldError(f, `“${file.name}”: formato no admitido (se acepta: ${f.accept}).`);
+        ok = false;
       }
-  if (!ok) toast(`Hay archivos que superan ${maxMB} MB. Revisa los campos marcados.`, "error");
+    }
+  if (!ok) toast("Hay archivos inválidos: superan el tamaño o tienen un tipo no admitido. Revisa los campos marcados.", "error");
   return ok;
 }
 function wf_progressBar(anchor) {
@@ -397,6 +418,7 @@ function progressForm(retoId) {
   input(form, "acuerdos", "Acuerdos", "", "textarea");
   const files = input(form, "archivos", "Archivos (opcional, máximo 50 MB cada uno)", "", "file");
   files.multiple = true;
+  files.accept = WF_ACCEPT_ADJUNTOS;
   files.parentElement.classList.add("full");
   wf_fileSummary(files);
   const submit = ui.button("Registrar seguimiento", { variant: "primary", type: "submit", icon: "play-circle" });
@@ -411,6 +433,7 @@ function filesForm(url, title) {
   const form = el("form", "wf-form wf-grid");
   const files = input(form, "archivos", "Archivos (uno o varios, máximo 50 MB cada uno)", "", "file", true);
   files.multiple = true;
+  files.accept = WF_ACCEPT_ADJUNTOS;
   files.parentElement.classList.add("full");
   wf_fileSummary(files);
   const submit = ui.button("Cargar archivos", { variant: "primary", type: "submit", icon: "cloud-arrow-up" });
@@ -434,13 +457,21 @@ async function sendMultipart(e, form, url, done) {
       if (status < 200 || status >= 300) throw new Error(body.error || "No se pudo guardar");
       return body;
     })());
-    $("detail-dialog").close();
-    toast(done);
-    await loadRecords();
   } catch (error) {
+    // Falló la subida: el usuario puede corregir y reintentar.
     toast(error.message);
+    return;
   } finally {
     progress.remove();
+  }
+  $("detail-dialog").close();
+  toast(done);
+  try {
+    await loadRecords();
+  } catch {
+    // La carga ya se guardó; el fallo es solo del refresco de la lista y no
+    // debe invitar a subir de nuevo los mismos archivos (FEB-9).
+    toast("La carga se guardó, pero no se pudo actualizar la lista.", "warning");
   }
 }
 function teamForm(integrationId, team) {
@@ -529,6 +560,9 @@ async function closurePanel(id) {
     form.onsubmit = async (e) => {
       e.preventDefault();
       if (!wf_validate(form)) return;
+      // El cuerpo de las rutas de cierre admite 10 MB en total: los archivos
+      // se validan (tipo y tamaño) antes de subirlos (FEB-6).
+      if (!wf_checkFiles(form, 9)) return;
       try {
         await busy(button, handler());
       } catch (error) {
@@ -546,9 +580,10 @@ async function closurePanel(id) {
   input(agenda, "agenda", "Agenda", data.agenda.agenda || "", "textarea");
   input(agenda, "notas", "Notas", data.cierre.notas || "", "textarea");
   choiceSelect(agenda, "impacto", "¿La empresa aplicó la solución?", IMPACTO, data.cierre.impacto || "");
-  const acta = input(agenda, "acta_url", data.cierre.acta ? "Reemplazar acta" : "Acta de cierre", "", "file");
+  const acta = input(agenda, "acta_url", data.cierre.acta ? "Reemplazar acta (PDF)" : "Acta de cierre (PDF)", "", "file");
+  acta.accept = ".pdf";
   acta.parentElement.classList.add("full");
-  wf_fileSummary(acta);
+  wf_fileSummary(acta, 9);
   if (data.cierre.acta) {
     const a = el("a", "wf-link small full", "Descargar acta actual");
     a.prepend(icon("download"));
@@ -566,9 +601,10 @@ async function closurePanel(id) {
     { emptyText: "Aún no hay entregables finales cargados." }));
   const artifact = el("form", "wf-form wf-grid");
   input(artifact, "nombre", "Nombre", "", "text", true);
-  const artifactFile = input(artifact, "archivo", "Archivo (PDF, PNG, JPG o texto)", "", "file", true);
+  const artifactFile = input(artifact, "archivo", "Archivo (PDF, PNG o JPG)", "", "file", true);
+  artifactFile.accept = ".pdf,.png,.jpg,.jpeg";
   artifactFile.parentElement.classList.add("full");
-  wf_fileSummary(artifactFile);
+  wf_fileSummary(artifactFile, 9);
   const artifactSubmit = ui.button("Cargar entregable final", { variant: "secondary", type: "submit", icon: "cloud-arrow-up" });
   artifactSubmit.classList.add("field--full");
   artifact.append(artifactSubmit);

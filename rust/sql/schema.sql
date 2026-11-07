@@ -255,7 +255,7 @@ CREATE INDEX "seguimientos_reto_creado_por_id_40eaefff" ON "seguimientos_reto" (
 ALTER TABLE "seguimiento_seguimientoarchivo" ADD CONSTRAINT "seguimiento_seguimie_seguimiento_id_1bb8dedb_fk_seguimien" FOREIGN KEY ("seguimiento_id") REFERENCES "seguimientos_reto" ("id") DEFERRABLE INITIALLY DEFERRED;
 CREATE INDEX "seguimiento_seguimientoarchivo_seguimiento_id_1bb8dedb" ON "seguimiento_seguimientoarchivo" ("seguimiento_id");
 ALTER TABLE "historial_estados" ADD CONSTRAINT "historial_estados_content_type_id_e4d46bde_fk_django_co" FOREIGN KEY ("content_type_id") REFERENCES "django_content_type" ("id") DEFERRABLE INITIALLY DEFERRED;
-ALTER TABLE "historial_estados" ADD CONSTRAINT "historial_estados_realizado_por_id_fc531431_fk_usuarios_id" FOREIGN KEY ("realizado_por_id") REFERENCES "usuarios" ("id") DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "historial_estados" ADD CONSTRAINT "historial_estados_realizado_por_id_fc531431_fk_usuarios_id" FOREIGN KEY ("realizado_por_id") REFERENCES "usuarios" ("id") ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED;
 CREATE INDEX "historial_estados_content_type_id_e4d46bde" ON "historial_estados" ("content_type_id");
 CREATE INDEX "historial_estados_realizado_por_id_fc531431" ON "historial_estados" ("realizado_por_id");
 CREATE INDEX "historial_estados_fecha_c4b2c96c" ON "historial_estados" ("fecha");
@@ -274,8 +274,8 @@ ALTER TABLE "usuarios_user_permissions" ADD CONSTRAINT "usuarios_user_permission
 ALTER TABLE "usuarios_user_permissions" ADD CONSTRAINT "usuarios_user_permis_permission_id_af615ca1_fk_auth_perm" FOREIGN KEY ("permission_id") REFERENCES "auth_permission" ("id") DEFERRABLE INITIALLY DEFERRED;
 CREATE INDEX "usuarios_user_permissions_usuario_id_232fd58d" ON "usuarios_user_permissions" ("usuario_id");
 CREATE INDEX "usuarios_user_permissions_permission_id_af615ca1" ON "usuarios_user_permissions" ("permission_id");
-ALTER TABLE "log_actividad" ADD CONSTRAINT "log_actividad_usuario_id_ab07d972_fk_usuarios_id" FOREIGN KEY ("usuario_id") REFERENCES "usuarios" ("id") DEFERRABLE INITIALLY DEFERRED;
-ALTER TABLE "log_actividad" ADD CONSTRAINT "log_actividad_realizado_por_id_84fa3425_fk_usuarios_id" FOREIGN KEY ("realizado_por_id") REFERENCES "usuarios" ("id") DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "log_actividad" ADD CONSTRAINT "log_actividad_usuario_id_ab07d972_fk_usuarios_id" FOREIGN KEY ("usuario_id") REFERENCES "usuarios" ("id") ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "log_actividad" ADD CONSTRAINT "log_actividad_realizado_por_id_84fa3425_fk_usuarios_id" FOREIGN KEY ("realizado_por_id") REFERENCES "usuarios" ("id") ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED;
 CREATE INDEX "log_actividad_usuario_id_ab07d972" ON "log_actividad" ("usuario_id");
 CREATE INDEX "log_actividad_accion_9fd342c2" ON "log_actividad" ("accion");
 CREATE INDEX "log_actividad_accion_9fd342c2_like" ON "log_actividad" ("accion" varchar_pattern_ops);
@@ -460,3 +460,74 @@ ALTER TABLE "usuarios" ALTER COLUMN "fecha_creacion" SET DEFAULT now();
 ALTER TABLE "log_actividad" ALTER COLUMN "identificador" SET DEFAULT '';
 ALTER TABLE "log_actividad" ALTER COLUMN "detalle" SET DEFAULT '';
 ALTER TABLE "log_actividad" ALTER COLUMN "creado_en" SET DEFAULT now();
+
+-- ============================================================================
+-- Schema integrity constraints (QA package F). Mirrored by sql/migrations/*.sql
+-- so existing databases converge; fresh databases get them inline here.
+-- ============================================================================
+
+-- DB-4 / AUTHK-3: emails are unique when compared case-insensitively.
+CREATE UNIQUE INDEX "usuarios_email_ci_uniq" ON "usuarios" (lower("email")) WHERE "email" <> '';
+
+-- DB-5: a user (or its email) may be jury of a hackathon only once.
+CREATE UNIQUE INDEX "jurados_hackaton_usuario_uniq" ON "jurados_hackaton" ("hackathon_id", "usuario_id") WHERE "usuario_id" IS NOT NULL;
+CREATE UNIQUE INDEX "jurados_hackaton_email_ci_uniq" ON "jurados_hackaton" ("hackathon_id", lower("email")) WHERE "email" <> '';
+
+-- DB-2 / DB-3: team names are unique within a challenge.
+ALTER TABLE "equipos" ADD CONSTRAINT "equipos_reto_nombre_unique" UNIQUE ("reto_id", "nombre");
+ALTER TABLE "equipos_reto_academico" ADD CONSTRAINT "equipos_reto_academico_reto_nombre_equipo_unique" UNIQUE ("reto_id", "nombre_equipo");
+
+-- DB-18: document types are restricted to the legal-document-type catalog.
+ALTER TABLE "documentos_empresas" ADD CONSTRAINT "documentos_empresas_tipo_documento_fk_tipos_documento_legal" FOREIGN KEY ("tipo_documento") REFERENCES "tipos_documento_legal" ("codigo") DEFERRABLE INITIALLY DEFERRED;
+
+-- DB-6 / DB-7: money amounts are never negative.
+ALTER TABLE "presupuestos" ADD CONSTRAINT "presupuestos_monto_total_nonnegative" CHECK ("monto_total" >= 0);
+ALTER TABLE "gastos" ADD CONSTRAINT "gastos_monto_nonnegative" CHECK ("monto" >= 0);
+
+-- DB-8: deliverable scores are sane and never exceed the maximum.
+ALTER TABLE "entregables" ADD CONSTRAINT "entregables_puntaje_maximo_nonnegative" CHECK ("puntaje_maximo" >= 0);
+ALTER TABLE "entregables" ADD CONSTRAINT "entregables_nota_range" CHECK ("nota" IS NULL OR ("nota" >= 0 AND "nota" <= "puntaje_maximo"));
+
+-- DB-9: professor evaluation grades are constrained to the 0-5 scale.
+ALTER TABLE "evaluaciones" ADD CONSTRAINT "evaluaciones_nota_range" CHECK ("nota" >= 0 AND "nota" <= 5);
+
+-- DB-10 / DB-11: rubric maxima and per-criterion scores are never negative.
+ALTER TABLE "evaluacion_criteriorubrica" ADD CONSTRAINT "evaluacion_criteriorubrica_puntaje_maximo_nonnegative" CHECK ("puntaje_maximo" >= 0);
+ALTER TABLE "evaluacion_evaluacioncriterio" ADD CONSTRAINT "evaluacion_evaluacioncriterio_puntaje_nonnegative" CHECK ("puntaje" >= 0);
+
+-- DB-12 / HCK-03: hackathon votes range 0-5.
+ALTER TABLE "votaciones_hackaton" ADD CONSTRAINT "votaciones_hackaton_puntaje_range" CHECK ("puntaje" >= 0 AND "puntaje" <= 5);
+
+-- DB-13: satisfaction ratings range 0-5 (or are unanswered).
+ALTER TABLE "cierre_encuestasatisfaccion" ADD CONSTRAINT "cierre_encuestasatisfaccion_calificacion_range" CHECK ("calificacion" IS NULL OR ("calificacion" >= 0 AND "calificacion" <= 5));
+
+-- DB-14: progress never exceeds 100%.
+ALTER TABLE "seguimientos_reto" ADD CONSTRAINT "seguimientos_reto_porcentaje_avance_max" CHECK ("porcentaje_avance" <= 100);
+
+-- DB-15 / DB-16 / DB-17: end dates never precede start dates.
+ALTER TABLE "retos" ADD CONSTRAINT "retos_fechas_tentativas_order" CHECK ("fecha_inicio_tentativa" IS NULL OR "fecha_fin_tentativa" IS NULL OR "fecha_fin_tentativa" >= "fecha_inicio_tentativa");
+ALTER TABLE "etapas_hackaton" ADD CONSTRAINT "etapas_hackaton_fechas_order" CHECK ("inicia_en" IS NULL OR "termina_en" IS NULL OR "termina_en" >= "inicia_en");
+ALTER TABLE "documentos_empresas" ADD CONSTRAINT "documentos_empresas_fechas_order" CHECK ("fecha_expedicion" IS NULL OR "fecha_vencimiento" IS NULL OR "fecha_vencimiento" >= "fecha_expedicion");
+
+-- DB-19: free-text state columns are restricted to their state machines
+-- (see states.json / states_meta.json and the domain::transition calls).
+ALTER TABLE "retos" ADD CONSTRAINT "retos_estado_check" CHECK ("estado" IN ('borrador','en_revision','rechazado','aprobado','abierto','en_curso','pausado','finalizado','cancelado'));
+ALTER TABLE "integraciones_academicas" ADD CONSTRAINT "integraciones_academicas_estado_check" CHECK ("estado" IN ('borrador','en_revision','rechazada','aprobada','publicada'));
+ALTER TABLE "hackathons" ADD CONSTRAINT "hackathons_estado_check" CHECK ("estado" IN ('borrador','publicado','en_curso','finalizado','cancelado'));
+ALTER TABLE "postulaciones" ADD CONSTRAINT "postulaciones_estado_check" CHECK ("estado" IN ('PENDIENTE','EN_REVISION','ACEPTADA','RECHAZADA','RETIRADA'));
+ALTER TABLE "entregables" ADD CONSTRAINT "entregables_estado_check" CHECK ("estado" IN ('ENVIADO','EN_REVISION','CALIFICADO'));
+ALTER TABLE "gastos" ADD CONSTRAINT "gastos_estado_check" CHECK ("estado" IN ('COMPROMETIDO','EJECUTADO'));
+ALTER TABLE "documentos_empresas" ADD CONSTRAINT "documentos_empresas_estado_check" CHECK ("estado" IN ('PENDIENTE','CARGADO','VERIFICADO','RECHAZADO','VENCIDO'));
+ALTER TABLE "cierre_solicitudlogistica" ADD CONSTRAINT "cierre_solicitudlogistica_estado_check" CHECK ("estado" IN ('SOLICITADA','CONFIRMADA','DESCARTADA'));
+ALTER TABLE "inscripciones_hackaton" ADD CONSTRAINT "inscripciones_hackaton_estado_check" CHECK ("estado" IN ('PENDIENTE','ACEPTADA','RECHAZADA'));
+
+-- DB-27: the read timestamp must agree with the read flag.
+
+-- DB-26: common hot-path filters.
+CREATE INDEX "notificaciones_usuario_leida_idx" ON "notificaciones" ("usuario_id", "leida");
+CREATE INDEX "retos_estado_idx" ON "retos" ("estado");
+CREATE INDEX "postulaciones_reto_estado_idx" ON "postulaciones" ("reto_id", "estado");
+CREATE INDEX "entregables_reto_estado_idx" ON "entregables" ("reto_id", "estado");
+CREATE INDEX "gastos_presupuesto_estado_idx" ON "gastos" ("presupuesto_id", "estado");
+CREATE INDEX "inscripciones_hackaton_hackathon_estado_idx" ON "inscripciones_hackaton" ("hackathon_id", "estado");
+CREATE INDEX "hackathons_estado_idx" ON "hackathons" ("estado");

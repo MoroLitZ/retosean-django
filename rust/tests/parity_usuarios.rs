@@ -508,15 +508,23 @@ parity!(test_entra_con_el_correo_sin_importar_mayusculas, |t| {
 parity!(test_correo_compartido_no_permite_entrar, |t| {
     ana(&t).await;
     let other = t.user("ana2", "ESTUDIANTE").await;
-    t.exec(&format!(
+    // AUTHK-3 / F: emails are now unique case-insensitively, so the shared-email
+    // ambiguity that once disabled email login can no longer be created.
+    let clashing = sqlx::raw_sql(&format!(
         "UPDATE usuarios SET email='ana@example.com' WHERE id={other}"
     ))
+    .execute(&t.pool)
     .await;
+    assert!(
+        clashing.is_err(),
+        "a case-insensitive duplicate email must be rejected"
+    );
+    // The legitimate owner's email stays unambiguous, so login by email succeeds.
     assert_eq!(
         login_with(&t.app, "ana@example.com", "RetosEAN2026")
             .await
             .0,
-        401
+        200
     );
 });
 parity!(test_correo_con_clave_incorrecta_falla, |t| {

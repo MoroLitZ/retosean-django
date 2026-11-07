@@ -494,6 +494,10 @@ pub fn pdf_document(
     }
     pdf.finish()
 }
+/// Hard cap for generic resource exports (rows() already applies the same limit;
+/// this constant documents it for the reports.rs path).
+const EXPORT_LIMIT: i64 = 5000;
+
 pub async fn export(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -505,7 +509,13 @@ pub async fn export(
         return Err(AppError::not_found());
     }
     let data = resources::rows(&state, &user, &name, &filters, true).await?;
-    let rows = data["records"].as_array().unwrap();
+    let rows = data["records"]
+        .as_array()
+        .ok_or_else(|| AppError::bad("La respuesta del recurso no contiene registros"))?;
+    // REP-4: the row set is capped by resources::rows at EXPORT_LIMIT rows.
+    if rows.len() > EXPORT_LIMIT as usize {
+        return Err(AppError::bad("El export supera el límite de registros."));
+    }
     let fields: Vec<String> = resources::resource(&name)?["fields"]
         .as_array()
         .unwrap()

@@ -38,7 +38,7 @@ pub async fn create(
     if !input
         .username
         .chars()
-        .all(|c| c.is_alphanumeric() || "@.+-_".contains(c))
+        .all(|c| c.is_alphanumeric() || ".+-_".contains(c))
         || !domain::valid_email(input.email.trim())
         || input.email.trim().len() > 254
         || input.telefono.chars().count() > 20
@@ -62,6 +62,16 @@ pub async fn create(
     if taken {
         return Err(AppError::bad("Ya existe un usuario con ese nombre."));
     }
+    // Emails must also be case-insensitively unique (AUTHK-3): a duplicate email
+    // disables email login for that address and broadens password resets.
+    let email_taken: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM usuarios WHERE lower(email)=lower($1))")
+            .bind(input.email.trim())
+            .fetch_one(&state.pool)
+            .await?;
+    if email_taken {
+        return Err(AppError::bad("Ya existe un usuario con ese correo."));
+    }
     if input.rol == "EMPRESA" {
         domain::validate_text(&input.nit, 20, "NIT")?;
         domain::validate_text(&input.razon_social, 150, "Razón social")?;
@@ -75,6 +85,23 @@ pub async fn create(
     .await
     .map_err(|_| AppError::bad("No se pudo guardar la contraseña"))?;
     let mut tx = state.pool.begin().await?;
+    // Re-check under an advisory lock so concurrent creates cannot both pass a
+    // pre-check before inserting (AUTHK-12); the DB unique index (package F)
+    // remains the final guard.
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
+        .bind(format!("usuario:{}", input.username.trim().to_lowercase()))
+        .execute(&mut *tx)
+        .await?;
+    let duplicated: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM usuarios WHERE lower(username)=lower($1) OR lower(email)=lower($2))",
+    )
+    .bind(input.username.trim())
+    .bind(input.email.trim())
+    .fetch_one(&mut *tx)
+    .await?;
+    if duplicated {
+        return Err(AppError::bad("Ya existe un usuario con estos datos."));
+    }
     let id:i64=sqlx::query_scalar("INSERT INTO usuarios(username,password,email,first_name,last_name,rol,telefono,is_active,activo,is_staff,is_superuser,date_joined,fecha_creacion) VALUES($1,$2,$3,$4,$5,$6,$7,true,true,false,false,now(),now()) RETURNING id")
         .bind(&input.username).bind(hash).bind(input.email.trim()).bind(&input.first_name).bind(&input.last_name).bind(&input.rol).bind(&input.telefono).fetch_one(&mut *tx).await?;
     match input.rol.as_str() {
@@ -179,6 +206,18 @@ pub async fn profile(
             || !(web.starts_with("https://") || web.starts_with("http://")))
     {
         return Err(AppError::bad("Introduzca una URL válida."));
+    }
+    // A changed email must not collide (case-insensitively) with another account
+    // (AUTHK-3), or email login/reset would become ambiguous for that address.
+    let email_taken: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM usuarios WHERE lower(email)=lower($1) AND id<>$2)",
+    )
+    .bind(email)
+    .bind(user.id)
+    .fetch_one(&state.pool)
+    .await?;
+    if email_taken {
+        return Err(AppError::bad("Ese correo ya está en uso."));
     }
     let mut tx = state.pool.begin().await?;
     sqlx::query("UPDATE usuarios SET first_name=$2,last_name=$3,email=$4,telefono=$5 WHERE id=$1")

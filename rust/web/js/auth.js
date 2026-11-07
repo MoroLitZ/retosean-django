@@ -217,7 +217,26 @@ async function authRoute() {
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? "" : "Ingresa un correo válido.";
   if (hash === "registro/academico" || hash === "registro/empresa") {
     const academic = hash.endsWith("academico");
-    const options = await api("/api/registro/opciones");
+    let options;
+    try {
+      options = await api("/api/registro/opciones");
+    } catch (error) {
+      // Sin opciones no hay formulario: error visible en el panel en vez de
+      // dejarlo vacío (FE-5).
+      const box = $("auth-alt");
+      const alert = el("div", "alert alert--danger mt-3");
+      alert.setAttribute("role", "alert");
+      alert.append(
+        icon("exclamation-triangle-fill"),
+        el("span", "", error.message || "No se pudo cargar el formulario de registro. Intenta de nuevo."),
+      );
+      box.replaceChildren(
+        el("h2", "", academic ? "Registro Comunidad EAN" : "Registro de Empresa"),
+        alert,
+        backToLogin(""),
+      );
+      return;
+    }
     authForm(
       academic ? "Registro Comunidad EAN" : "Registro de Empresa",
       academic

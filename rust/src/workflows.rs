@@ -224,6 +224,11 @@ pub async fn challenge_state(
     if !company_action && !admin_action {
         return Err(AppError::forbidden());
     }
+    // WF-3: separation of duties — an administrator linked to the owning company
+    // (their user id is the reto's empresa_id) never decides on their own reto.
+    if admin_action && user.id == owner {
+        return Err(AppError::forbidden());
+    }
     if company_action {
         for (name, label) in [
             ("titulo", "Título"),
@@ -678,7 +683,7 @@ pub async fn application_state(
         (true, _) if user.id == owner => "Postulación gestionada por la empresa.",
         (true, _) => "Postulación gestionada.",
     };
-    history(
+    let audit = history(
         &mut tx,
         ("participaciones", "postulacion"),
         id,
@@ -689,7 +694,10 @@ pub async fn application_state(
     )
     .await?;
     // _notificar_respuesta_postulacion / _notificar_postulacion_retirada.
-    let key = format!("postulacion:{id}:{}", input.estado);
+    // WF-7: the audit id makes each occurrence distinct, so a re-submitted
+    // application that returns to a state it already held notifies again
+    // (mirrors challenge_state, agreement and document).
+    let key = format!("postulacion:{id}:{}:{audit}", input.estado);
     let (recipient, message, kind, custom_title) = match input.estado.as_str() {
         "ACEPTADA" => (
             student,
@@ -880,8 +888,12 @@ pub async fn mark_applications_in_review(state: &AppState, user: &auth::User) ->
     if user.rol != "EMPRESA" {
         return Ok(());
     }
+    // WF-4: only retos still open for review advance their pending applications;
+    // finalizing or cancelling a reto freezes its postulaciones instead of moving
+    // them. PENDIENTE -> EN_REVISION is the machine's only in-review transition.
+    domain::transition("MAQUINA_POSTULACION", "PENDIENTE", "EN_REVISION")?;
     let mut tx = state.pool.begin().await?;
-    let opened: Vec<i64> = sqlx::query_scalar("UPDATE postulaciones SET estado='EN_REVISION' WHERE estado='PENDIENTE' AND reto_id IN (SELECT id FROM retos WHERE empresa_id=$1) RETURNING id")
+    let opened: Vec<i64> = sqlx::query_scalar("UPDATE postulaciones SET estado='EN_REVISION' WHERE estado='PENDIENTE' AND reto_id IN (SELECT id FROM retos WHERE empresa_id=$1 AND eliminado_en IS NULL AND estado IN ('abierto','en_curso','pausado')) RETURNING id")
         .bind(user.id).fetch_all(&mut *tx).await?;
     for id in opened {
         history(

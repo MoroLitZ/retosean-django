@@ -41,6 +41,25 @@ pub fn field_label(table: &str, field: &str) -> String {
         None => String::new(),
     }
 }
+/// Allowed URL schemes for link-like fields; anything else (javascript:,
+/// data:, file:, etc.) is stripped on export to avoid stored XSS / open redirect.
+fn safe_url(field: &str, value: &str) -> String {
+    let name = field.to_ascii_lowercase();
+    let is_link = name.ends_with("_url")
+        || name == "link"
+        || name.starts_with("enlace_")
+        || name == "sitio_web";
+    if !is_link || value.is_empty() {
+        return value.to_string();
+    }
+    let scheme = value.split(':').next().unwrap_or("").to_ascii_lowercase();
+    if ["http", "https", "mailto", "tel"].contains(&scheme.as_str()) {
+        value.to_string()
+    } else {
+        String::new()
+    }
+}
+
 /// Display text of an exported value: booleans as Sí/No and choice codes
 /// with their labels; the stored values themselves are unchanged.
 pub fn display_value(table: &str, field: &str, value: &Value) -> String {
@@ -48,7 +67,7 @@ pub fn display_value(table: &str, field: &str, value: &Value) -> String {
         Value::Null => String::new(),
         Value::Bool(true) => "Sí".into(),
         Value::Bool(false) => "No".into(),
-        Value::String(s) => crate::dashboard::etiqueta(table, field, s),
+        Value::String(s) => safe_url(field, &crate::dashboard::etiqueta(table, field, s)),
         other => other.to_string(),
     }
 }
@@ -187,7 +206,7 @@ pub fn data_expression(table: &str) -> String {
             | "jurados_hackaton" => "x.nombre",
             // Integrations and hackathons are known by their reto's title.
             "integraciones_academicas" | "hackathons" => {
-                "(SELECT r.titulo FROM retos r WHERE r.id=x.reto_id)"
+                "(SELECT r.titulo FROM retos r WHERE r.id=x.reto_id AND r.eliminado_en IS NULL)"
             }
             _ => continue,
         };
@@ -262,8 +281,13 @@ pub async fn rows(
     let base = format!(
         "WITH actor AS (SELECT $1::bigint id) SELECT {expr} data FROM \"{table}\" t WHERE ({policy}) AND ($2 = '%%' OR EXISTS(SELECT 1 FROM jsonb_each_text({expr}) kv WHERE kv.value ILIKE $2)){}",
         match (table, filters.ecosistema) {
-            ("unidades_estudio", _) if filters.activo.as_deref() != Some("0") =>
-                " AND t.activo".to_string(),
+            // ACA-9: only the units' managers (admins, professors) see inactive ones.
+            ("unidades_estudio", _)
+                if filters.activo.as_deref() != Some("0")
+                    || !(user.admin() || user.rol == "PROFESOR") =>
+            {
+                " AND t.activo".to_string()
+            }
             ("retos", Some(ecosystem)) => format!(" AND t.ecosistema_id={ecosystem}"),
             _ => String::new(),
         }
@@ -305,8 +329,10 @@ pub async fn detail(
     Path((name, id)): Path<(String, i64)>,
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, false).await?;
-    crate::event::advance_before_read(&state, &name, id).await;
+    // ACA-8: authorize first so an unauthenticated or unauthorized request cannot
+    // trigger advance_before_read side effects (e.g., hackathon state advances).
     let record = visible_record(&state, &user, &name, id).await?;
+    crate::event::advance_before_read(&state, &name, id).await;
     Ok(Json(record))
 }
 pub async fn visible_record(state: &AppState, user: &User, name: &str, id: i64) -> Result<Value> {
@@ -323,9 +349,10 @@ pub async fn export(
 ) -> Result<Response> {
     let user = auth::current(&state, &headers, false).await?;
     let data = rows(&state, &user, &name, &filters, true).await?;
-    let fields: Vec<&str> = resource(&name)?["fields"]
+    let fields_arr = resource(&name)?["fields"]
         .as_array()
-        .unwrap()
+        .ok_or_else(|| AppError::bad("Recurso inválido para exportación"))?;
+    let fields: Vec<&str> = fields_arr
         .iter()
         .filter_map(|f| f["name"].as_str())
         .filter(|f| !["password", "is_staff", "is_superuser"].contains(f))

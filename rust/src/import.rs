@@ -24,7 +24,7 @@ pub const COLUMNAS: [&str; 7] = [
     "password",
 ];
 const OBLIGATORIAS: [&str; 3] = ["username", "email", "rol"];
-const ROLES: [&str; 5] = ["ADMIN", "EMPRESA", "ESTUDIANTE", "EXPERTO", "PROFESOR"];
+const ROLES: [&str; 4] = ["EMPRESA", "ESTUDIANTE", "EXPERTO", "PROFESOR"];
 const MAX_FILAS: usize = 1000;
 
 fn headers_of(row: &[String]) -> Vec<String> {
@@ -77,6 +77,15 @@ fn read_file(name: &str, bytes: &[u8]) -> std::result::Result<Vec<Vec<String>>, 
             .worksheet_range_at(0)
             .ok_or("El archivo está vacío.")?
             .map_err(|e| format!("No se pudo leer el archivo: {e}"))?;
+        // MED-1: reject workbooks with too many rows before materializing the
+        // full Vec; the range is still loaded, but we stop processing early.
+        let row_count = range.rows().count();
+        if row_count > MAX_FILAS + 1 {
+            return Err(format!(
+                "El archivo tiene {} filas y el máximo permitido es {MAX_FILAS}.",
+                row_count.saturating_sub(1)
+            ));
+        }
         Ok(range
             .rows()
             .map(|r| r.iter().map(|v| v.to_string().trim().to_string()).collect())
@@ -110,6 +119,7 @@ impl Row {
 
 async fn validate(
     state: &AppState,
+    admin: &auth::User,
     rows: &[Vec<String>],
 ) -> Result<std::result::Result<Vec<Row>, String>> {
     let Some(first) = rows.first() else {
@@ -211,6 +221,11 @@ async fn validate(
         }
         if rol.is_empty() {
             r.errores.push("El rol es obligatorio.".into());
+        } else if rol == "ADMIN" {
+            if !admin.is_superuser {
+                r.errores
+                    .push("Solo un superusuario puede importar administradores.".into());
+            }
         } else if !ROLES.contains(&rol.as_str()) {
             r.errores
                 .push(format!("Rol no válido. Usa uno de: {}.", ROLES.join(", ")));
@@ -281,7 +296,7 @@ pub async fn import(
         Ok(rows) => rows,
         Err(error) => return Ok(Json(json!({"error_global": error}))),
     };
-    let rows = match validate(&state, &rows).await? {
+    let rows = match validate(&state, &admin, &rows).await? {
         Ok(rows) => rows,
         Err(error) => return Ok(Json(json!({"error_global": error}))),
     };

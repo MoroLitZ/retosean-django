@@ -76,9 +76,19 @@ impl Mailer {
         let port: u16 = get("EMAIL_PORT")
             .and_then(|p| p.parse().ok())
             .unwrap_or(587);
+        let user = get("EMAIL_HOST_USER");
+        let password = get("EMAIL_HOST_PASSWORD");
         let tls = get("EMAIL_USE_TLS")
             .map(|v| ["True", "true", "1"].contains(&v.as_str()))
             .unwrap_or(true);
+        // Never send SMTP credentials over plaintext (WF-5): with TLS disabled and
+        // credentials configured the mailer fails back to the console backend.
+        if !tls && (user.is_some() || password.is_some()) {
+            tracing::error!(
+                "EMAIL_USE_TLS is false but SMTP credentials are set; refusing plaintext auth, emails will only be logged"
+            );
+            return Mailer::Console;
+        }
         let builder = if tls {
             match AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&host) {
                 Ok(b) => b,
@@ -93,7 +103,7 @@ impl Mailer {
         let mut builder = builder
             .port(port)
             .timeout(Some(std::time::Duration::from_secs(10)));
-        if let (Some(user), Some(password)) = (get("EMAIL_HOST_USER"), get("EMAIL_HOST_PASSWORD")) {
+        if let (Some(user), Some(password)) = (user, password) {
             builder = builder.credentials(Credentials::new(user, password));
         }
         Mailer::Smtp {
@@ -326,13 +336,33 @@ pub fn bodies(name: &str, title: &str, message: &str, url: &str) -> (String, Str
 /// who did not opt out) and records enviada_por_correo / error_envio like Django.
 /// Rows stay locked while sending, so concurrent workers never send twice.
 pub async fn deliver_pending(pool: &PgPool, mailer: &Mailer, site_url: &str) -> Result<usize> {
-    let mut tx = pool.begin().await?;
-    let rows: Vec<(i64, String, String, String, String, String)> = sqlx::query_as(
-        "SELECT n.id,u.email,coalesce(nullif(trim(u.first_name||' '||u.last_name),''),u.username),n.titulo,n.mensaje,n.link FROM notificaciones n JOIN usuarios u ON u.id=n.usuario_id LEFT JOIN preferencias_notificacion p ON p.usuario_id=u.id WHERE NOT n.enviada_por_correo AND n.error_envio='' AND n.creada_en>now()-interval '1 day' AND n.evento=ANY($1) AND u.email<>'' AND coalesce(p.recibir_email,true) ORDER BY n.id LIMIT 50 FOR UPDATE OF n SKIP LOCKED",
+    // Sentinel used to claim rows while sending, without holding a transaction
+    // or row locks during SMTP I/O (WF-6). Abandoned claims from a crashed run
+    // are recovered on the next tick.
+    const CLAIM: &str = "ENVIANDO";
+    sqlx::query(
+        "UPDATE notificaciones SET error_envio='' WHERE error_envio=$1 AND creada_en<now()-interval '10 minutes'",
     )
-    .bind(email_events())
-    .fetch_all(&mut *tx)
+    .bind(CLAIM)
+    .execute(pool)
     .await?;
+    let rows: Vec<(i64, String, String, String, String, String)> = {
+        let mut tx = pool.begin().await?;
+        let rows: Vec<(i64, String, String, String, String, String)> = sqlx::query_as(
+            "SELECT n.id,u.email,coalesce(nullif(trim(u.first_name||' '||u.last_name),''),u.username),n.titulo,n.mensaje,n.link FROM notificaciones n JOIN usuarios u ON u.id=n.usuario_id LEFT JOIN preferencias_notificacion p ON p.usuario_id=u.id WHERE NOT n.enviada_por_correo AND n.error_envio='' AND n.creada_en>now()-interval '1 day' AND n.evento=ANY($1) AND u.email<>'' AND coalesce(p.recibir_email,true) ORDER BY n.id LIMIT 50 FOR UPDATE OF n SKIP LOCKED",
+        )
+        .bind(email_events())
+        .fetch_all(&mut *tx)
+        .await?;
+        let ids: Vec<i64> = rows.iter().map(|(id, ..)| *id).collect();
+        sqlx::query("UPDATE notificaciones SET error_envio=$2 WHERE id=ANY($1)")
+            .bind(ids.as_slice())
+            .bind(CLAIM)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        rows
+    };
     let mut sent = 0;
     for (id, email, name, title, message, link) in rows {
         let url = if link.is_empty() || link == "/" {
@@ -350,7 +380,7 @@ pub async fn deliver_pending(pool: &PgPool, mailer: &Mailer, site_url: &str) -> 
                     "UPDATE notificaciones SET enviada_por_correo=true,error_envio='' WHERE id=$1",
                 )
                 .bind(id)
-                .execute(&mut *tx)
+                .execute(pool)
                 .await?;
                 sent += 1;
             }
@@ -360,12 +390,11 @@ pub async fn deliver_pending(pool: &PgPool, mailer: &Mailer, site_url: &str) -> 
                 sqlx::query("UPDATE notificaciones SET error_envio=$2 WHERE id=$1")
                     .bind(id)
                     .bind(error)
-                    .execute(&mut *tx)
+                    .execute(pool)
                     .await?;
             }
         }
     }
-    tx.commit().await?;
     Ok(sent)
 }
 

@@ -56,8 +56,8 @@ const records_NUMERIC = [
   "calificacion",
 ];
 let columnHeaders = {};
-function columns(records) {
-  const spec = COLUMNS[`${selected}:${role()}`] || COLUMNS[selected];
+function columns(records, table) {
+  const spec = COLUMNS[`${table}:${role()}`] || COLUMNS[table];
   if (spec) {
     columnHeaders = Object.fromEntries(spec);
     return spec.map(([key]) => key);
@@ -99,6 +99,9 @@ function columns(records) {
   ].slice(0, 6);
 }
 let showInactive = false;
+// Token de carga: cada llamada lo incrementa; una respuesta que llega después
+// de una llamada más reciente es obsoleta y se descarta sin tocar el DOM (FE-2).
+let recordsSeq = 0;
 // Filas fantasma que ocupan la tabla mientras se resuelve la consulta.
 function records_skeletonRows(count = 6) {
   const head = $("table-head");
@@ -116,36 +119,44 @@ function records_skeletonRows(count = 6) {
   return frag;
 }
 async function loadRecords() {
-  const table = $("table-head").closest("table");
-  if (table && !table.querySelector("caption")) {
-    table.prepend(el("caption", "visually-hidden", title(selected)));
+  const seq = ++recordsSeq;
+  // Parámetros capturados antes del await: nunca releer los globales después,
+  // o una navegación rápida pintaría filas viejas con columnas nuevas.
+  const table = selected;
+  const requestPage = page;
+  const requestQuery = query;
+  const tbl = $("table-head").closest("table");
+  if (tbl && !tbl.querySelector("caption")) {
+    tbl.prepend(el("caption", "visually-hidden", title(table)));
   }
   const body = $("table-body");
   body.replaceChildren(records_skeletonRows(6));
-  const inactive = selected === "unidades_estudio" && showInactive ? "&activo=0" : "";
+  const inactive = table === "unidades_estudio" && showInactive ? "&activo=0" : "";
   let data;
   try {
     data = await api(
-      `/api/records/${selected}?page=${page}&q=${encodeURIComponent(query)}${inactive}`,
+      `/api/records/${table}?page=${requestPage}&q=${encodeURIComponent(requestQuery)}${inactive}`,
     );
   } catch (error) {
+    if (seq !== recordsSeq || table !== selected) return;
     body.replaceChildren();
     throw error;
   }
+  if (seq !== recordsSeq || table !== selected) return;
   $("extra-panel").replaceChildren();
-  if (selected === "tipos_documento_legal" && admin())
+  if (table === "tipos_documento_legal" && admin())
     action($("extra-panel"), "Nuevo tipo de documento", () => documentTypeForm(null));
-  if (selected === "log_actividad" && admin())
+  if (table === "log_actividad" && admin())
     action($("extra-panel"), "Filtrar bitácora", () => activityLog({}));
-  if (selected === "notificaciones" && admin())
+  if (table === "notificaciones" && admin())
     action($("extra-panel"), "Registro de envíos", () => deliveryLog(""));
-  if (selected === "certificados") {
+  if (table === "certificados") {
     const link = el("a", "btn btn--secondary btn--sm");
     link.href = "/api/portafolio";
     link.append(icon("download"), el("span", "", "Descargar mi portafolio (PDF)"));
     $("extra-panel").append(link);
   }
-  if (selected === "unidades_estudio") {
+  if (table === "unidades_estudio") {
     const wrap = el("label", "switch");
     const box = el("input");
     box.type = "checkbox";
@@ -163,7 +174,7 @@ async function loadRecords() {
     );
     $("extra-panel").append(wrap);
   }
-  if (selected === "equipos_reto_academico" && user.rol === "ESTUDIANTE")
+  if (table === "equipos_reto_academico" && user.rol === "ESTUDIANTE")
     scheduleForStudent().catch(showError);
   total = data.total;
   const recordCount = $("record-count");
@@ -172,13 +183,13 @@ async function loadRecords() {
   // Exports are an admin feature in Django (apps/reportes).
   $("exports").hidden = !admin();
   $("export-link").href =
-    `/api/export/${selected}?q=${encodeURIComponent(query)}`;
+    `/api/export/${table}?q=${encodeURIComponent(requestQuery)}`;
   $("export-link").download = "retosean.csv";
   $("export-pdf").href =
-    `/api/export/${selected}/pdf?q=${encodeURIComponent(query)}`;
+    `/api/export/${table}/pdf?q=${encodeURIComponent(requestQuery)}`;
   $("export-xlsx").href =
-    `/api/export/${selected}/xlsx?q=${encodeURIComponent(query)}`;
-  const cols = columns(data.records);
+    `/api/export/${table}/xlsx?q=${encodeURIComponent(requestQuery)}`;
+  const cols = columns(data.records, table);
   const head = document.createElement("tr");
   for (const key of [...cols, "Acciones"]) {
     const th = document.createElement("th");
@@ -186,8 +197,8 @@ async function loadRecords() {
     th.textContent =
       columnHeaders[key] ||
       capfirst(
-        field(selected, key)?.verbose_name ||
-          field(selected, key + "_id")?.verbose_name ||
+        field(table, key)?.verbose_name ||
+          field(table, key + "_id")?.verbose_name ||
           key,
       );
     if (records_NUMERIC.includes(key)) th.classList.add("num");
@@ -200,7 +211,7 @@ async function loadRecords() {
     const td = document.createElement("td");
     td.colSpan = cols.length + 1;
     td.append(
-      query
+      requestQuery
         ? ui.empty(
             "search",
             "Sin resultados",
@@ -232,13 +243,13 @@ async function loadRecords() {
       if (records_NUMERIC.includes(key)) td.classList.add("num");
       if (key.includes("estado") && record[key]) {
         const badge = el("span", "pill " + badgeClass(record[key]) + " dot");
-        badge.textContent = choice(selected, key, record[key]);
+        badge.textContent = choice(table, key, record[key]);
         td.append(badge);
       } else {
         const text = display(record[key]);
         td.title = text;
-        td.textContent = field(selected, key)?.choices.length
-          ? choice(selected, key, record[key])
+        td.textContent = field(table, key)?.choices.length
+          ? choice(table, key, record[key])
           : text;
       }
       tr.append(td);
@@ -254,10 +265,10 @@ async function loadRecords() {
   }
   const pageNumber = $("page-number");
   pageNumber.textContent =
-    `Página ${page} de ${Math.max(1, Math.ceil(total / 20))}`;
+    `Página ${requestPage} de ${Math.max(1, Math.ceil(total / 20))}`;
   pageNumber.setAttribute("aria-live", "polite");
-  $("previous").disabled = page <= 1;
-  $("next").disabled = page * 20 >= total;
+  $("previous").disabled = requestPage <= 1;
+  $("next").disabled = requestPage * 20 >= total;
 }
 function showError(error) {
   $("app-error").textContent = error.message;

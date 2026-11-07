@@ -4,7 +4,7 @@ use crate::{
 };
 use axum::{
     Json,
-    extract::State,
+    extract::{ConnectInfo, State},
     http::{HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use sqlx::{FromRow, PgPool};
+use std::net::SocketAddr;
 use subtle::ConstantTimeEq;
 
 #[derive(Debug, Clone, Serialize, FromRow)]
@@ -117,14 +118,25 @@ pub struct Credentials {
     username: String,
     password: String,
 }
-/// The client address as Django's _ip: the first X-Forwarded-For hop when behind a proxy.
-fn client_ip(headers: &HeaderMap) -> Option<String> {
-    headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.split(',').next())
-        .map(|v| v.trim().to_string())
-        .filter(|v| v.parse::<std::net::IpAddr>().is_ok())
+/// The client address for audit and rate limiting. X-Forwarded-For is only
+/// trusted when the app is explicitly configured to run behind a trusted proxy;
+/// otherwise the TCP peer address is used (fail closed on the spoofable header).
+pub(crate) fn client_ip(
+    headers: &HeaderMap,
+    trust_proxy: bool,
+    peer: Option<SocketAddr>,
+) -> Option<String> {
+    if trust_proxy
+        && let Some(ip) = headers
+            .get("x-forwarded-for")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(',').next())
+            .map(|v| v.trim().to_string())
+            .filter(|v| v.parse::<std::net::IpAddr>().is_ok())
+    {
+        return Some(ip);
+    }
+    peer.map(|p| p.ip().to_string())
 }
 /// usuarios/signals.py: LOGIN, LOGIN_FALLIDO and LOGOUT entries.
 async fn log_access(
@@ -132,12 +144,51 @@ async fn log_access(
     user: Option<i64>,
     identifier: &str,
     action: &str,
-    headers: &HeaderMap,
+    ip: Option<&str>,
 ) -> Result<()> {
     let identifier: String = identifier.chars().take(150).collect();
     sqlx::query("INSERT INTO log_actividad(usuario_id,identificador,accion,detalle,ip,creado_en) VALUES($1,$2,$3,'',$4::inet,now())")
-        .bind(user).bind(identifier).bind(action).bind(client_ip(headers)).execute(&state.pool).await?;
+        .bind(user).bind(identifier).bind(action).bind(ip).execute(&state.pool).await?;
     Ok(())
+}
+/// The core rate-limit check shared by login, registration and password reset:
+/// purge stale rows, take an advisory lock, count, reject over the cap, else
+/// record. A 10-minute rolling window is kept by the cleanup in each path.
+pub(crate) async fn check_subject(state: &AppState, subject: &str, limit: i64) -> Result<()> {
+    sqlx::query("DELETE FROM rust_login_attempts WHERE attempted_at < now()-interval '10 minutes'")
+        .execute(&state.pool)
+        .await?;
+    let mut tx = state.pool.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
+        .bind(subject)
+        .execute(&mut *tx)
+        .await?;
+    let attempts: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM rust_login_attempts WHERE subject=$1")
+            .bind(subject)
+            .fetch_one(&mut *tx)
+            .await?;
+    if attempts >= limit {
+        return Err(AppError(
+            StatusCode::TOO_MANY_REQUESTS,
+            "Demasiadas solicitudes. Intenta de nuevo más tarde".into(),
+        ));
+    }
+    sqlx::query("INSERT INTO rust_login_attempts(subject) VALUES($1)")
+        .bind(subject)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(())
+}
+/// A failure cap per client IP, so a distributed brute-force across many
+/// usernames from one address is still throttled (the per-account limiter alone
+/// would let an attacker walk the whole namespace).
+const IP_FAILURE_LIMIT: i64 = 100;
+async fn record_ip_failure(state: &AppState, ip: Option<&str>) -> Result<()> {
+    // Unknown client IP (e.g. a test harness without a peer) skips this limiter.
+    let Some(ip) = ip else { return Ok(()) };
+    check_subject(state, &digest(&format!("ip:{ip}")), IP_FAILURE_LIMIT).await
 }
 /// Waits briefly for a password-hashing slot instead of failing at once.
 pub(crate) async fn hash_slot(
@@ -159,6 +210,7 @@ pub(crate) async fn hash_slot(
 pub async fn login(
     State(state): State<AppState>,
     headers: HeaderMap,
+    peer: Option<axum::Extension<ConnectInfo<SocketAddr>>>,
     Json(input): Json<Credentials>,
 ) -> Result<Response> {
     // 254 characters covers the longest valid email; usernames are capped at 150
@@ -194,6 +246,11 @@ pub async fn login(
         Some((id, ..)) => digest(&format!("cuenta:{id}")),
         None => digest(&input.username.to_lowercase()),
     };
+    let ip = client_ip(
+        &headers,
+        state.config.trust_proxy,
+        peer.map(|axum::Extension(ConnectInfo(addr))| addr),
+    );
     // A server too busy to hash rejects without recording an attempt; no DB
     // connection is held while waiting for a slot.
     let permit = hash_slot(&state.login_slots).await?;
@@ -210,7 +267,17 @@ pub async fn login(
             .bind(&subject)
             .fetch_one(&mut *tx)
             .await?;
-    if attempts >= 10 {
+    // AUTH-4: an address over its failure cap is refused before any password check.
+    let ip_failures: i64 = match ip.as_deref() {
+        Some(ip) => {
+            sqlx::query_scalar("SELECT count(*) FROM rust_login_attempts WHERE subject=$1")
+                .bind(digest(&format!("ip:{ip}")))
+                .fetch_one(&mut *tx)
+                .await?
+        }
+        None => 0,
+    };
+    if attempts >= 10 || ip_failures >= IP_FAILURE_LIMIT {
         return Err(AppError(
             StatusCode::TOO_MANY_REQUESTS,
             "Demasiados intentos. Espera 10 minutos".into(),
@@ -237,7 +304,8 @@ pub async fn login(
     .await
     .map_err(|_| AppError::bad("No se pudo validar la contraseña"))?;
     if !valid || id == 0 {
-        log_access(&state, None, &username, "LOGIN_FALLIDO", &headers).await?;
+        log_access(&state, None, &username, "LOGIN_FALLIDO", ip.as_deref()).await?;
+        record_ip_failure(&state, ip.as_deref()).await?;
         return Err(AppError(
             StatusCode::UNAUTHORIZED,
             "Usuario o contraseña incorrectos".into(),
@@ -245,14 +313,23 @@ pub async fn login(
     }
     if let Some(message) = inactive {
         // Right password, but the account cannot sign in: no session is opened.
-        log_access(&state, Some(id), &account, "LOGIN_FALLIDO", &headers).await?;
-        return Err(AppError(StatusCode::UNAUTHORIZED, message.into()));
+        // The specific reason is kept in the server log only, never disclosed.
+        tracing::warn!(
+            user_id = id,
+            reason = message,
+            "login rejected: inactive account"
+        );
+        log_access(&state, Some(id), &account, "LOGIN_FALLIDO", ip.as_deref()).await?;
+        return Err(AppError(
+            StatusCode::UNAUTHORIZED,
+            "Usuario o contraseña incorrectos".into(),
+        ));
     }
     sqlx::query("DELETE FROM rust_login_attempts WHERE subject=$1")
         .bind(&subject)
         .execute(&state.pool)
         .await?;
-    log_access(&state, Some(id), &account, "LOGIN", &headers).await?;
+    log_access(&state, Some(id), &account, "LOGIN", ip.as_deref()).await?;
     start_session(&state, id).await
 }
 /// Opens an 8-hour session for `id` and returns the cookie response (login, registration).
@@ -303,17 +380,43 @@ pub async fn me(
     }
     Ok(Json(json!({"user":user,"csrf":csrf,"permisos":permisos})))
 }
-pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Result<Response> {
+pub async fn logout(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    peer: Option<axum::Extension<ConnectInfo<SocketAddr>>>,
+) -> Result<Response> {
     let user = current(&state, &headers, true).await?;
-    log_access(&state, Some(user.id), &user.username, "LOGOUT", &headers).await?;
+    let ip = client_ip(
+        &headers,
+        state.config.trust_proxy,
+        peer.map(|axum::Extension(ConnectInfo(addr))| addr),
+    );
+    log_access(
+        &state,
+        Some(user.id),
+        &user.username,
+        "LOGOUT",
+        ip.as_deref(),
+    )
+    .await?;
     sqlx::query("DELETE FROM rust_sessions WHERE token_hash=$1")
         .bind(digest(session_token(&headers).unwrap_or("")))
         .execute(&state.pool)
         .await?;
     let mut response = Json(json!({"ok":true})).into_response();
+    // Mirror the session cookie's Secure attribute so the clearing header
+    // matches and older non-secure cookies are not left behind.
+    let secure = if state.config.secure_cookie {
+        "; Secure"
+    } else {
+        ""
+    };
     response.headers_mut().insert(
         "set-cookie",
-        HeaderValue::from_static("retosean_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"),
+        HeaderValue::from_str(&format!(
+            "retosean_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0{secure}"
+        ))
+        .map_err(|_| AppError::bad("Cookie inválida"))?,
     );
     Ok(response)
 }

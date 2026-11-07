@@ -126,7 +126,26 @@ async function api(path, data) {
   const body = await readJson(response);
   if (!response.ok) {
     if (response.status === 401 && !path.endsWith("/login")) showLogin();
-    throw new Error(body.error || "No se pudo completar la operación");
+    const error = new Error(body.error || "No se pudo completar la operación");
+    error.status = response.status;
+    throw error;
+  }
+  return body;
+}
+// Variante de api() para cuerpos multipart (FormData): mismo manejo de CSRF,
+// de sesión expirada (401 → showLogin) y de errores normalizados.
+async function apiForm(path, formData) {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrf || "" },
+    body: formData,
+  });
+  const body = await readJson(response);
+  if (!response.ok) {
+    if (response.status === 401) showLogin();
+    const error = new Error(body.error || "No se pudo completar la operación");
+    error.status = response.status;
+    throw error;
   }
   return body;
 }
@@ -188,19 +207,39 @@ function toast(message, variant = "info") {
   toastTimer = setTimeout(hideToast, Math.max(4500, 60 * text.length));
 }
 function showLogin() {
+  // Cierra el diálogo de detalle: vive fuera de #app-view y, si quedara
+  // abierto sobre el login, bloquearía el inicio de sesión con datos viejos.
+  if ($("detail-dialog").open) $("detail-dialog").close();
+  $("dialog-content").replaceChildren();
+  // Deja el shell en un estado limpio y con su aria sincronizado.
+  setBellMenu(false);
+  setSidebar(false);
   $("app-view").hidden = true;
   $("login-view").hidden = false;
   document.body.className = "auth";
   document.title = "Retosean — Universidad EAN";
   user = null;
   csrf = null;
-  authRoute().catch(() => {});
+  authRoute().catch(showError);
 }
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
+}
+// URL de datos del servidor para un href: solo http(s), mailto o relativas.
+// Devuelve null para cualquier otro esquema (javascript:, data:, file:, …).
+function safeHref(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  let url;
+  try {
+    url = new URL(text, location.origin);
+  } catch {
+    return null;
+  }
+  return ["http:", "https:", "mailto:"].includes(url.protocol) ? url.href : null;
 }
 // Peso amounts in es-CO format: $1.234.567,89
 function cop(value) {
@@ -288,9 +327,10 @@ function buildNav() {
     navLabels[target] ??= text;
     return a;
   };
+  // Encabezados de grupo visibles también para lectores de pantalla: dan
+  // orientación dentro del landmark de navegación.
   const section = (text) => {
     const li = el("li", "nav__section");
-    li.setAttribute("aria-hidden", "true");
     li.append(el("span", "", text));
     nav.append(li);
   };
@@ -349,17 +389,20 @@ async function refreshBell() {
     "aria-label",
     unread ? `Notificaciones: ${unread} sin leer` : "Notificaciones",
   );
-  const styles = {
+  // Prototipo nulo: un `tipo` como "constructor" o "toString" no hereda
+  // funciones de Object.prototype y cae siempre en el respaldo INFO.
+  const styles = Object.assign(Object.create(null), {
     EXITO: ["check-circle-fill", "text-success"],
     ADVERTENCIA: ["exclamation-triangle-fill", "text-warning"],
     ERROR: ["x-circle-fill", "text-danger"],
     INFO: ["info-circle-fill", "text-info"],
-  };
+  });
   const list = $("bell-items");
   list.replaceChildren();
   for (const n of mine.slice(0, 8)) {
     const a = el("a", "menu__item" + (n.leida ? "" : " menu__item--unread"));
     a.href = "#notificaciones";
+    a.setAttribute("role", "menuitem");
     const [iname, icls] = styles[n.tipo] || styles.INFO;
     const icn = icon(iname);
     icn.classList.add(icls);
@@ -394,15 +437,23 @@ function fecha(value, withTime) {
 async function route() {
   if (!user) return authRoute().catch(showError);
   $("app-error").hidden = true;
-  $("bell-menu").hidden = true;
-  $("sidebar").classList.remove("open");
-  $("sidebar-overlay").classList.remove("show");
+  setBellMenu(false);
+  setSidebar(false);
   selected = location.hash.slice(1) || "dashboard";
+  // Vista de ESTA navegación; si `selected` cambia, otra route() más reciente
+  // tomó el control y los resultados pendientes se descartan (FE-2).
+  const view = selected;
   if (selected === "publicar") {
     location.hash = "retos";
-    challengeForm();
+    // Se abre después de la route() que provoca el cambio de hash, para que
+    // el cierre del diálogo anterior no se lleve el formulario recién abierto.
+    setTimeout(() => challengeForm(), 0);
     return;
   }
+  // Navegar con el diálogo de detalle abierto lo cierra y lo limpia: el
+  // registro mostrado pertenece a la vista anterior (FE-3).
+  if ($("detail-dialog").open) $("detail-dialog").close();
+  $("dialog-content").replaceChildren();
   page = 1;
   query = "";
   $("search").value = "";
@@ -471,10 +522,16 @@ async function route() {
     if (selected === "dashboard") await loadDashboard();
     else if (selected === "reportes") await loadBuilder();
     else await loadRecords();
+  } catch (error) {
+    //Errores del cargador: visibles en la vista; route() nunca rechaza (FEB-1).
+    if (view === selected) showError(error);
   } finally {
-    main.setAttribute("aria-busy", "false");
-    if (progress) progress.hidden = true;
+    if (view === selected) {
+      main.setAttribute("aria-busy", "false");
+      if (progress) progress.hidden = true;
+    }
   }
+  if (view !== selected) return;
   // Move focus to the page heading so keyboard / screen-reader users know the
   // page changed; announce via document.title above.
   const headingEl = $("page-heading");

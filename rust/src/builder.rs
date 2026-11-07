@@ -272,7 +272,7 @@ const REPORTS: [Report; 5] = [
             "'gastos',g.n,'gasto_refrigerios',g.refr::text,'gasto_materiales',g.mat::text,'gasto_impresiones',g.imp::text,",
             "'gasto_espacios',g.esp::text,'gasto_otros',g.otr::text,'alerta_80',CASE WHEN b.alerta_80_enviada THEN 'Sí' ELSE 'No' END",
             ") fila FROM presupuestos b JOIN retos r ON r.id=b.reto_id JOIN usuarios eu ON eu.id=r.empresa_id CROSS JOIN LATERAL (SELECT ",
-            "coalesce(sum(monto) FILTER (WHERE estado='COMPROMETIDO'),0.00) comp,coalesce(sum(monto) FILTER (WHERE estado<>'COMPROMETIDO'),0.00) ejec,count(*) n,",
+            "coalesce(sum(monto) FILTER (WHERE estado='COMPROMETIDO'),0.00) comp,coalesce(sum(monto) FILTER (WHERE estado IN ('','EJECUTADO')),0.00) ejec,count(*) FILTER (WHERE estado NOT IN ('ANULADO','RECHAZADO','PENDIENTE')) n,",
             "coalesce(sum(monto) FILTER (WHERE categoria='REFRIGERIOS'),0.00) refr,coalesce(sum(monto) FILTER (WHERE categoria='MATERIALES'),0.00) mat,",
             "coalesce(sum(monto) FILTER (WHERE categoria='IMPRESIONES'),0.00) imp,coalesce(sum(monto) FILTER (WHERE categoria='ESPACIOS'),0.00) esp,",
             "coalesce(sum(monto) FILTER (WHERE categoria='OTROS'),0.00) otr FROM gastos WHERE presupuesto_id=b.id) g WHERE TRUE {where}"
@@ -574,12 +574,17 @@ async fn build(
     }
     let total = count.fetch_one(&state.pool).await? as usize;
     let mut sql = format!("{base} ORDER BY {}", report.order);
-    if let Some(l) = limit {
-        sql.push_str(&format!(" LIMIT {l}"));
+    // SQLQ-4: use a bind parameter for the LIMIT instead of string interpolation.
+    let limit_index = binds.len() + 1;
+    if limit.is_some() {
+        sql.push_str(&format!(" LIMIT ${limit_index}"));
     }
     let mut query = sqlx::query_scalar::<_, Value>(&sql);
     for b in &binds {
         query = query.bind(b);
+    }
+    if let Some(l) = limit {
+        query = query.bind(l);
     }
     let raw = query.fetch_all(&state.pool).await?;
     // No columns chosen means all of them (columnas_por_clave).
@@ -589,6 +594,11 @@ async fn build(
         .filter(|c| input.columnas.is_empty() || input.columnas.iter().any(|k| k == c.0))
         .copied()
         .collect();
+    // REP-2: a request with only nonexistent columns would otherwise panic later
+    // when pdf_document slices an empty widths array.
+    if columns.is_empty() {
+        return Err(AppError::bad("Selecciona al menos una columna válida."));
+    }
     let rows = raw
         .iter()
         .map(|row| {
@@ -689,7 +699,23 @@ pub async fn catalog(State(state): State<AppState>, headers: HeaderMap) -> Resul
     if reports.is_empty() {
         return Err(AppError::forbidden());
     }
-    let options: Value = sqlx::query_scalar("SELECT jsonb_build_object('facultades',(SELECT coalesce(jsonb_agg(jsonb_build_array(id,nombre) ORDER BY nombre),'[]') FROM facultades),'programas',(SELECT coalesce(jsonb_agg(jsonb_build_array(p.id,p.nombre||' - '||f.nombre) ORDER BY p.nombre),'[]') FROM programas p JOIN facultades f ON f.id=p.facultad_id),'empresas',(SELECT coalesce(jsonb_agg(jsonb_build_array(id,razon_social) ORDER BY razon_social),'[]') FROM empresas))")
+    // REP-3: scope the empresas catalog to what the user can reach. Admins see
+    // all; professors only see companies whose retos have an approved/published
+    // integration with them.
+    let empresas_where = if user.admin() {
+        "".to_string()
+    } else {
+        format!(
+            "WHERE e.usuario_id={} OR EXISTS(SELECT 1 FROM retos r JOIN integraciones_academicas i ON i.reto_id=r.id WHERE r.empresa_id=e.usuario_id AND i.profesor_id={} AND i.estado IN ('aprobada','publicada'))",
+            user.id, user.id
+        )
+    };
+    let options: Value = sqlx::query_scalar(
+        &format!("SELECT jsonb_build_object(
+            'facultades',(SELECT coalesce(jsonb_agg(jsonb_build_array(id,nombre) ORDER BY nombre),'[]') FROM facultades),
+            'programas',(SELECT coalesce(jsonb_agg(jsonb_build_array(p.id,p.nombre||' - '||f.nombre) ORDER BY p.nombre),'[]') FROM programas p JOIN facultades f ON f.id=p.facultad_id),
+            'empresas',(SELECT coalesce(jsonb_agg(jsonb_build_array(e.id,e.razon_social) ORDER BY e.razon_social),'[]') FROM empresas e {empresas_where}))"),
+    )
         .fetch_one(&state.pool)
         .await?;
     Ok(Json(json!({"reportes": reports, "opciones": options})))
@@ -821,7 +847,8 @@ async fn generate(
     let limit = if format == "EXCEL" {
         Some(MAX_FILAS_EXCEL)
     } else {
-        None
+        // REP-1: cap the PDF query at the same 2000 rows the renderer uses.
+        Some(2000)
     };
     let built = build(state, user, input, limit).await?;
     let (bytes, extension, mime) = render(&built, format)?;

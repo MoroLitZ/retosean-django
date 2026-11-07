@@ -344,8 +344,8 @@ async fn sync_mirror(
         .bind(students)
         .execute(&mut **tx)
         .await?;
-    sqlx::query("INSERT INTO miembros_equipo(equipo_id,estudiante_id,rol,fecha_ingreso) SELECT $1,s,'MIEMBRO',now() FROM unnest($2::bigint[]) s WHERE NOT EXISTS(SELECT 1 FROM miembros_equipo WHERE equipo_id=$1 AND estudiante_id=s)")
-        .bind(mirror).bind(students).execute(&mut **tx).await?;
+    sqlx::query("INSERT INTO miembros_equipo(equipo_id,estudiante_id,rol,fecha_ingreso) SELECT $1,s,'MIEMBRO',now() FROM unnest($2::bigint[]) s WHERE NOT EXISTS(SELECT 1 FROM miembros_equipo WHERE equipo_id=$1 AND estudiante_id=s) AND NOT EXISTS(SELECT 1 FROM miembros_equipo m JOIN equipos e ON e.id=m.equipo_id WHERE e.reto_id=$3 AND m.estudiante_id=s AND m.equipo_id<>$1)")
+        .bind(mirror).bind(students).bind(reto).execute(&mut **tx).await?;
     // The first member by id leads, the rest are members.
     sqlx::query("UPDATE miembros_equipo SET rol=CASE WHEN estudiante_id=$2 THEN 'LIDER' ELSE 'MIEMBRO' END WHERE equipo_id=$1")
         .bind(mirror).bind(students.first().copied()).execute(&mut **tx).await?;
@@ -383,7 +383,16 @@ pub async fn delete_team(
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, true).await?;
     let mut tx = state.pool.begin().await?;
-    let (_, mirror) = academic_team(&mut tx, id, &user).await?;
+    let (reto, mirror) = academic_team(&mut tx, id, &user).await?;
+    let closed: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM hackathons WHERE reto_id=$1 AND (resultados_publicados OR estado='finalizado'))")
+        .bind(reto)
+        .fetch_one(&mut *tx)
+        .await?;
+    if closed {
+        return Err(AppError::bad(
+            "No se puede eliminar el equipo: el hackathon ya finalizó.",
+        ));
+    }
     let name: String =
         sqlx::query_scalar("SELECT nombre_equipo FROM equipos_reto_academico WHERE id=$1")
             .bind(id)
@@ -669,6 +678,12 @@ pub async fn register(
     if !member {
         return Err(AppError::forbidden());
     }
+    let accepted:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM postulaciones WHERE reto_id=$1 AND estudiante_id=$2 AND estado='ACEPTADA')").bind(reto).bind(user.id).fetch_one(&mut *tx).await?;
+    if !accepted {
+        return Err(AppError::bad(
+            "Solo pueden inscribirse estudiantes con postulación aceptada.",
+        ));
+    }
     let registered: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM inscripciones_hackaton WHERE hackathon_id=$1 AND equipo_id=$2)")
         .bind(id)
         .bind(input.equipo_id)
@@ -763,9 +778,15 @@ pub async fn vote(
     Json(input): Json<VoteInput>,
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, true).await?;
-    let score = crate::finance::money(&input.puntaje)?;
+    let score = input
+        .puntaje
+        .parse::<rust_decimal::Decimal>()
+        .map_err(|_| AppError::bad("El puntaje debe ser un número entre 0 y 5."))?;
     domain::max_chars(&input.comentario, 4000, "Comentario")?;
-    if score > rust_decimal::Decimal::from(5) {
+    if score < rust_decimal::Decimal::ZERO
+        || score > rust_decimal::Decimal::from(5)
+        || score.scale() > 2
+    {
         return Err(AppError::bad("El puntaje debe estar entre 0 y 5."));
     }
     let mut tx = state.pool.begin().await?;

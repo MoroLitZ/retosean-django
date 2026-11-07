@@ -228,8 +228,8 @@ function importForm() {
   const form = el("form");
   const fileField = forms_fileField(
     "archivo",
-    "Archivo .csv o .xlsx (máximo 1000 filas)",
-    { accept: ".csv,.xlsx,.xlsm", required: true, hint: "Máximo 1000 filas por archivo." },
+    "Archivo .csv o .xlsx (máximo 1000 filas, 5 MB)",
+    { accept: ".csv,.xlsx,.xlsm", required: true, hint: "Máximo 1000 filas y 5 MB por archivo." },
   );
   form.append(fileField);
   const file = fileField.querySelector("input");
@@ -263,7 +263,8 @@ function importForm() {
     busy(
       preview,
       (async () => {
-        const error = forms_validateFile(file);
+        // 5 MB: el mismo límite por archivo que aplica el servidor (FEB-5).
+        const error = forms_validateFile(file, 5);
         if (error) {
           forms_setError(fileField, error);
           return;
@@ -555,10 +556,14 @@ async function permissionsForm(id) {
     busy(
       button,
       (async () => {
-        const codigos = Array.from(form.querySelectorAll("input:checked")).map(
-          (b) => b.value,
-        );
-        await mutate(`/api/usuarios/${id}/permisos`, { codigos });
+        try {
+          const codigos = Array.from(form.querySelectorAll("input:checked")).map(
+            (b) => b.value,
+          );
+          await mutate(`/api/usuarios/${id}/permisos`, { codigos });
+        } catch (error) {
+          toast(error.message, "error");
+        }
       })(),
     );
   });
@@ -850,7 +855,12 @@ async function activityLog(filters) {
   form.append(forms_actions(apply));
   form.addEventListener("submit", (e) => {
     e.preventDefault();
-    activityLog(Object.fromEntries(new FormData(form))).catch(showError);
+    // busy() bloquea el botón hasta que la nueva vista esté lista: ni doble
+    // envío ni diálogos apilados por clics rápidos (FEB-3).
+    busy(
+      apply,
+      activityLog(Object.fromEntries(new FormData(form))).catch(showError),
+    );
   });
   parent.append(
     form,
@@ -914,9 +924,12 @@ async function deliveryLog(estado) {
     { value: estado },
   );
   const filter = filterField.querySelector("select");
-  filter.addEventListener("change", () =>
-    deliveryLog(filter.value).catch(showError),
-  );
+  filter.addEventListener("change", () => {
+    // Se deshabilita mientras carga: el render de deliveryLog reemplaza el
+    // control; así ni se apilan llamadas ni hay doble envío (FEB-3).
+    filter.disabled = true;
+    deliveryLog(filter.value).catch(showError);
+  });
   parent.append(filterField);
   parent.append(
     ui.table(
@@ -1149,7 +1162,8 @@ async function applicationForm(id) {
   form.append(forms_actions(button));
   form.addEventListener("submit", (e) => {
     e.preventDefault();
-    const error = forms_validateFile(cv);
+    // PDF de máximo 5 MB, igual que el servidor (workflows::apply).
+    const error = forms_validateFile(cv, 5);
     if (error) {
       forms_setError(cvField, error);
       return;

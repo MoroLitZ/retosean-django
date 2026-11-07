@@ -293,8 +293,13 @@ async function loadBuilder() {
     const a = el("a");
     a.href = url;
     a.download = name;
+    a.hidden = true;
+    // Algunos navegadores ignoran click() en un ancla fuera del documento; se
+    // revoca la URL después para no abortar la descarga (FEB-8).
+    document.body.append(a);
     a.click();
-    URL.revokeObjectURL(url);
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   });
   add("Generar y enviar por correo", "envelope", "accent", async () => {
     const data = await api("/api/reportes/enviar", payload());

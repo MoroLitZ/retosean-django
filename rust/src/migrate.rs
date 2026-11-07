@@ -9,6 +9,44 @@ type Error = Box<dyn std::error::Error>;
 /// Download keys Rust serves (media::safe_key); other files are reported.
 const EXTENSIONS: &[&str] = &["pdf", "png", "jpg", "txt", "xlsx", "zip"];
 
+/// The QA-package-F integrity rules (CHECKs, UNIQUEs and the document-type FK)
+/// are defined VALID inline in schema.sql. A legacy Django database may contain
+/// rows that violate them, so import-django drops them before copying and
+/// re-adds them NOT VALID (with dedup) afterwards — the same reconciliation the
+/// `migrate` command performs on a pre-existing database. Constraints are left
+/// off while files are copied because the file `UPDATE`s would otherwise
+/// re-validate grandfathered rows.
+const RELAX_INTEGRITY: &str = r#"
+ALTER TABLE "presupuestos" DROP CONSTRAINT IF EXISTS "presupuestos_monto_total_nonnegative";
+ALTER TABLE "gastos" DROP CONSTRAINT IF EXISTS "gastos_monto_nonnegative";
+ALTER TABLE "entregables" DROP CONSTRAINT IF EXISTS "entregables_puntaje_maximo_nonnegative";
+ALTER TABLE "entregables" DROP CONSTRAINT IF EXISTS "entregables_nota_range";
+ALTER TABLE "evaluaciones" DROP CONSTRAINT IF EXISTS "evaluaciones_nota_range";
+ALTER TABLE "evaluacion_criteriorubrica" DROP CONSTRAINT IF EXISTS "evaluacion_criteriorubrica_puntaje_maximo_nonnegative";
+ALTER TABLE "evaluacion_evaluacioncriterio" DROP CONSTRAINT IF EXISTS "evaluacion_evaluacioncriterio_puntaje_nonnegative";
+ALTER TABLE "votaciones_hackaton" DROP CONSTRAINT IF EXISTS "votaciones_hackaton_puntaje_range";
+ALTER TABLE "cierre_encuestasatisfaccion" DROP CONSTRAINT IF EXISTS "cierre_encuestasatisfaccion_calificacion_range";
+ALTER TABLE "seguimientos_reto" DROP CONSTRAINT IF EXISTS "seguimientos_reto_porcentaje_avance_max";
+ALTER TABLE "retos" DROP CONSTRAINT IF EXISTS "retos_fechas_tentativas_order";
+ALTER TABLE "etapas_hackaton" DROP CONSTRAINT IF EXISTS "etapas_hackaton_fechas_order";
+ALTER TABLE "documentos_empresas" DROP CONSTRAINT IF EXISTS "documentos_empresas_fechas_order";
+ALTER TABLE "retos" DROP CONSTRAINT IF EXISTS "retos_estado_check";
+ALTER TABLE "integraciones_academicas" DROP CONSTRAINT IF EXISTS "integraciones_academicas_estado_check";
+ALTER TABLE "hackathons" DROP CONSTRAINT IF EXISTS "hackathons_estado_check";
+ALTER TABLE "postulaciones" DROP CONSTRAINT IF EXISTS "postulaciones_estado_check";
+ALTER TABLE "entregables" DROP CONSTRAINT IF EXISTS "entregables_estado_check";
+ALTER TABLE "gastos" DROP CONSTRAINT IF EXISTS "gastos_estado_check";
+ALTER TABLE "documentos_empresas" DROP CONSTRAINT IF EXISTS "documentos_empresas_estado_check";
+ALTER TABLE "cierre_solicitudlogistica" DROP CONSTRAINT IF EXISTS "cierre_solicitudlogistica_estado_check";
+ALTER TABLE "inscripciones_hackaton" DROP CONSTRAINT IF EXISTS "inscripciones_hackaton_estado_check";
+DROP INDEX IF EXISTS "usuarios_email_ci_uniq";
+DROP INDEX IF EXISTS "jurados_hackaton_usuario_uniq";
+DROP INDEX IF EXISTS "jurados_hackaton_email_ci_uniq";
+ALTER TABLE "equipos" DROP CONSTRAINT IF EXISTS "equipos_reto_nombre_unique";
+ALTER TABLE "equipos_reto_academico" DROP CONSTRAINT IF EXISTS "equipos_reto_academico_reto_nombre_equipo_unique";
+ALTER TABLE "documentos_empresas" DROP CONSTRAINT IF EXISTS "documentos_empresas_tipo_documento_fk_tipos_documento_legal";
+"#;
+
 pub struct Summary {
     pub rows: i64,
     pub tables: usize,
@@ -37,6 +75,9 @@ pub async fn import_django(
             return Err(format!("import-django requires an empty database (run init-db with a new RUST_DB_NAME); \"{table}\" has rows").into());
         }
     }
+    // Relax the QA-package-F integrity rules before copying: legacy rows need not
+    // satisfy them, and they are reconciled (dedup + NOT VALID) after the copy.
+    sqlx::raw_sql(RELAX_INTEGRITY).execute(&mut *tx).await?;
     let mut summary = Summary {
         rows: 0,
         tables: 0,
@@ -59,19 +100,31 @@ pub async fn import_django(
             .map(|c| format!("\"{c}\""))
             .collect();
         let list = shared.join(",");
-        // shortcut: one table at a time in memory; fine for Django databases of
-        // a few hundred MB, stream with a cursor if they grow beyond that.
-        let rows: Vec<serde_json::Value> =
-            sqlx::query_scalar(&format!("SELECT to_jsonb(t) FROM \"{table}\" t"))
-                .fetch_all(&mut source)
-                .await?;
-        for chunk in rows.chunks(500) {
+        // OPS-13: stream each table through a server-side cursor in chunks so
+        // a large Django database never fully lands in RAM.
+        let mut source_tx = source.begin().await?;
+        sqlx::query(&format!(
+            "DECLARE retosean_import CURSOR FOR SELECT to_jsonb(t) FROM \"{table}\" t"
+        ))
+        .execute(&mut *source_tx)
+        .await?;
+        loop {
+            let chunk: Vec<serde_json::Value> =
+                sqlx::query_scalar("FETCH 500 FROM retosean_import")
+                    .fetch_all(&mut *source_tx)
+                    .await?;
+            let count = chunk.len() as i64;
+            if count == 0 {
+                break;
+            }
             sqlx::query(&format!("INSERT INTO \"{table}\" ({list}) SELECT {list} FROM jsonb_populate_recordset(NULL::\"{table}\", $1)"))
-                .bind(serde_json::Value::Array(chunk.to_vec()))
+                .bind(serde_json::Value::Array(chunk))
                 .execute(&mut *tx)
                 .await?;
+            summary.rows += count;
         }
-        summary.rows += rows.len() as i64;
+        // Read-only source transaction: the rollback also closes the cursor.
+        source_tx.rollback().await?;
         summary.tables += 1;
         let has_id = shared.iter().any(|c| c == "\"id\"");
         if has_id {
@@ -88,7 +141,24 @@ pub async fn import_django(
         &mut written,
     )
     .await;
-    let result = match copied {
+    // Reconcile the grandfathered rows exactly like `migrate` on an existing DB:
+    // dedupe the unique keys, then add the CHECK/FK rules back NOT VALID so new
+    // writes are still constrained.
+    let restored = match copied {
+        Ok(()) => {
+            sqlx::raw_sql(include_str!(
+                "../sql/migrations/0002_estado_constraints.sql"
+            ))
+            .execute(&mut *tx)
+            .await?;
+            sqlx::raw_sql(include_str!("../sql/migrations/0003_unique_and_fk.sql"))
+                .execute(&mut *tx)
+                .await?;
+            Ok(())
+        }
+        Err(error) => Err(error),
+    };
+    let result = match restored {
         Ok(()) => tx.commit().await.map_err(Error::from),
         Err(error) => Err(error),
     };

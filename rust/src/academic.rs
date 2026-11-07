@@ -249,7 +249,7 @@ pub async fn edit(
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, true).await?;
     let mut tx = state.pool.begin().await?;
-    let current: Option<Value> = sqlx::query_scalar("SELECT to_jsonb(i)||jsonb_build_object('reto_estado',r.estado) FROM integraciones_academicas i JOIN retos r ON r.id=i.reto_id WHERE i.id=$1 AND i.profesor_id=$2 AND $3='PROFESOR' FOR UPDATE OF i")
+    let current: Option<Value> = sqlx::query_scalar("SELECT to_jsonb(i)||jsonb_build_object('reto_estado',r.estado) FROM integraciones_academicas i JOIN retos r ON r.id=i.reto_id WHERE i.id=$1 AND i.profesor_id=$2 AND $3='PROFESOR' AND r.eliminado_en IS NULL FOR UPDATE OF i")
         .bind(id)
         .bind(user.id)
         .bind(&user.rol)
@@ -257,8 +257,7 @@ pub async fn edit(
         .await?;
     let current = current.ok_or_else(AppError::not_found)?;
     let estado = current["estado"].as_str().unwrap_or("").to_string();
-    let editable = ["borrador", "rechazada"].contains(&estado.as_str())
-        || ["abierto", "en_curso"].contains(&current["reto_estado"].as_str().unwrap_or(""));
+    let editable = ["borrador", "rechazada"].contains(&estado.as_str());
     if !editable {
         return Err(AppError::bad(
             "Esta integración no puede editarse desde su estado actual.",

@@ -262,6 +262,22 @@ const ui = (() => {
     const list = h("div", "tabs");
     list.setAttribute("role", "tablist");
     const panels = h("div", "tabs__panels");
+    // Activa la pestaña i: roving tabindex + paneles (patrón WAI-ARIA tabs).
+    const activate = (i, moveFocus) => {
+      items.forEach((_, j) => {
+        const t = document.getElementById("tab-" + j);
+        const p = document.getElementById("panel-" + j);
+        if (!t || !p) return;
+        t.setAttribute("aria-selected", String(i === j));
+        t.tabIndex = i === j ? 0 : -1;
+        p.hidden = i !== j;
+      });
+      if (moveFocus) {
+        const t = document.getElementById("tab-" + i);
+        if (t) t.focus();
+      }
+      onChange && onChange(i, items[i]);
+    };
     items.forEach((item, i) => {
       const tab = h("button", "tabs__tab", item.label);
       tab.type = "button";
@@ -270,16 +286,17 @@ const ui = (() => {
       tab.setAttribute("aria-controls", "panel-" + i);
       tab.setAttribute("aria-selected", String(i === 0));
       tab.tabIndex = i === 0 ? 0 : -1;
-      tab.onclick = () => {
-        items.forEach((_, j) => {
-          const t = document.getElementById("tab-" + j);
-          const p = document.getElementById("panel-" + j);
-          if (!t || !p) return;
-          t.setAttribute("aria-selected", String(i === j));
-          t.tabIndex = i === j ? 0 : -1;
-          p.hidden = i !== j;
-        });
-        onChange && onChange(i, item);
+      tab.onclick = () => activate(i, false);
+      tab.onkeydown = (e) => {
+        const last = items.length - 1;
+        let next = -1;
+        if (e.key === "ArrowRight") next = i === last ? 0 : i + 1;
+        else if (e.key === "ArrowLeft") next = i === 0 ? last : i - 1;
+        else if (e.key === "Home") next = 0;
+        else if (e.key === "End") next = last;
+        if (next < 0) return;
+        e.preventDefault();
+        activate(next, true);
       };
       list.append(tab);
 

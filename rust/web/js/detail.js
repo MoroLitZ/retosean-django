@@ -2,6 +2,14 @@
 // ── Detalle de registro dentro del <dialog> (openRecord) ──
 // Presentación con el design system: esqueleto mientras carga, ficha
 // clave/valor, badges de estado, acciones y tablas responsivas.
+// Aviso visible dentro del diálogo cuando falla una consulta secundaria: el
+// resto del registro se conserva en vez de dejar la ficha a medias (FE-6).
+function detail_loadError(message) {
+  const note = el("div", "alert alert--danger small");
+  note.setAttribute("role", "alert");
+  note.append(icon("exclamation-triangle-fill"), el("span", "", message));
+  return note;
+}
 async function openRecord(id) {
   const parent = modal("Cargando…");
   parent.setAttribute("aria-busy", "true");
@@ -216,11 +224,17 @@ async function openRecord(id) {
     actions.append(a);
   }
   if (selected === "integraciones_academicas") {
-    const team = await api(`/api/integraciones/${id}/equipo`);
-    parent.insertBefore(teamTables(team), actions);
+    let team = null;
+    try {
+      team = await api(`/api/integraciones/${id}/equipo`);
+      parent.insertBefore(teamTables(team), actions);
+    } catch {
+      parent.insertBefore(detail_loadError("No se pudo cargar el equipo de la integración."), actions);
+    }
     const editable =
-      ["borrador", "rechazada"].includes(record.estado) ||
-      ["abierto", "en_curso"].includes(record.reto_estado);
+      team &&
+      (["borrador", "rechazada"].includes(record.estado) ||
+        ["abierto", "en_curso"].includes(record.reto_estado));
     if (user.rol === "PROFESOR" && record.profesor_id === user.id && editable) {
       action(actions, "Editar integración", () => integrationForm(record.reto_id, record));
       action(actions, "Editar equipo y cronograma", () => teamForm(id, team));
@@ -270,64 +284,68 @@ async function openRecord(id) {
     }
   }
   if (selected === "presupuestos") {
-    const summary = await api(`/api/presupuestos/${id}/resumen`);
-    const p = document.createElement("p");
-    p.className = "text-soft small";
-    p.textContent = `Comprometido: ${cop(summary.comprometido)} · Ejecutado: ${cop(summary.ejecutado)} · Disponible: ${cop(summary.disponible)} · ${summary.porcentaje}% asignado${summary.alerta ? " · Umbral de alerta alcanzado" : ""}`;
-    parent.prepend(p);
-    // HU07: expenses with their state; admins execute commitments or remove them.
-    const list = el("div", "mb-3");
-    list.append(
-      ui.table(
-        [
-          { label: "Fecha" },
-          { label: "Categoría" },
-          { label: "Estado" },
-          { label: "Descripción" },
-          { label: "Monto", align: "right" },
-        ],
-        summary.gastos.map((g) => [fecha(g.creado_en), choiceLabel(g.categoria), choiceLabel(g.estado), g.descripcion, cop(g.monto)]),
-        { empty: "Aún no se registran gastos.", caption: "Gastos del presupuesto" },
-      ),
-    );
-    if (admin())
-      for (const g of summary.gastos) {
-        const line = el("div", "cluster cluster--sm small mb-2");
-        line.append(el("span", "me-1 fw-semibold", `${choiceLabel(g.categoria)} ${cop(g.monto)}:`));
-        if (g.estado === "COMPROMETIDO")
-          action(line, "Marcar ejecutado", () => mutate(`/api/gastos/${g.id}/ejecutar`, {}));
-        action(line, "Eliminar", async () => {
-          if (await ui.confirm("¿Eliminar este gasto?", { title: "Eliminar gasto", confirmText: "Eliminar" }))
-            await mutate(`/api/gastos/${g.id}/eliminar`, {});
-        });
-        list.append(line);
-      }
-    parent.insertBefore(list, actions);
-    for (const [format, text] of [["xlsx", "Exportar gastos (Excel)"], ["pdf", "Exportar gastos (PDF)"]]) {
-      const a = document.createElement("a");
-      a.className = "btn btn--secondary btn--sm";
-      a.href = `/api/retos/${summary.reto}/presupuesto/${format}`;
-      a.append(icon("download"), el("span", "", text));
-      actions.append(a);
-    }
-    if (admin())
-      action(
-        actions,
-        "Registrar gasto",
-        () =>
-          simpleForm("Nuevo gasto", `/api/presupuestos/${id}/gastos`, [
-            [
-              "categoria",
-              "Categoría",
-              "select",
-              ["REFRIGERIOS", "MATERIALES", "IMPRESIONES", "ESPACIOS", "OTROS"],
-            ],
-            ["monto", "Monto (COP)", "number", "0.00"],
-            ["estado", "Estado", "select", [{ value: "EJECUTADO", label: "Ejecutado (pagado)" }, { value: "COMPROMETIDO", label: "Comprometido (reservado)" }]],
-            ["descripcion", "Descripción", "textarea"],
-          ]),
-        true,
+    const summary = await api(`/api/presupuestos/${id}/resumen`).catch(() => null);
+    if (!summary) {
+      parent.insertBefore(detail_loadError("No se pudo cargar el resumen del presupuesto."), actions);
+    } else {
+      const p = document.createElement("p");
+      p.className = "text-soft small";
+      p.textContent = `Comprometido: ${cop(summary.comprometido)} · Ejecutado: ${cop(summary.ejecutado)} · Disponible: ${cop(summary.disponible)} · ${summary.porcentaje}% asignado${summary.alerta ? " · Umbral de alerta alcanzado" : ""}`;
+      parent.prepend(p);
+      // HU07: expenses with their state; admins execute commitments or remove them.
+      const list = el("div", "mb-3");
+      list.append(
+        ui.table(
+          [
+            { label: "Fecha" },
+            { label: "Categoría" },
+            { label: "Estado" },
+            { label: "Descripción" },
+            { label: "Monto", align: "right" },
+          ],
+          summary.gastos.map((g) => [fecha(g.creado_en), choiceLabel(g.categoria), choiceLabel(g.estado), g.descripcion, cop(g.monto)]),
+          { empty: "Aún no se registran gastos.", caption: "Gastos del presupuesto" },
+        ),
       );
+      if (admin())
+        for (const g of summary.gastos) {
+          const line = el("div", "cluster cluster--sm small mb-2");
+          line.append(el("span", "me-1 fw-semibold", `${choiceLabel(g.categoria)} ${cop(g.monto)}:`));
+          if (g.estado === "COMPROMETIDO")
+            action(line, "Marcar ejecutado", () => mutate(`/api/gastos/${g.id}/ejecutar`, {}));
+          action(line, "Eliminar", async () => {
+            if (await ui.confirm("¿Eliminar este gasto?", { title: "Eliminar gasto", confirmText: "Eliminar" }))
+              await mutate(`/api/gastos/${g.id}/eliminar`, {});
+          });
+          list.append(line);
+        }
+      parent.insertBefore(list, actions);
+      for (const [format, text] of [["xlsx", "Exportar gastos (Excel)"], ["pdf", "Exportar gastos (PDF)"]]) {
+        const a = document.createElement("a");
+        a.className = "btn btn--secondary btn--sm";
+        a.href = `/api/retos/${summary.reto}/presupuesto/${format}`;
+        a.append(icon("download"), el("span", "", text));
+        actions.append(a);
+      }
+      if (admin())
+        action(
+          actions,
+          "Registrar gasto",
+          () =>
+            simpleForm("Nuevo gasto", `/api/presupuestos/${id}/gastos`, [
+              [
+                "categoria",
+                "Categoría",
+                "select",
+                ["REFRIGERIOS", "MATERIALES", "IMPRESIONES", "ESPACIOS", "OTROS"],
+              ],
+              ["monto", "Monto (COP)", "number", "0.00"],
+              ["estado", "Estado", "select", [{ value: "EJECUTADO", label: "Ejecutado (pagado)" }, { value: "COMPROMETIDO", label: "Comprometido (reservado)" }]],
+              ["descripcion", "Descripción", "textarea"],
+            ]),
+          true,
+        );
+    }
   }
   if (selected === "entregables" && user.rol === "PROFESOR") {
     action(actions, record.estado === "CALIFICADO" ? "Volver a calificar" : "Calificar", () => gradeForm(id, record), true);
@@ -461,6 +479,8 @@ async function openRecord(id) {
         if (await ui.confirm(`¿Eliminar el equipo "${team.nombre_equipo}"? También se elimina su equipo operativo.`, { title: "Eliminar equipo", confirmText: "Eliminar" }))
           await mutate(`/api/equipos-academicos/${id}/eliminar`, {});
       });
+    } else {
+      parent.insertBefore(detail_loadError("No se pudo cargar el equipo académico."), actions);
     }
   }
   if (selected === "unidades_estudio" && (admin() || user.rol === "PROFESOR")) {
@@ -483,40 +503,51 @@ async function openRecord(id) {
     action(actions, "Cargar documento", () => documentForm(`/api/documentos/${id}/cargar`));
   if (selected === "hackathons") {
     // HU09: logistics, guests, automatic close and the final report.
-    const event = await api(`/api/hackathons/${id}/logistica`);
-    const info = el("div", "mb-3");
-    info.append(
-      el("h6", "fw-bold mt-2", "Logística del evento"),
-      el("p", "small mb-1", `Modalidad: ${label(MODALIDADES, event.modalidad)} · Espacio: ${event.lugar || "Por definir"}`),
-    );
-    if (event.enlace_transmision) {
-      const link = el("a", "small", event.enlace_transmision);
-      link.href = event.enlace_transmision;
-      link.target = "_blank";
-      link.rel = "noopener";
-      info.append(link);
-    }
-    if (event.cierre && !record.resultados_publicados)
-      info.append(el("p", "small text-muted mt-2 mb-1", `Los resultados se publican automáticamente el ${fecha(event.cierre, true)}.`));
-    if (event.invitados.length)
+    const event = await api(`/api/hackathons/${id}/logistica`).catch(() => null);
+    if (event) {
+      const info = el("div", "mb-3");
       info.append(
-        ui.table(
-          ["Invitado", "Tipo", "Organización", "Confirmado"],
-          event.invitados.map((g) => [g.nombre, label(TIPOS_INVITADO, g.tipo), g.organizacion, g.confirmado ? "Sí" : "Pendiente"]),
-          { empty: "Sin invitados.", caption: "Invitados del evento" },
-        ),
+        el("h6", "fw-bold mt-2", "Logística del evento"),
+        el("p", "small mb-1", `Modalidad: ${label(MODALIDADES, event.modalidad)} · Espacio: ${event.lugar || "Por definir"}`),
       );
-    parent.insertBefore(info, actions);
-    if (event.puede_gestionar && !["finalizado", "cancelado"].includes(record.estado))
-      action(actions, "Logística e invitados", () => logisticsForm(id, event));
-    if (event.puede_exportar)
-      for (const [format, text] of [["pdf", "Informe final PDF"], ["xlsx", "Informe final Excel"]]) {
-        const a = document.createElement("a");
-        a.className = "btn btn--secondary btn--sm";
-        a.href = `/api/hackathons/${id}/informe/${format}`;
-        a.append(icon("download"), el("span", "", text));
-        actions.append(a);
+      if (event.enlace_transmision) {
+        // Enlace del servidor: solo http(s) o relativas; cualquier otro
+        // esquema se muestra como texto y nunca como enlace clicable (FE-1).
+        const href = safeHref(event.enlace_transmision);
+        if (href) {
+          const link = el("a", "small", event.enlace_transmision);
+          link.href = href;
+          link.target = "_blank";
+          link.rel = "noopener";
+          info.append(link);
+        } else {
+          info.append(el("p", "small mb-1", `Transmisión: ${event.enlace_transmision}`));
+        }
       }
+      if (event.cierre && !record.resultados_publicados)
+        info.append(el("p", "small text-muted mt-2 mb-1", `Los resultados se publican automáticamente el ${fecha(event.cierre, true)}.`));
+      if (event.invitados.length)
+        info.append(
+          ui.table(
+            ["Invitado", "Tipo", "Organización", "Confirmado"],
+            event.invitados.map((g) => [g.nombre, label(TIPOS_INVITADO, g.tipo), g.organizacion, g.confirmado ? "Sí" : "Pendiente"]),
+            { empty: "Sin invitados.", caption: "Invitados del evento" },
+          ),
+        );
+      parent.insertBefore(info, actions);
+      if (event.puede_gestionar && !["finalizado", "cancelado"].includes(record.estado))
+        action(actions, "Logística e invitados", () => logisticsForm(id, event));
+      if (event.puede_exportar)
+        for (const [format, text] of [["pdf", "Informe final PDF"], ["xlsx", "Informe final Excel"]]) {
+          const a = document.createElement("a");
+          a.className = "btn btn--secondary btn--sm";
+          a.href = `/api/hackathons/${id}/informe/${format}`;
+          a.append(icon("download"), el("span", "", text));
+          actions.append(a);
+        }
+    } else {
+      parent.insertBefore(detail_loadError("No se pudo cargar la logística del evento."), actions);
+    }
     if (admin() || user.rol === "PROFESOR") {
       const targets =
         {

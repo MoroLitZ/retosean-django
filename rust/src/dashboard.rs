@@ -186,7 +186,7 @@ pub async fn panel(
         ),
         "PROFESOR" => (
             format!(
-                "{PARAMS}, i AS (SELECT t.* FROM integraciones_academicas t, p WHERE t.profesor_id = p.uid AND {}), e AS (SELECT t.* FROM entregables t, p WHERE t.reto_id IN (SELECT reto_id FROM i) AND {})",
+                "{PARAMS}, i AS (SELECT t.* FROM integraciones_academicas t, p WHERE t.profesor_id = p.uid AND t.estado IN ('aprobada','publicada') AND {}), e AS (SELECT t.* FROM entregables t, p WHERE t.reto_id IN (SELECT reto_id FROM i) AND {})",
                 EN_RANGO.replace("{c}", "creado_en"),
                 EN_RANGO.replace("{c}", "fecha_entrega")
             ),

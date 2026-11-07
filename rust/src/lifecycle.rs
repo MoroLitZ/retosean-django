@@ -116,13 +116,28 @@ pub async fn progress(
     let mut tx = state.pool.begin().await?;
     // Re-check under the row lock: the reto may have changed while reading the body.
     let still: Option<i64> = sqlx::query_scalar(
-        "SELECT empresa_id FROM retos WHERE id=$1 AND eliminado_en IS NULL FOR UPDATE",
+        "SELECT empresa_id FROM retos WHERE id=$1 AND eliminado_en IS NULL AND estado NOT IN ('finalizado','cancelado') FOR UPDATE",
     )
     .bind(reto)
     .fetch_optional(&mut *tx)
     .await?;
-    if still != Some(owner) {
+    let still = still.ok_or_else(AppError::not_found)?;
+    if still != owner {
         return Err(AppError::not_found());
+    }
+    // ACA-5: professor permission must be rechecked after locking the reto.
+    let teacher: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2 AND estado IN ('aprobada','publicada'))",
+    )
+    .bind(reto)
+    .bind(user.id)
+    .fetch_one(&mut *tx)
+    .await?;
+    let allowed = user.admin()
+        || (user.rol == "EMPRESA" && owner == user.id)
+        || (user.rol == "PROFESOR" && teacher);
+    if !allowed {
+        return Err(AppError::forbidden());
     }
     let id: i64 = sqlx::query_scalar("INSERT INTO seguimientos_reto(reto_id,tipo_sesion,fecha_sesion,porcentaje_avance,avances,observaciones,acuerdos,creado_por_id,creado_en) VALUES($1,$2,COALESCE($3,(now() AT TIME ZONE 'America/Bogota')::date),$4,$5,$6,$7,$8,now()) RETURNING id")
         .bind(reto).bind(kind).bind(input.fecha_sesion).bind(input.porcentaje_avance as i16).bind(&input.avances).bind(&input.observaciones).bind(&input.acuerdos).bind(user.id).fetch_one(&mut *tx).await?;
@@ -298,7 +313,8 @@ pub async fn issue_certificates(
         eligible.insert(id, "ESTUDIANTE");
     }
     // CIE-01: un estudiante cuyo cupo fue rechazado o que se retiró no debe
-    // certificarse aunque haya subido algún entregable.
+    // certificarse aunque haya subido algún entregable. Los miembros de equipos
+    // académicos no postulan, así que no se exige postulación aceptada (ACA-15).
     let students: Vec<i64> = sqlx::query_scalar("SELECT m.usuario_id FROM equipos_reto_academico_estudiantes m JOIN equipos_reto_academico e ON e.id=m.equiporetoacademico_id WHERE e.reto_id=$1 UNION SELECT estudiante_id FROM entregables WHERE reto_id=$1 AND estudiante_id IS NOT NULL AND estudiante_id NOT IN (SELECT estudiante_id FROM postulaciones WHERE reto_id=$1 AND estado IN ('RECHAZADA','RETIRADA'))")
         .bind(reto).fetch_all(&mut **tx).await?;
     for id in students {

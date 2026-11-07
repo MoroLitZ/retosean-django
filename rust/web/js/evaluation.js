@@ -22,6 +22,7 @@ async function gradeForm(id, record) {
   const nota = input(libre, "nota", `Nota (máximo ${record.puntaje_maximo})`, "", "number");
   nota.step = "0.01";
   nota.min = "0";
+  if (record.puntaje_maximo != null) nota.max = String(record.puntaje_maximo);
   const criterios = el("div", "wf-stack");
   const draw = () => {
     const rubrica = rubricas.find((r) => String(r.id) === modo.value);
@@ -31,6 +32,7 @@ async function gradeForm(id, record) {
       const f = input(criterios, `criterio_${c.id}`, `${c.nombre} (máximo ${c.puntaje_maximo})`, "", "number");
       f.step = "0.01";
       f.min = "0";
+      if (c.puntaje_maximo != null) f.max = String(c.puntaje_maximo);
       f.dataset.criterio = c.id;
     }
   };

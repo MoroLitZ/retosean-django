@@ -41,6 +41,19 @@ async fn emit(
 }
 
 pub async fn run(pool: &PgPool, days: &[i64]) -> Result<usize> {
+    // WF-8: `days` is operator-supplied (CLI/cron). Ignore out-of-range and
+    // duplicate values and cap the sweep, so a bad or malicious argument cannot
+    // fan out into an unbounded number of expensive queries and reminder emails.
+    const MAX_DIA: i64 = 365;
+    const MAX_BARRIDOS: usize = 31;
+    let mut vistos = std::collections::HashSet::new();
+    let dias: Vec<i64> = days
+        .iter()
+        .copied()
+        .filter(|n| (0..=MAX_DIA).contains(n) && vistos.insert(*n))
+        .take(MAX_BARRIDOS)
+        .collect();
+    let days = dias.as_slice();
     let mut tx = pool.begin().await?;
     let today = "(now() AT TIME ZONE 'America/Bogota')::date";
     // NOT-02: the concrete Bogota date, so dedupe keys change when a deadline is

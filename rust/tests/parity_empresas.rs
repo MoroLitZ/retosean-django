@@ -317,7 +317,7 @@ parity!(
 parity!(test_documento_vencido_deshabilita_a_la_empresa, |t| {
     let (_, company, _) = gate(&t).await;
     t.verify_documents(company).await;
-    t.exec(&format!("UPDATE documentos_empresas SET fecha_vencimiento=(now() AT TIME ZONE 'America/Bogota')::date-1 WHERE empresa_id={company} AND tipo_documento='CAMARA_COMERCIO'")).await;
+    t.exec(&format!("UPDATE documentos_empresas SET fecha_expedicion=(now() AT TIME ZONE 'America/Bogota')::date-30,fecha_vencimiento=(now() AT TIME ZONE 'America/Bogota')::date-1 WHERE empresa_id={company} AND tipo_documento='CAMARA_COMERCIO'")).await;
     assert!(!can_operate(&t, company).await);
 });
 
@@ -756,7 +756,7 @@ async fn expiring(t: &Ctx) -> (i64, i64, i64) {
     (user, company, reto)
 }
 async fn expire(t: &Ctx, company: i64, kind: &str) {
-    t.exec(&format!("UPDATE documentos_empresas SET fecha_vencimiento=(now() AT TIME ZONE 'America/Bogota')::date-1 WHERE empresa_id={company} AND tipo_documento='{kind}'")).await;
+    t.exec(&format!("UPDATE documentos_empresas SET fecha_expedicion=(now() AT TIME ZONE 'America/Bogota')::date-30,fecha_vencimiento=(now() AT TIME ZONE 'America/Bogota')::date-1 WHERE empresa_id={company} AND tipo_documento='{kind}'")).await;
 }
 async fn sweep(t: &Ctx) {
     retosean::reminders::run(&t.pool, &[1]).await.unwrap();

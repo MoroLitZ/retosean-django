@@ -146,18 +146,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     retosean::mail::spawn_outbox(pool.clone(), mailer, site);
     let listener = tokio::net::TcpListener::bind(config.bind).await?;
     tracing::info!(address=%config.bind, database=%config.database_name, "RetosEAN Rust ready");
+    let app = router(AppState {
+        pool,
+        config,
+        password_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
+        login_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
+    });
+    // Expose the TCP peer so auth uses the real client address unless the app is
+    // explicitly behind a trusted proxy (config.trust_proxy).
     axum::serve(
         listener,
-        router(AppState {
-            pool,
-            config,
-            password_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
-            login_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
-        }),
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
-    .with_graceful_shutdown(async {
-        let _ = tokio::signal::ctrl_c().await;
-    })
+    .with_graceful_shutdown(shutdown_signal())
     .await?;
     Ok(())
+}
+
+/// Waits for SIGINT (Ctrl-C) and, on Unix, SIGTERM, so `docker stop`/systemd
+/// drain in-flight requests gracefully instead of killing them mid-request.
+async fn shutdown_signal() {
+    let ctrl_c = tokio::signal::ctrl_c();
+    tokio::pin!(ctrl_c);
+    let terminate = terminate_signal();
+    tokio::pin!(terminate);
+    tokio::select! {
+        _ = &mut ctrl_c => {}
+        _ = &mut terminate => {}
+    }
+    tracing::info!("shutdown signal received");
+}
+
+#[cfg(unix)]
+fn terminate_signal() -> impl std::future::Future<Output = ()> {
+    async {
+        if let Ok(mut term) =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        {
+            term.recv().await;
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn terminate_signal() -> impl std::future::Future<Output = ()> {
+    std::future::pending()
 }

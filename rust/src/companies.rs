@@ -49,6 +49,10 @@ pub async fn review(
     let mut tx = state.pool.begin().await?;
     let row:Option<(Option<i64>,String,String,String)>=sqlx::query_as("SELECT usuario_id,estado_validacion,estado_listas_restrictivas,razon_social FROM empresas WHERE id=$1 FOR UPDATE").bind(id).fetch_optional(&mut *tx).await?;
     let (owner, from, lists, company_name) = row.ok_or_else(AppError::not_found)?;
+    // BIZ-2: separación de funciones — el revisor no puede ser el dueño de la empresa.
+    if owner == Some(user.id) {
+        return Err(AppError::forbidden());
+    }
     if validation == "VERIFICADA" {
         if input.estado_listas_restrictivas != "APROBADO" {
             return Err(AppError::bad("Verifica primero las listas restrictivas"));
@@ -209,6 +213,10 @@ pub async fn agreement(
             .fetch_optional(&mut *tx)
             .await?;
     let (from, owner) = row.ok_or_else(AppError::not_found)?;
+    // BIZ-2: separación de funciones — nadie tramita el convenio de su propia empresa.
+    if owner == Some(user.id) {
+        return Err(AppError::forbidden());
+    }
     domain::transition("MAQUINA_CONVENIO", &from, &input.estado)?;
     sqlx::query("UPDATE empresas SET estado_convenio=$2,fecha_vencimiento_convenio=$3,fecha_ultima_actualizacion=now() WHERE id=$1").bind(id).bind(&input.estado).bind(if input.estado=="FIRMADO"{input.fecha_vencimiento}else{None}).execute(&mut *tx).await?;
     let audit = history(
@@ -275,6 +283,10 @@ pub async fn document(
     let mut tx = state.pool.begin().await?;
     let row: Option<DocumentRow> =sqlx::query_as("SELECT d.estado,d.archivo,e.usuario_id,(d.fecha_vencimiento IS NOT NULL AND d.fecha_vencimiento<(now() at time zone 'America/Bogota')::date),e.id FROM documentos_empresas d JOIN empresas e ON e.id=d.empresa_id WHERE d.id=$1 FOR UPDATE OF d").bind(id).fetch_optional(&mut *tx).await?;
     let (from, file, owner, expired, company) = row.ok_or_else(AppError::not_found)?;
+    // BIZ-2: separación de funciones — nadie revisa los documentos de su propia empresa.
+    if owner == Some(user.id) {
+        return Err(AppError::forbidden());
+    }
     domain::transition("MAQUINA_DOCUMENTO", &from, &input.estado)?;
     if input.estado == "VERIFICADO" && (expired || file.as_deref().unwrap_or("").is_empty()) {
         return Err(AppError::bad(

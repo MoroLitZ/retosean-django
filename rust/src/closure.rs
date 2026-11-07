@@ -58,13 +58,13 @@ async fn teacher(tx: &mut Transaction<'_, Postgres>, reto: i64, user: &User) -> 
         .fetch_one(&mut **tx)
         .await?)
 }
-/// CIE-06: un reto finalizado no admite contenido nuevo en el cierre.
+/// CIE-06 / ACA-7: a closed or cancelled reto does not admit new closure content.
 async fn finished(tx: &mut Transaction<'_, Postgres>, reto: i64, action: &str) -> Result<()> {
     let estado: String = sqlx::query_scalar("SELECT estado FROM retos WHERE id=$1")
         .bind(reto)
         .fetch_one(&mut **tx)
         .await?;
-    if estado == "finalizado" {
+    if estado == "finalizado" || estado == "cancelado" {
         return Err(AppError::bad(format!(
             "El reto ya fue finalizado; no se pueden {action}."
         )));
@@ -153,12 +153,16 @@ async fn read_form(
     }
     Ok((fields, data))
 }
-async fn store(state: &AppState, data: &[u8]) -> Result<(String, std::path::PathBuf)> {
-    let key = format!(
-        "{}.{}",
-        uuid::Uuid::new_v4().simple(),
-        crate::media::extension(data)?
-    );
+async fn store(
+    state: &AppState,
+    data: &[u8],
+    allowed: &[&str],
+) -> Result<(String, std::path::PathBuf)> {
+    let ext = crate::media::extension(data)?;
+    if !allowed.contains(&ext) {
+        return Err(AppError::bad("Tipo de archivo no permitido."));
+    }
+    let key = format!("{}.{}", uuid::Uuid::new_v4().simple(), ext);
     tokio::fs::create_dir_all(&state.config.media_root)
         .await
         .map_err(|_| AppError::bad("No se pudo guardar el archivo"))?;
@@ -205,11 +209,14 @@ pub async fn save(
     }
     let mut tx = state.pool.begin().await?;
     manage(&mut tx, reto, &user, true).await?;
+    // ACA-6: freeze agenda/acta after finalization or cancellation.
+    finished(&mut tx, reto, "editar la agenda ni el acta").await?;
     sqlx::query("INSERT INTO cierre_agendacierre(reto_id,fecha_hora,espacio,recursos,invitados,agenda,actualizado_en) VALUES($1,NULLIF($2,'')::timestamp AT TIME ZONE 'America/Bogota',$3,$4,$5,$6,now()) ON CONFLICT(reto_id) DO UPDATE SET fecha_hora=excluded.fecha_hora,espacio=excluded.espacio,recursos=excluded.recursos,invitados=excluded.invitados,agenda=excluded.agenda,actualizado_en=now()")
         .bind(reto).bind(when).bind(get("espacio")).bind(get("recursos")).bind(get("invitados")).bind(get("agenda")).execute(&mut *tx).await?;
     let closure = closure_id(&mut tx, reto, user.id).await?;
     let stored = match &acta {
-        Some(data) => Some(store(&state, data).await?),
+        // ACA-12: acta must be a PDF.
+        Some(data) => Some(store(&state, data, &["pdf"]).await?),
         None => None,
     };
     sqlx::query("UPDATE cierres_reto SET notas=$2,impacto=$3,acta_url=COALESCE($4,acta_url),cerrado_por_id=$5,actualizado_en=now() WHERE id=$1")
@@ -241,7 +248,8 @@ pub async fn artifact(
     // CIE-06: un reto finalizado no admite nuevos entregables finales.
     finished(&mut tx, reto, "cargar nuevos entregables finales").await?;
     let closure = closure_id(&mut tx, reto, user.id).await?;
-    let (key, path) = store(&state, &data).await?;
+    // ACA-12: final artifacts must be images or PDFs.
+    let (key, path) = store(&state, &data, &["pdf", "png", "jpg"]).await?;
     let id: i64 = sqlx::query_scalar("INSERT INTO cierre_entregablefinal(cierre_id,nombre,archivo,cargado_por_id,creado_en) VALUES($1,$2,$3,$4,now()) RETURNING id")
         .bind(closure).bind(name).bind(&key).bind(user.id).fetch_one(&mut *tx).await?;
     commit(tx, Some(path)).await?;
@@ -322,6 +330,8 @@ pub async fn request(
     }
     let mut tx = state.pool.begin().await?;
     manage(&mut tx, reto, &user, false).await?;
+    // ACA-7: logistics requests are not accepted once the reto is closed or cancelled.
+    finished(&mut tx, reto, "solicitar logística").await?;
     let id: i64 = sqlx::query_scalar("INSERT INTO cierre_solicitudlogistica(reto_id,evento,tipo,descripcion,estado,solicitada_por_id,creada_en,actualizado_en) VALUES($1,$2,$3,$4,'SOLICITADA',$5,now(),now()) RETURNING id")
         .bind(reto).bind(&input.evento).bind(&input.tipo).bind(detail).bind(user.id).fetch_one(&mut *tx).await?;
     history(
@@ -382,6 +392,7 @@ pub async fn request_state(
     if !user.admin() {
         return Err(AppError::forbidden());
     }
+    crate::domain::max_chars(&input.comentario, 4000, "Comentario")?;
     let mut tx = state.pool.begin().await?;
     let from: Option<String> =
         sqlx::query_scalar("SELECT estado FROM cierre_solicitudlogistica WHERE id=$1 FOR UPDATE")

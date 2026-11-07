@@ -1,8 +1,12 @@
 # CFG-07: sin secretos por defecto débiles; RUST_POSTGRES_PASSWORD se toma del
 # .env y es obligatorio definirlo (compose falla al arrancar si falta).
+# OPS-6: la contraseña viaja en variables de entorno de ambos servicios; pasar
+# a Docker secrets requiere que la app lea DB_PASSWORD de un fichero (config.rs),
+# cambio que no pertenece a este paquete.
 services:
   db:
-    image: postgres:18
+    image: postgres:18@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42
+    restart: unless-stopped
     environment:
       POSTGRES_DB: retosean_rust
       POSTGRES_USER: retosean
@@ -16,6 +20,21 @@ services:
       retries: 10
   web:
     build: .
+    restart: unless-stopped
+    # OPS-7: hardening mínimo; el estado vive en el volumen rust_media y /tmp.
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    # Holgura: las subidas (hasta 110 MB por petición) se bufferizan en RAM.
+    mem_limit: 1g
+    # OPS-5: /health solo responde 200 si la base de datos contesta.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     environment:
       DB_HOST: db
       DB_PORT: "5432"

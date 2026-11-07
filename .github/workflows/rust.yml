@@ -6,13 +6,19 @@ on:
   pull_request:
     paths: ["rust/**", ".github/workflows/rust.yml"]
 
+# OPS-2: least privilege; nothing in this workflow needs write access.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    # OPS-1: hard cap so a wedged build cannot burn the runner forever.
+    timeout-minutes: 60
 
     services:
       postgres:
-        image: postgres:18
+        image: postgres:18@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42
         env:
           POSTGRES_USER: retosean
           POSTGRES_PASSWORD: retosean-ci
@@ -38,13 +44,14 @@ jobs:
         working-directory: rust
 
     steps:
-      - uses: actions/checkout@v4
+      # OPS-1: actions pinned to commit SHAs (tag kept in the comment).
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           components: rustfmt, clippy
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: rust
 
@@ -56,15 +63,24 @@ jobs:
         run: cargo clippy --locked --all-targets -- -D warnings
 
       - name: Instalar cargo-audit
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2
         with:
           tool: cargo-audit
 
       # CFG-09: dependency audit gate RUSTSEC-2023-0071
       # (rsa) is ignored: no fixed version exists and rsa is an optional sqlx
       # dependency that this feature set never builds.
+      # OPS-8: time-boxed exception, review before 2027-05-07. The step below
+      # fails CI if rsa ever enters the built dependency graph, at which point
+      # the ignore above must be removed.
       - name: Auditoría de dependencias
         run: cargo audit --ignore RUSTSEC-2023-0071
+      - name: Excepción rsa (RUSTSEC-2023-0071) verificada
+        run: |
+          if cargo tree --locked -i rsa 2>/dev/null | grep -q .; then
+            echo "::error::rsa is now part of the built dependency graph; remove --ignore RUSTSEC-2023-0071 from the audit step"
+            exit 1
+          fi
 
       - name: Sintaxis del frontend
         run: for f in web/js/*.js; do node --check "$f"; done

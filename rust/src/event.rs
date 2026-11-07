@@ -53,8 +53,9 @@ pub async fn advance(pool: &PgPool, id: i64) -> Result<Vec<&'static str>> {
         estado = "en_curso".into();
         changes.push("en_curso");
     }
-    // Close = start of the awards stage, else the end of the last dated stage.
-    let closed: bool = sqlx::query_scalar("SELECT COALESCE(COALESCE((SELECT min(inicia_en) FROM etapas_hackaton WHERE hackathon_id=$1 AND tipo='premiacion'),(SELECT max(termina_en) FROM etapas_hackaton WHERE hackathon_id=$1)) <= now(), false)")
+    // Close = award stage started, or the presentation stage has already ended.
+    // Missing presentation/premiacion dates must not finalize the hackathon.
+    let closed: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM etapas_hackaton WHERE hackathon_id=$1 AND tipo='premiacion' AND inicia_en<=now()) OR EXISTS(SELECT 1 FROM etapas_hackaton WHERE hackathon_id=$1 AND tipo='presentacion' AND termina_en IS NOT NULL AND termina_en<=now())")
         .bind(id).fetch_one(&mut *tx).await?;
     if ["publicado", "en_curso"].contains(&estado.as_str()) && !published && closed {
         publish_results(
@@ -191,14 +192,6 @@ pub async fn logistics(
     Json(input): Json<LogisticsInput>,
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, true).await?;
-    let reto: i64 = sqlx::query_scalar("SELECT reto_id FROM hackathons WHERE id=$1")
-        .bind(id)
-        .fetch_optional(&state.pool)
-        .await?
-        .ok_or_else(AppError::not_found)?;
-    if !is_manager(&state, &user, reto).await? {
-        return Err(AppError::forbidden());
-    }
     if !["presencial", "virtual", "hibrida"].contains(&input.modalidad.as_str()) {
         return Err(AppError::bad("Modalidad inválida"));
     }
@@ -234,6 +227,18 @@ pub async fn logistics(
         crate::domain::max_chars(g.email.trim(), 254, "Correo del invitado")?;
     }
     let mut tx = state.pool.begin().await?;
+    let (reto, status): (i64, String) =
+        sqlx::query_as("SELECT reto_id,estado FROM hackathons WHERE id=$1 FOR UPDATE")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or_else(AppError::not_found)?;
+    if ["finalizado", "cancelado"].contains(&status.as_str()) {
+        return Err(AppError::bad("Hackathon cerrado"));
+    }
+    if !is_manager(&state, &user, reto).await? {
+        return Err(AppError::forbidden());
+    }
     sqlx::query("UPDATE hackathons SET modalidad=$2,lugar=$3,enlace_transmision=$4,notas_logistica=$5,actualizado_en=now() WHERE id=$1")
         .bind(id).bind(&input.modalidad).bind(lugar).bind(enlace).bind(input.notas_logistica.trim()).execute(&mut *tx).await?;
     sqlx::query("DELETE FROM invitados_hackaton WHERE hackathon_id=$1")

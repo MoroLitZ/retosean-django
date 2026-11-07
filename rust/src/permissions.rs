@@ -66,12 +66,17 @@ pub async fn role(
         return Err(AppError::bad("Rol inválido"));
     }
     let mut tx = state.pool.begin().await?;
-    let row: Option<(String, String)> =
-        sqlx::query_as("SELECT rol,username FROM usuarios WHERE id=$1 FOR UPDATE")
+    let row: Option<(String, String, bool)> =
+        sqlx::query_as("SELECT rol,username,is_superuser FROM usuarios WHERE id=$1 FOR UPDATE")
             .bind(id)
             .fetch_optional(&mut *tx)
             .await?;
-    let (from, username) = row.ok_or_else(AppError::not_found)?;
+    let (from, username, target_superuser) = row.ok_or_else(AppError::not_found)?;
+    // Only a superuser may grant the ADMIN role or change an already-privileged
+    // account (an ADMIN or a superuser), mirroring user_status (WF-2).
+    if (input.rol == "ADMIN" || from == "ADMIN" || target_superuser) && !user.is_superuser {
+        return Err(AppError::forbidden());
+    }
     if from == input.rol {
         return Ok(Json(json!({"rol":from,"cambiado":false})));
     }
@@ -347,6 +352,9 @@ pub async fn agreement_choice(
     Json(input): Json<AgreementChoice>,
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, true).await?;
+    // The convention choice is the company's: require the role explicitly so a
+    // stray empresas row never grants it to another kind of account (AUTHK-8).
+    user.require("EMPRESA")?;
     let mut tx = state.pool.begin().await?;
     let company: Option<i64> =
         sqlx::query_scalar("SELECT id FROM empresas WHERE usuario_id=$1 FOR UPDATE")

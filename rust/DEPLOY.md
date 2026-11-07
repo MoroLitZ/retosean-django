@@ -20,7 +20,8 @@ Set these as environment variables. The binary also reads `.env` and `../.env`.
 ## Steps to go live
 
 1. **Server.** A Linux machine with PostgreSQL. `compose.yml` in this folder
-   runs PostgreSQL 18 and the app together.
+   runs PostgreSQL 18 and the app together; set `RUST_POSTGRES_PASSWORD` in
+   `rust/.env` (see `.env.example`) — compose refuses to start without it.
 2. **Build.** `cargo build --release` produces `target/release/retosean`, or
    build the Docker image from the `Dockerfile`.
 3. **Create the database (once).** Run `retosean init-db`, then load data:

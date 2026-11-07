@@ -45,6 +45,15 @@ pub async fn set_budget(
         return Err(AppError::bad("El reto no admite presupuesto"));
     }
     let id: i64=sqlx::query_scalar("INSERT INTO presupuestos(reto_id,monto_total,alerta_80_enviada,creado_en,actualizado_en) VALUES($1,$2,false,now(),now()) ON CONFLICT(reto_id) DO UPDATE SET monto_total=excluded.monto_total,actualizado_en=now() RETURNING id").bind(reto).bind(amount).fetch_one(&mut *tx).await?;
+    // BIZ-3: mirror of the expense-side rule (PRE-01): the new total cannot drop
+    // below what gastos already reserve, or the disponible would go negative.
+    let (_, comprometido, ejecutado) = amounts(&mut tx, id).await?;
+    let asignado = comprometido + ejecutado;
+    if amount < asignado {
+        return Err(AppError::bad(format!(
+            "El monto (${amount}) no puede ser menor a lo ya asignado (${asignado})."
+        )));
+    }
     check_threshold(&mut tx, id).await?;
     tx.commit().await?;
     Ok(Json(json!({"id":id,"monto_total":format!("{amount:.2}")})))
@@ -93,6 +102,9 @@ pub async fn expense(
     if exists.is_none() {
         return Err(AppError::not_found());
     }
+    if !admite_gastos(&mut tx, id).await? {
+        return Err(AppError::bad("El reto no admite gastos"));
+    }
     // PRE-01: a gasto must not leave the disponible negative. The row is locked
     // FOR UPDATE above so two concurrent gastos cannot both fit in the same balance.
     let (total, comprometido, ejecutado) = amounts(&mut tx, id).await?;
@@ -120,6 +132,13 @@ async fn amounts(
 ) -> Result<(Decimal, Decimal, Decimal)> {
     Ok(sqlx::query_as("SELECT b.monto_total,COALESCE(sum(g.monto) FILTER (WHERE g.estado='COMPROMETIDO'),0),COALESCE(sum(g.monto) FILTER (WHERE g.estado<>'COMPROMETIDO'),0) FROM presupuestos b LEFT JOIN gastos g ON g.presupuesto_id=b.id WHERE b.id=$1 GROUP BY b.id")
         .bind(id).fetch_one(&mut **tx).await?)
+}
+/// BIZ-4: whether a budget's reto still admits money movements. set_budget only
+/// validates the state at creation time; the reto can be cancelled or deleted
+/// afterwards, so gastos must not keep flowing into it.
+async fn admite_gastos(tx: &mut Transaction<'_, Postgres>, presupuesto: i64) -> Result<bool> {
+    Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM presupuestos p JOIN retos r ON r.id=p.reto_id WHERE p.id=$1 AND r.eliminado_en IS NULL AND r.estado NOT IN ('borrador','cancelado'))")
+        .bind(presupuesto).fetch_one(&mut **tx).await?)
 }
 fn percent(total: Decimal, assigned: Decimal) -> Decimal {
     if total == Decimal::ZERO {
@@ -205,6 +224,10 @@ pub async fn execute(
         return Ok(Json(
             json!({"estado":estado,"mensaje":"Ese gasto ya estaba ejecutado."}),
         ));
+    }
+    // BIZ-4: finalizing a payment is also a money movement on the reto.
+    if !admite_gastos(&mut tx, budget).await? {
+        return Err(AppError::bad("El reto no admite gastos"));
     }
     sqlx::query("UPDATE gastos SET estado='EJECUTADO',ejecutado_en=now() WHERE id=$1")
         .bind(gasto)

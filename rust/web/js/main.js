@@ -147,12 +147,9 @@ async function sendUnit(e, form, url) {
     return;
   }
   try {
-    const response = await busy(
-      button,
-      fetch(url, { method: "POST", headers: { "X-CSRF-Token": csrf }, body: new FormData(form) }),
-    );
-    const data = await readJson(response);
-    if (!response.ok) throw new Error(data.error || "No se pudo guardar");
+    // apiForm comparte con api() el manejo de CSRF, del 401 (showLogin) y de
+    // los mensajes de error del servidor (FE-4).
+    const data = await busy(button, apiForm(url, new FormData(form)));
     $("detail-dialog").close();
     toast(data.mensaje);
     await loadRecords();
@@ -246,18 +243,71 @@ $("toggle-password").onclick = () => {
   btn.setAttribute("aria-pressed", String(show));
 };
 $("import-users").onclick = importForm;
-$("bell").onclick = () => {
-  $("bell-menu").hidden = !$("bell-menu").hidden;
-  $("bell").setAttribute("aria-expanded", String(!$("bell-menu").hidden));
-};
-$("sidebar-toggle").onclick = () => {
-  $("sidebar").classList.toggle("open");
-  $("sidebar-overlay").classList.toggle("show");
-};
+// ── Menú de notificaciones (campana) ──
+// Apertura con clic, cierre con Escape y clic afuera, foco en el primer elemento
+// al abrir y navegación con flechas/Home/End dentro del menú (FE-7).
+function setBellMenu(open) {
+  const menu = $("bell-menu");
+  menu.hidden = !open;
+  $("bell").setAttribute("aria-expanded", String(open));
+  if (open) {
+    const first = menu.querySelector("a, button");
+    if (first) first.focus();
+  }
+}
+$("bell").onclick = () => setBellMenu($("bell-menu").hidden);
+$("bell-menu").addEventListener("keydown", (e) => {
+  const items = [...$("bell-menu").querySelectorAll(".menu__item")];
+  const i = items.indexOf(document.activeElement);
+  let next = -1;
+  if (e.key === "ArrowDown") next = (i + 1) % items.length;
+  else if (e.key === "ArrowUp") next = (i - 1 + items.length) % items.length;
+  else if (e.key === "Home") next = 0;
+  else if (e.key === "End") next = items.length - 1;
+  else return;
+  e.preventDefault();
+  if (items[next]) items[next].focus();
+});
+// El foco sale del menú (Tab u otro control): se cierra sin robar el foco. El
+// clic en la campana lo gestiona su onclick, así que se excluye.
+$("bell-menu").addEventListener("focusout", (e) => {
+  if ($("bell-menu").contains(e.relatedTarget) || e.relatedTarget === $("bell")) return;
+  setBellMenu(false);
+});
+document.addEventListener("click", (e) => {
+  if (!$("bell-menu").hidden && !e.target.closest?.("#bell-menu, #bell"))
+    setBellMenu(false);
+});
+// ── Menú lateral (móvil) ──
+// aria-expanded sincronizado, cierre con Escape o con el overlay y foco en la
+// navegación al abrir / de vuelta al botón al cerrar (FE-8).
+function setSidebar(open) {
+  $("sidebar").classList.toggle("open", open);
+  $("sidebar-overlay").classList.toggle("show", open);
+  const toggle = $("sidebar-toggle");
+  toggle.setAttribute("aria-expanded", String(open));
+  toggle.setAttribute("aria-label", open ? "Cerrar menú" : "Abrir menú");
+  if (open) {
+    const first = $("navigation").querySelector("a, button");
+    if (first) first.focus();
+  }
+}
+$("sidebar-toggle").onclick = () =>
+  setSidebar(!$("sidebar").classList.contains("open"));
 $("sidebar-overlay").onclick = () => {
-  $("sidebar").classList.remove("open");
-  $("sidebar-overlay").classList.remove("show");
+  setSidebar(false);
+  $("sidebar-toggle").focus();
 };
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (!$("bell-menu").hidden) {
+    setBellMenu(false);
+    $("bell").focus();
+  } else if ($("sidebar").classList.contains("open")) {
+    setSidebar(false);
+    $("sidebar-toggle").focus();
+  }
+});
 $("periodo").onchange = () => $("periodo-form").requestSubmit();
 $("periodo-form").onsubmit = (e) => {
   e.preventDefault();
@@ -285,4 +335,15 @@ $("next").onclick = () => {
   }
 };
 window.addEventListener("hashchange", () => route().catch(showError));
-start().catch(() => showLogin());
+start().catch((error) => {
+  showLogin();
+  // Sin sesión (401) es el estado normal del login: no mostrar nada. Cualquier
+  // otro fallo (red, 5xx, /api/resources…) se hace visible en el panel (FE-5).
+  if (!error || error.status === 401) return;
+  const text = error.status
+    ? error.message
+    : "No se pudo conectar con el servidor. Revisa tu conexión e intenta de nuevo.";
+  const box = $("login-error");
+  box.replaceChildren(icon("exclamation-circle-fill"), el("span", "", text));
+  box.hidden = false;
+});
