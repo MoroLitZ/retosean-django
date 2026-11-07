@@ -1,1 +1,106 @@
-/* auth.css */
+/* auth.css — Área de autenticación (el login estático vive en index.html). */
+
+/* Formularios dentro de #auth-alt: un poco más de aire entre campos. */
+.auth-form .field {
+  margin-bottom: var(--space-4);
+}
+.auth-form .auth-submit {
+  margin-top: var(--space-1);
+}
+
+/* Botón de mostrar/ocultar contraseña dentro del input-group. */
+.auth-toggle,
+.toggle-password {
+  cursor: pointer;
+}
+.auth-toggle .icon,
+.toggle-password .icon {
+  width: var(--icon-base);
+  height: var(--icon-base);
+}
+
+/* Selector de tipo de cuenta (tarjetas de elección). */
+.auth-choice__wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.auth-choice__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-md);
+  background: var(--brand-subtle);
+  color: var(--brand);
+  flex-shrink: 0;
+}
+.auth-choice__icon .icon {
+  width: var(--icon-lg);
+  height: var(--icon-lg);
+}
+.auth-choice__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+.auth-choice__title {
+  font-weight: var(--weight-semibold);
+  color: var(--ink);
+  font-size: var(--text-base);
+}
+.auth-choice__desc {
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+  line-height: 1.5;
+}
+.auth-choice__arrow {
+  color: var(--ink-muted);
+  flex-shrink: 0;
+}
+.auth-choice__arrow .icon {
+  width: var(--icon-base);
+  height: var(--icon-base);
+}
+
+/* Pantallas de resultado (éxito / pendiente) centradas. */
+.auth-result {
+  text-align: center;
+}
+.auth-result__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  margin: 0 auto var(--space-4);
+  border-radius: 50%;
+  background: var(--brand-subtle);
+  color: var(--brand);
+}
+.auth-result__icon .icon {
+  width: 1.8rem;
+  height: 1.8rem;
+}
+.auth-result .auth-subtitle {
+  margin-bottom: 0;
+}
+
+/* Recrea la grilla de formulario (2 columnas → 1 en pantallas pequeñas) y el
+   helper de tramo completo que antes aportaba legacy.css. Ver SHARED_SUGGESTIONS. */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 var(--space-4);
+}
+.full {
+  grid-column: 1 / -1;
+}
+@media (max-width: 768px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}

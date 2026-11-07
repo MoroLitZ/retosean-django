@@ -44,6 +44,17 @@ const COLUMNS = {
   tipos_documento_legal: [["orden", "Orden"], ["nombre", "Documento"], ["obligatorio", "Obligatorio"], ["vigencia_dias", "Vigencia (días)"], ["activo", "Activo"]],
   cierre_solicitudlogistica: [["reto", "Reto"], ["evento", "Evento"], ["tipo", "Tipo"], ["estado", "Estado"], ["creada_en", "Solicitada"]],
 };
+// Columnas que se muestran alineadas a la derecha con cifras tabulares.
+const records_NUMERIC = [
+  "monto",
+  "monto_total",
+  "nota",
+  "horas",
+  "orden",
+  "vigencia_dias",
+  "porcentaje_avance",
+  "calificacion",
+];
 let columnHeaders = {};
 function columns(records) {
   const spec = COLUMNS[`${selected}:${role()}`] || COLUMNS[selected];
@@ -88,11 +99,39 @@ function columns(records) {
   ].slice(0, 6);
 }
 let showInactive = false;
+// Filas fantasma que ocupan la tabla mientras se resuelve la consulta.
+function records_skeletonRows(count = 6) {
+  const head = $("table-head");
+  const span = head && head.firstElementChild ? head.firstElementChild.children.length : 7;
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < count; i++) {
+    const tr = el("tr", "records-skeleton-row");
+    const td = el("td");
+    td.colSpan = span;
+    td.setAttribute("aria-hidden", "true");
+    td.append(el("div", "skeleton skeleton--row"));
+    tr.append(td);
+    frag.append(tr);
+  }
+  return frag;
+}
 async function loadRecords() {
+  const table = $("table-head").closest("table");
+  if (table && !table.querySelector("caption")) {
+    table.prepend(el("caption", "visually-hidden", title(selected)));
+  }
+  const body = $("table-body");
+  body.replaceChildren(records_skeletonRows(6));
   const inactive = selected === "unidades_estudio" && showInactive ? "&activo=0" : "";
-  const data = await api(
-    `/api/records/${selected}?page=${page}&q=${encodeURIComponent(query)}${inactive}`,
-  );
+  let data;
+  try {
+    data = await api(
+      `/api/records/${selected}?page=${page}&q=${encodeURIComponent(query)}${inactive}`,
+    );
+  } catch (error) {
+    body.replaceChildren();
+    throw error;
+  }
   $("extra-panel").replaceChildren();
   if (selected === "tipos_documento_legal" && admin())
     action($("extra-panel"), "Nuevo tipo de documento", () => documentTypeForm(null));
@@ -101,13 +140,14 @@ async function loadRecords() {
   if (selected === "notificaciones" && admin())
     action($("extra-panel"), "Registro de envíos", () => deliveryLog(""));
   if (selected === "certificados") {
-    const link = el("a", "secondary", "Descargar mi portafolio (PDF)");
+    const link = el("a", "btn btn--secondary btn--sm");
     link.href = "/api/portafolio";
+    link.append(icon("download"), el("span", "", "Descargar mi portafolio (PDF)"));
     $("extra-panel").append(link);
   }
   if (selected === "unidades_estudio") {
-    const wrap = el("div", "form-check mb-2");
-    const box = el("input", "form-check-input");
+    const wrap = el("label", "switch");
+    const box = el("input");
     box.type = "checkbox";
     box.id = "show-inactive";
     box.checked = showInactive;
@@ -116,17 +156,21 @@ async function loadRecords() {
       page = 1;
       loadRecords().catch(showError);
     };
-    const l = el("label", "form-check-label", "Mostrar unidades inactivas");
-    l.htmlFor = box.id;
-    wrap.append(box, l);
+    wrap.append(
+      box,
+      el("span", "switch__track"),
+      el("span", "switch__label", "Mostrar unidades inactivas"),
+    );
     $("extra-panel").append(wrap);
   }
   if (selected === "equipos_reto_academico" && user.rol === "ESTUDIANTE")
     scheduleForStudent().catch(showError);
   total = data.total;
-  $("record-count").textContent = `${total} registro${total === 1 ? "" : "s"}`;
+  const recordCount = $("record-count");
+  recordCount.textContent = `${total} registro${total === 1 ? "" : "s"}`;
+  recordCount.setAttribute("aria-live", "polite");
   // Exports are an admin feature in Django (apps/reportes).
-  $("exports").classList.toggle("d-none", !admin());
+  $("exports").hidden = !admin();
   $("export-link").href =
     `/api/export/${selected}?q=${encodeURIComponent(query)}`;
   $("export-link").download = "retosean.csv";
@@ -138,6 +182,7 @@ async function loadRecords() {
   const head = document.createElement("tr");
   for (const key of [...cols, "Acciones"]) {
     const th = document.createElement("th");
+    th.scope = "col";
     th.textContent =
       columnHeaders[key] ||
       capfirst(
@@ -145,46 +190,72 @@ async function loadRecords() {
           field(selected, key + "_id")?.verbose_name ||
           key,
       );
+    if (records_NUMERIC.includes(key)) th.classList.add("num");
     head.append(th);
   }
   $("table-head").replaceChildren(head);
-  $("table-body").replaceChildren();
+  body.replaceChildren();
   if (!data.records.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 7;
-    td.className = "text-center text-muted py-5";
-    td.textContent = "No hay registros para mostrar.";
+    td.colSpan = cols.length + 1;
+    td.append(
+      query
+        ? ui.empty(
+            "search",
+            "Sin resultados",
+            "Ningún registro coincide con tu búsqueda.",
+            ui.button("Limpiar búsqueda", {
+              variant: "secondary",
+              icon: "x",
+              onClick: () => {
+                query = "";
+                page = 1;
+                $("search").value = "";
+                loadRecords().catch(showError);
+              },
+            }),
+          )
+        : ui.empty(
+            "folder2-open",
+            "No hay registros",
+            "Aún no hay registros en esta sección.",
+          ),
+    );
     tr.append(td);
-    $("table-body").append(tr);
+    body.append(tr);
   }
   for (const record of data.records) {
     const tr = document.createElement("tr");
     for (const key of cols) {
       const td = document.createElement("td");
-      const text = display(record[key]);
-      td.title = text;
+      if (records_NUMERIC.includes(key)) td.classList.add("num");
       if (key.includes("estado") && record[key]) {
-        const badge = el("span", "badge " + badgeClass(record[key]));
+        const badge = el("span", "pill " + badgeClass(record[key]) + " dot");
         badge.textContent = choice(selected, key, record[key]);
         td.append(badge);
-      } else
+      } else {
+        const text = display(record[key]);
+        td.title = text;
         td.textContent = field(selected, key)?.choices.length
           ? choice(selected, key, record[key])
           : text;
+      }
       tr.append(td);
     }
     const td = document.createElement("td");
-    const button = el("button", "btn btn-sm btn-outline-secondary");
+    const button = el("button", "btn btn--secondary btn--sm");
     button.type = "button";
-    button.append(icon("eye"), " Ver detalle");
+    button.append(icon("eye"), el("span", "", "Ver detalle"));
     button.onclick = () => openRecord(record.id).catch(showError);
     td.append(button);
     tr.append(td);
-    $("table-body").append(tr);
+    body.append(tr);
   }
-  $("page-number").textContent =
+  const pageNumber = $("page-number");
+  pageNumber.textContent =
     `Página ${page} de ${Math.max(1, Math.ceil(total / 20))}`;
+  pageNumber.setAttribute("aria-live", "polite");
   $("previous").disabled = page <= 1;
   $("next").disabled = page * 20 >= total;
 }
@@ -202,17 +273,11 @@ function modal(title) {
 function action(parent, label, handler, primary = false) {
   const button = document.createElement("button");
   button.type = "button";
-  button.className = primary ? "primary" : "secondary";
+  button.className = "btn " + (primary ? "btn--primary" : "btn--secondary");
   button.textContent = label;
-  button.onclick = async () => {
-    button.disabled = true;
-    try {
-      await handler();
-    } catch (e) {
-      toast(e.message);
-    } finally {
-      button.disabled = false;
-    }
+  button.onclick = () => {
+    const task = Promise.resolve().then(handler).catch((e) => toast(e.message));
+    busy(button, task);
   };
   parent.append(button);
   return button;
@@ -225,20 +290,26 @@ function input(
   type = "text",
   required = false,
 ) {
-  const wrapper = document.createElement("div");
-  if (type === "textarea") wrapper.className = "full";
-  const l = document.createElement("label");
+  const wrapper = el("div", "field");
+  if (type === "textarea") wrapper.classList.add("field--full");
+  if (type === "file") wrapper.classList.add("file");
+  const l = el("label", "field__label", label);
   l.htmlFor = "field-" + name;
-  l.textContent = label;
+  if (required) l.append(el("span", "req", " *"));
   const field = document.createElement(
     type === "textarea" ? "textarea" : "input",
   );
   field.id = "field-" + name;
   field.name = name;
   if (type !== "textarea") field.type = type;
-  field.value = value ?? "";
+  if (type === "textarea") field.className = "textarea";
+  else if (type !== "file") field.className = "input";
+  if (type !== "file") field.value = value ?? "";
   field.required = required;
-  wrapper.append(l, field);
+  const err = el("p", "field__error");
+  err.id = field.id + "-error";
+  field.setAttribute("aria-describedby", err.id);
+  wrapper.append(l, field, err);
   parent.append(wrapper);
   return field;
 }

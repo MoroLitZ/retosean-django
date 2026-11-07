@@ -1,1 +1,56 @@
-/* forms.css */
+/* RetosEAN — create/edit form styles (forms area).
+   - Two-column form grid that collapses to one column on narrow screens.
+   - Action row for form submit buttons.
+   - Inline comment control and indeterminate upload progress. */
+
+/* Two-column form grid; collapses to a single column below 768px. */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 var(--space-4);
+  align-items: start;
+}
+@media (max-width: 768px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Action row at the foot of a form; spans both grid columns. */
+.forms-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+/* Inline comment form (deliverable panel). */
+.forms-comment {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+.forms-comment .input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Indeterminate file-upload progress bar. */
+.progress--busy .progress__bar {
+  width: 40%;
+  animation: forms_indeterminate 1.2s linear infinite;
+}
+@keyframes forms_indeterminate {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(360%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress--busy .progress__bar {
+    animation: none;
+  }
+}

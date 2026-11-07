@@ -1,97 +1,228 @@
 "use strict";
-function authField(parent, name, label, type = "text", options = null, value = "") {
-  const wrap = el("div");
-  const l = el("label", "form-label", label);
-  l.htmlFor = "auth-" + name;
-  let field;
+// ── Autenticación ──
+// El formulario de inicio de sesión es estático en index.html. Aquí se
+// renderizan dentro de #auth-alt: el selector de tipo de cuenta, el registro
+// académico/empresa, la recuperación y el restablecimiento de contraseña.
+
+// Construye un campo del design system (.field) con etiqueta, marcador de campo
+// obligatorio, pista opcional, error inline y cableado aria. Los campos de
+// contraseña incluyen un botón de mostrar/ocultar. Devuelve el control para que
+// quien lo invoque pueda leer su valor u ocultarlo vía control.parentElement.
+function authField(parent, name, label, spec = {}) {
+  const {
+    type = "text", options = null, value = "", required = false,
+    hint = null, validate = null, autocomplete = null, placeholder = null,
+  } = spec;
+  const wrap = el("div", "field");
+  const id = "auth-" + name;
+  let control;
   if (options) {
-    field = el("select", "form-select");
-    options.forEach(([v, t]) => field.append(new Option(t, v)));
+    control = el("select", "select");
+    for (const opt of options) {
+      const [v, t] = Array.isArray(opt) ? opt : [opt.value, opt.label];
+      const o = el("option", "", t);
+      o.value = String(v);
+      control.append(o);
+    }
   } else {
-    field = el("input", "form-control");
-    field.type = type;
+    control = el("input", "input");
+    control.type = type;
   }
-  field.id = "auth-" + name;
-  field.name = name;
-  // An empty value would deselect a <select>'s first option.
-  if (value) field.value = value;
-  if (type === "password") field.autocomplete = "new-password";
-  wrap.append(l, field);
+  control.id = id;
+  control.name = name;
+  if (value) control.value = value;
+  if (required) control.required = true;
+  if (placeholder) control.placeholder = placeholder;
+  if (autocomplete) control.autocomplete = autocomplete;
+  else if (type === "password") control.autocomplete = "new-password";
+
+  const lbl = el("label", "field__label", label);
+  lbl.htmlFor = id;
+  if (required) lbl.append(el("span", "req", " *"));
+  wrap.append(lbl);
+
+  if (type === "password") {
+    const group = el("div", "input-group");
+    group.append(control);
+    const toggle = el("button", "input-group-text auth-toggle");
+    toggle.type = "button";
+    toggle.setAttribute("aria-label", "Mostrar la contraseña");
+    toggle.setAttribute("aria-pressed", "false");
+    toggle.append(icon("eye"));
+    toggle.onclick = () => {
+      const show = control.type === "password";
+      control.type = show ? "text" : "password";
+      toggle.replaceChildren(icon(show ? "eye-slash" : "eye"));
+      toggle.setAttribute("aria-pressed", String(show));
+      toggle.setAttribute(
+        "aria-label",
+        show ? "Ocultar la contraseña" : "Mostrar la contraseña",
+      );
+    };
+    group.append(toggle);
+    wrap.append(group);
+  } else {
+    wrap.append(control);
+  }
+
+  if (hint) wrap.append(el("p", "field__hint", hint));
+  const error = el("p", "field__error");
+  error.id = id + "-error";
+  control.setAttribute("aria-describedby", error.id);
+  wrap.append(error);
+
+  if (parent._authFields)
+    parent._authFields.push({ control, error, required, validate, wrap });
   parent.append(wrap);
-  return field;
+  return control;
 }
+
+// Renderiza un formulario de autenticación y se encarga de la validación
+// inline, el estado de envío (busy) y los errores de la API.
 function authForm(title, subtitle, build, submitLabel, onSubmit, footer) {
   const box = $("auth-alt");
   box.replaceChildren(el("h2", "", title), el("p", "auth-subtitle", subtitle));
-  const error = el("div", "alert alert-danger py-2 mb-3");
+  const error = el("div", "alert alert--danger");
   error.hidden = true;
-  const form = el("form");
+  const form = el("form", "auth-form");
   form.noValidate = true;
+  form._authFields = [];
   build(form);
-  const button = el("button", "btn btn-auth w-100 mt-4", submitLabel);
+  const button = el("button", "btn btn--primary w-100 auth-submit", submitLabel);
+  button.type = "submit";
   form.append(button);
   form.onsubmit = async (e) => {
     e.preventDefault();
     error.hidden = true;
-    button.disabled = true;
-    try {
-      await onSubmit(Object.fromEntries(new FormData(form)));
-    } catch (err) {
-      error.textContent = err.message;
-      error.hidden = false;
-    } finally {
-      button.disabled = false;
+    let firstBad = null;
+    for (const f of form._authFields) {
+      if (f.wrap.hidden) continue;
+      const v = f.control.value;
+      let msg = "";
+      if (f.required && v.trim() === "") msg = "Este campo es obligatorio.";
+      else if (v.trim() !== "" && f.validate) msg = f.validate(v) || "";
+      if (msg) {
+        f.error.replaceChildren(icon("exclamation-circle-fill"), el("span", "", msg));
+        f.control.setAttribute("aria-invalid", "true");
+        firstBad = firstBad || f.control;
+      } else {
+        f.error.replaceChildren();
+        f.control.removeAttribute("aria-invalid");
+      }
     }
+    if (firstBad) {
+      firstBad.focus();
+      return;
+    }
+    const data = Object.fromEntries(new FormData(form));
+    busy(button, onSubmit(data)).catch((err) => {
+      error.replaceChildren(
+        icon("exclamation-triangle-fill"),
+        el("span", "", err.message),
+      );
+      error.hidden = false;
+    });
   };
   box.append(error, form);
   if (footer) box.append(footer);
 }
+
 function backToLogin(text = "¿Ya tienes cuenta?") {
   const p = el("p", "text-center mt-3 mb-0 auth-note", text + " ");
-  const a = el("a", "text-link-green", "Inicia sesión aquí");
+  const a = el("a", "text-link", "Inicia sesión aquí");
   a.href = "#";
   p.append(a);
   return p;
 }
+
+// Pantalla de resultado (éxito / pendiente) centrada dentro de #auth-alt.
+function authResult(title, message, iconName, footer) {
+  const box = $("auth-alt");
+  box.replaceChildren();
+  const wrap = el("div", "auth-result");
+  const icn = el("div", "auth-result__icon");
+  icn.append(icon(iconName || "check-circle-fill"));
+  wrap.append(icn, el("h2", "", title), el("p", "auth-subtitle", message));
+  box.append(wrap);
+  if (footer) box.append(footer);
+}
+
 async function authRoute() {
   const hash = location.hash.slice(1);
-  const alt = hash.startsWith("registro") || hash === "recuperar" || hash.startsWith("restablecer/");
+  const alt =
+    hash.startsWith("registro") ||
+    hash === "recuperar" ||
+    hash.startsWith("restablecer/");
   $("auth-login").hidden = alt;
   $("auth-alt").hidden = !alt;
   if (!alt) return;
   if (hash === "registro") {
     const box = $("auth-alt");
-    box.replaceChildren(el("h2", "", "Crea tu cuenta"), el("p", "auth-subtitle", "Elige cómo vas a participar en RetosEAN"));
-    for (const [target, title, text] of [
-      ["registro/academico", "Comunidad EAN", "Si eres Estudiante o Profesor de la Universidad EAN, usa esta opción para validar tu correo institucional."],
-      ["registro/empresa", "Empresas / Organizaciones", "Si eres un Aliado Comercial externo y deseas proponer retos o validar documentación legal, crea tu perfil corporativo aquí."],
+    box.replaceChildren(
+      el("h2", "", "Crea tu cuenta"),
+      el("p", "auth-subtitle", "Elige cómo vas a participar en RetosEAN"),
+    );
+    for (const [target, title, text, iconName] of [
+      [
+        "registro/academico",
+        "Comunidad EAN",
+        "Si eres Estudiante o Profesor de la Universidad EAN, usa esta opción para validar tu correo institucional.",
+        "people",
+      ],
+      [
+        "registro/empresa",
+        "Empresas / Organizaciones",
+        "Si eres un Aliado Comercial externo y deseas proponer retos o validar documentación legal, crea tu perfil corporativo aquí.",
+        "building",
+      ],
     ]) {
-      const a = el("a", "auth-choice text-decoration-none text-dark");
+      const a = el("a", "auth-choice");
       a.href = "#" + target;
-      a.append(el("div", "fw-bold", title), el("div", "small text-muted", text));
+      const inner = el("span", "auth-choice__wrap");
+      const icn = el("span", "auth-choice__icon");
+      icn.append(icon(iconName));
+      const body = el("span", "auth-choice__body");
+      body.append(
+        el("span", "auth-choice__title", title),
+        el("span", "auth-choice__desc", text),
+      );
+      const arrow = el("span", "auth-choice__arrow");
+      arrow.append(icon("chevron-right"));
+      inner.append(icn, body, arrow);
+      a.append(inner);
       box.append(a);
     }
     box.append(backToLogin());
     return;
   }
   const register = async (data) => {
-    for (const k of ["programa_id", "facultad_id", "semestre"]) data[k] = data[k] ? Number(data[k]) : null;
+    for (const k of ["programa_id", "facultad_id", "semestre"])
+      data[k] = data[k] ? Number(data[k]) : null;
     const session = await api("/api/registro", data);
     if (session.pendiente_aprobacion) {
-      // A self-registered professor waits for admin approval: no session yet.
-      $("auth-alt").replaceChildren(el("h2", "", "Cuenta pendiente de aprobación"),
-        el("p", "auth-subtitle", session.mensaje), backToLogin(""));
+      // Un profesor auto-registrado espera aprobación del administrador.
+      authResult(
+        "Cuenta pendiente de aprobación",
+        session.mensaje,
+        "hourglass",
+        backToLogin(""),
+      );
       return;
     }
     csrf = session.csrf;
     location.hash = "dashboard";
     await start();
   };
+  const emailOk = (v) =>
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? "" : "Ingresa un correo válido.";
   if (hash === "registro/academico" || hash === "registro/empresa") {
     const academic = hash.endsWith("academico");
     const options = await api("/api/registro/opciones");
-    authForm(academic ? "Registro Comunidad EAN" : "Registro de Empresa",
-      academic ? "Usa tu correo institucional @universidadean.edu.co" : "Crea el perfil corporativo de tu organización",
+    authForm(
+      academic ? "Registro Comunidad EAN" : "Registro de Empresa",
+      academic
+        ? "Usa tu correo institucional @universidadean.edu.co"
+        : "Crea el perfil corporativo de tu organización",
       (form) => {
         const hidden = el("input");
         hidden.type = "hidden";
@@ -99,13 +230,47 @@ async function authRoute() {
         hidden.value = academic ? "academico" : "empresa";
         form.append(hidden);
         if (academic) {
-          const rol = authField(form, "rol", "Rol", "text", [["ESTUDIANTE", "Estudiante"], ["PROFESOR", "Profesor"]]);
-          authField(form, "first_name", "Nombre");
-          authField(form, "last_name", "Apellido");
-          const programa = authField(form, "programa_id", "Programa", "text", [["", "Seleccione un programa"], ...options.programas.map((p) => [p.value, p.label])]).parentElement;
-          const semestre = authField(form, "semestre", "Semestre", "text", Array.from({ length: 10 }, (_, i) => [String(i + 1), String(i + 1)])).parentElement;
-          const facultad = authField(form, "facultad_id", "Facultad", "text", [["", "Seleccione una facultad"], ...options.facultades.map((f) => [f.value, f.label])]).parentElement;
-          const especialidad = authField(form, "especialidad", "Especialidad", "text", [["", "Seleccione una especialidad"], ...options.especialidades.map((e) => [e, e])]).parentElement;
+          const rol = authField(form, "rol", "Rol", {
+            type: "select",
+            options: [
+              ["ESTUDIANTE", "Estudiante"],
+              ["PROFESOR", "Profesor"],
+            ],
+            required: true,
+          });
+          authField(form, "first_name", "Nombre", { required: true });
+          authField(form, "last_name", "Apellido", { required: true });
+          const programa = authField(form, "programa_id", "Programa", {
+            type: "select",
+            options: [
+              ["", "Seleccione un programa"],
+              ...options.programas.map((p) => [p.value, p.label]),
+            ],
+            required: true,
+          }).parentElement;
+          const semestre = authField(form, "semestre", "Semestre", {
+            type: "select",
+            options: Array.from({ length: 10 }, (_, i) => [
+              String(i + 1),
+              String(i + 1),
+            ]),
+          }).parentElement;
+          const facultad = authField(form, "facultad_id", "Facultad", {
+            type: "select",
+            options: [
+              ["", "Seleccione una facultad"],
+              ...options.facultades.map((f) => [f.value, f.label]),
+            ],
+            required: true,
+          }).parentElement;
+          const especialidad = authField(form, "especialidad", "Especialidad", {
+            type: "select",
+            options: [
+              ["", "Seleccione una especialidad"],
+              ...options.especialidades.map((e) => [e, e]),
+            ],
+            required: true,
+          }).parentElement;
           const toggle = () => {
             const student = rol.value === "ESTUDIANTE";
             programa.hidden = semestre.hidden = !student;
@@ -114,43 +279,95 @@ async function authRoute() {
           rol.onchange = toggle;
           toggle();
         } else {
-          authField(form, "nit", "NIT de la Empresa");
-          authField(form, "razon_social", "Razón social");
-          authField(form, "sector_industrial", "Sector Industrial");
-          authField(form, "tipo_convocatoria", "Tipo de convocatoria", "text", options.convocatorias);
+          authField(form, "nit", "NIT de la Empresa", { required: true });
+          authField(form, "razon_social", "Razón social", { required: true });
+          authField(form, "sector_industrial", "Sector industrial");
+          authField(form, "tipo_convocatoria", "Tipo de convocatoria", {
+            type: "select",
+            options: options.convocatorias,
+          });
           authField(form, "area_responsable", "Área responsable");
-          authField(form, "sitio_web", "Sitio web", "url");
+          authField(form, "sitio_web", "Sitio web", { type: "url" });
         }
-        authField(form, "username", academic ? "Usuario" : "Usuario Corporativo");
-        authField(form, "email", academic ? "Correo electrónico" : "Correo electrónico corporativo", "email");
-        authField(form, "password", "Contraseña (mínimo 12 caracteres)", "password");
-        authField(form, "password2", "Confirmar contraseña", "password");
-      }, "Crear cuenta", register, backToLogin());
+        authField(form, "username", academic ? "Usuario" : "Usuario Corporativo", {
+          required: true,
+        });
+        authField(
+          form,
+          "email",
+          academic ? "Correo electrónico" : "Correo electrónico corporativo",
+          { type: "email", required: true, validate: emailOk },
+        );
+        const password = authField(form, "password", "Contraseña", {
+          type: "password",
+          required: true,
+          hint: "Mínimo 12 caracteres.",
+        });
+        authField(form, "password2", "Confirmar contraseña", {
+          type: "password",
+          required: true,
+          validate: (v) =>
+            v !== password.value ? "Las contraseñas no coinciden." : "",
+        });
+      },
+      "Crear cuenta",
+      register,
+      backToLogin(),
+    );
     return;
   }
   if (hash === "recuperar") {
-    authForm("Recuperar contraseña", "Te enviaremos un enlace para elegir una nueva contraseña",
-      (form) => authField(form, "email", "Correo electrónico", "email"),
-      "Enviar enlace", async (data) => {
+    authForm(
+      "Recuperar contraseña",
+      "Te enviaremos un enlace para elegir una nueva contraseña",
+      (form) =>
+        authField(form, "email", "Correo electrónico", {
+          type: "email",
+          required: true,
+          validate: emailOk,
+        }),
+      "Enviar enlace",
+      async (data) => {
         await api("/api/password/reset", data);
-        const box = $("auth-alt");
-        box.replaceChildren(el("h2", "", "Revisa tu correo"),
-          el("p", "auth-subtitle", "Si existe una cuenta con ese correo, te enviamos un enlace para restablecer la contraseña. El enlace vence en 3 días."),
-          backToLogin("¿Recordaste tu contraseña?"));
-      }, backToLogin("¿Recordaste tu contraseña?"));
+        authResult(
+          "Revisa tu correo",
+          "Si existe una cuenta con ese correo, te enviamos un enlace para restablecer la contraseña. El enlace vence en 3 días.",
+          "envelope",
+          backToLogin("¿Recordaste tu contraseña?"),
+        );
+      },
+      backToLogin("¿Recordaste tu contraseña?"),
+    );
     return;
   }
   const token = hash.slice("restablecer/".length);
-  authForm("Elige una nueva contraseña", "Usa al menos 12 caracteres",
+  authForm(
+    "Elige una nueva contraseña",
+    "Usa al menos 12 caracteres",
     (form) => {
-      authField(form, "nueva", "Nueva contraseña", "password");
-      authField(form, "nueva2", "Confirmar contraseña", "password");
+      const nueva = authField(form, "nueva", "Nueva contraseña", {
+        type: "password",
+        required: true,
+        hint: "Mínimo 12 caracteres.",
+        validate: (v) =>
+          v.length >= 12 ? "" : "La contraseña debe tener al menos 12 caracteres.",
+      });
+      authField(form, "nueva2", "Confirmar contraseña", {
+        type: "password",
+        required: true,
+        validate: (v) => (v !== nueva.value ? "Las contraseñas no coinciden." : ""),
+      });
     },
-    "Cambiar contraseña", async (data) => {
+    "Cambiar contraseña",
+    async (data) => {
       await api("/api/password/reset/confirm", { ...data, token });
-      const box = $("auth-alt");
-      box.replaceChildren(el("h2", "", "Contraseña actualizada"),
-        el("p", "auth-subtitle", "Ya puedes iniciar sesión con tu nueva contraseña."), backToLogin(""));
-    }, backToLogin());
+      authResult(
+        "Contraseña actualizada",
+        "Ya puedes iniciar sesión con tu nueva contraseña.",
+        "check-circle-fill",
+        backToLogin(""),
+      );
+    },
+    backToLogin(),
+  );
 }
-// ── HU12: grading by free score or rubric; grades published per reto ──

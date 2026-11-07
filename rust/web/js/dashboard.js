@@ -1,84 +1,95 @@
 "use strict";
+/* ═══════════════════════════════════════════════════════════════════════════
+   Dashboard de Indicadores — KPIs, gráficas, filtros y accesos rápidos.
+   Construido con el design system RetosEAN (helper ui.*, icon(), tokens CSS);
+   sin Bootstrap. Nombres de nivel superior: KPIS, GRAFICAS, ACCESOS,
+   dashboardQuery y loadDashboard (estables para core.js/main.js). Los helpers
+   privados usan el prefijo `dash_` para evitar colisiones globales.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+// [texto, clave del API, icono, tono (kpi__icon--<tono>), nota(kpis) opcional]
 const KPIS = {
   ADMIN: [
-    ["Retos totales", "retos_total", "trophy", "#2563eb"],
-    ["Retos activos", "retos_activos", "play-circle", "#16a34a"],
-    ["Finalizados", "retos_finalizados", "flag", "#7c3aed"],
-    ["En revisión", "retos_en_revision", "hourglass-split", "#f59e0b"],
-    ["Empresas", "empresas_total", "building", "#0891b2", (k) => `${k.empresas_verificadas} verificadas`],
-    ["Estudiantes", "estudiantes_total", "mortarboard", "#65a30d"],
-    ["Docentes", "profesores_total", "person-video3", "#db2777"],
-    ["Postulaciones", "postulaciones_total", "send", "#dc2626", (k) => `${k.postulaciones_aceptadas} aceptadas`],
-    ["Solución aplicada", "impacto_si", "check2-circle", "#16a34a", () => "la empresa la aplicó"],
-    ["No aplicada", "impacto_no", "x-circle", "#dc2626"],
-    ["Impacto en evaluación", "impacto_evaluacion", "hourglass", "#f59e0b"],
+    ["Retos totales", "retos_total", "trophy", "accent"],
+    ["Retos activos", "retos_activos", "play-circle", "success"],
+    ["Finalizados", "retos_finalizados", "flag", "violet"],
+    ["En revisión", "retos_en_revision", "hourglass-split", "warning"],
+    ["Empresas", "empresas_total", "building", "info", (k) => `${k.empresas_verificadas} verificadas`],
+    ["Estudiantes", "estudiantes_total", "mortarboard", "brand"],
+    ["Docentes", "profesores_total", "person-video3", "pink"],
+    ["Postulaciones", "postulaciones_total", "send", "danger", (k) => `${k.postulaciones_aceptadas} aceptadas`],
+    ["Solución aplicada", "impacto_si", "check2-circle", "success", () => "la empresa la aplicó"],
+    ["No aplicada", "impacto_no", "x-circle", "danger"],
+    ["Impacto en evaluación", "impacto_evaluacion", "hourglass", "warning"],
   ],
   EMPRESA: [
-    ["Mis retos", "retos_total", "trophy", "#2563eb"],
-    ["Activos", "retos_activos", "play-circle", "#16a34a"],
-    ["En revisión", "retos_en_revision", "hourglass-split", "#f59e0b"],
-    ["Finalizados", "retos_finalizados", "flag", "#7c3aed"],
-    ["Postulaciones", "postulaciones_total", "send", "#0891b2"],
-    ["Pendientes", "postulaciones_pendientes", "clock-history", "#f59e0b"],
-    ["Aceptadas", "postulaciones_aceptadas", "person-check", "#16a34a"],
-    ["Entregables", "entregables_total", "folder-check", "#db2777"],
+    ["Mis retos", "retos_total", "trophy", "accent"],
+    ["Activos", "retos_activos", "play-circle", "success"],
+    ["En revisión", "retos_en_revision", "hourglass-split", "warning"],
+    ["Finalizados", "retos_finalizados", "flag", "violet"],
+    ["Postulaciones", "postulaciones_total", "send", "info"],
+    ["Pendientes", "postulaciones_pendientes", "clock-history", "warning"],
+    ["Aceptadas", "postulaciones_aceptadas", "person-check", "success"],
+    ["Entregables", "entregables_total", "folder-check", "pink"],
   ],
   PROFESOR: [
-    ["Cursos activos", "cursos_activos", "journal-text", "#2563eb"],
-    ["Retos asignados", "retos_asignados", "trophy", "#16a34a"],
-    ["Mis estudiantes", "estudiantes_total", "people", "#0891b2"],
-    ["Por calificar", "evaluaciones_pendientes", "clipboard2-check", "#f59e0b"],
-    ["Entregables recibidos", "entregables_total", "folder-check", "#7c3aed"],
-    ["Integraciones en revisión", "integraciones_en_revision", "hourglass-split", "#dc2626"],
-    ["Nota promedio", "nota_promedio", "star-half", "#65a30d"],
+    ["Cursos activos", "cursos_activos", "journal-text", "accent"],
+    ["Retos asignados", "retos_asignados", "trophy", "success"],
+    ["Mis estudiantes", "estudiantes_total", "people", "info"],
+    ["Por calificar", "evaluaciones_pendientes", "clipboard2-check", "warning"],
+    ["Entregables recibidos", "entregables_total", "folder-check", "violet"],
+    ["Integraciones en revisión", "integraciones_en_revision", "hourglass-split", "danger"],
+    ["Nota promedio", "nota_promedio", "star-half", "brand"],
   ],
   ESTUDIANTE: [
-    ["Retos disponibles", "retos_disponibles", "search", "#2563eb"],
-    ["Mis postulaciones", "postulaciones_total", "send", "#0891b2"],
-    ["Aceptadas", "postulaciones_aceptadas", "person-check", "#16a34a"],
-    ["Favoritos", "favoritos_total", "star", "#f59e0b"],
-    ["Entregables", "entregables_total", "folder-check", "#7c3aed"],
-    ["Sin calificar", "entregables_pendientes", "hourglass-split", "#dc2626"],
-    ["Nota promedio", "nota_promedio", "star-half", "#65a30d"],
+    ["Retos disponibles", "retos_disponibles", "search", "accent"],
+    ["Mis postulaciones", "postulaciones_total", "send", "info"],
+    ["Aceptadas", "postulaciones_aceptadas", "person-check", "success"],
+    ["Favoritos", "favoritos_total", "star", "warning"],
+    ["Entregables", "entregables_total", "folder-check", "violet"],
+    ["Sin calificar", "entregables_pendientes", "hourglass-split", "danger"],
+    ["Nota promedio", "nota_promedio", "star-half", "brand"],
   ],
   EXPERTO: [
-    ["Hackathones asignados", "hackathones_asignados", "lightning-charge", "#2563eb"],
-    ["En curso", "hackathones_en_curso", "play-circle", "#16a34a"],
-    ["Equipos por evaluar", "equipos_por_evaluar", "hourglass-split", "#f59e0b"],
-    ["Votos emitidos", "votos_emitidos", "check2-square", "#7c3aed"],
-    ["Puntaje promedio", "puntaje_promedio", "star-half", "#65a30d"],
-    ["Equipos académicos", "equipos_academicos", "people", "#0891b2"],
+    ["Hackathones asignados", "hackathones_asignados", "lightning-charge", "accent"],
+    ["En curso", "hackathones_en_curso", "play-circle", "success"],
+    ["Equipos por evaluar", "equipos_por_evaluar", "hourglass-split", "warning"],
+    ["Votos emitidos", "votos_emitidos", "check2-square", "violet"],
+    ["Puntaje promedio", "puntaje_promedio", "star-half", "brand"],
+    ["Equipos académicos", "equipos_academicos", "people", "info"],
   ],
 };
-// [title, serie, chart type, dataset label, column class]
+
+// [título, clave de la serie, tipo de gráfica, etiqueta del dataset, ancho ("med"|"wide")]
 const GRAFICAS = {
   ADMIN: [
-    ["Retos por estado", "retos_por_estado", "doughnut", "Total", "col-lg-5"],
-    ["Retos por facultad", "retos_por_facultad", "bar", "Retos", "col-lg-7"],
-    ["Retos creados por mes", "retos_por_mes", "line", "Retos creados", "col-lg-7"],
-    ["Integraciones académicas", "integraciones_por_estado", "doughnut", "Total", "col-lg-5"],
-    ["Impacto: ¿la empresa aplicó la solución?", "impacto", "doughnut", "Total", "col-lg-5"],
+    ["Retos por estado", "retos_por_estado", "doughnut", "Total", "med"],
+    ["Retos por facultad", "retos_por_facultad", "bar", "Retos", "wide"],
+    ["Retos creados por mes", "retos_por_mes", "line", "Retos creados", "wide"],
+    ["Integraciones académicas", "integraciones_por_estado", "doughnut", "Total", "med"],
+    ["Impacto: ¿la empresa aplicó la solución?", "impacto", "doughnut", "Total", "med"],
   ],
   EMPRESA: [
-    ["Mis retos por estado", "retos_por_estado", "doughnut", "Total", "col-lg-5"],
-    ["Retos publicados por mes", "retos_por_mes", "line", "Retos", "col-lg-7"],
+    ["Mis retos por estado", "retos_por_estado", "doughnut", "Total", "med"],
+    ["Retos publicados por mes", "retos_por_mes", "line", "Retos", "wide"],
   ],
   PROFESOR: [
-    ["Entregables por estado", "entregables_por_estado", "doughnut", "Total", "col-lg-5"],
-    ["Entregables por reto", "entregables_por_reto", "bar", "Entregables", "col-lg-7"],
+    ["Entregables por estado", "entregables_por_estado", "doughnut", "Total", "med"],
+    ["Entregables por reto", "entregables_por_reto", "bar", "Entregables", "wide"],
   ],
   ESTUDIANTE: [
-    ["Mis postulaciones", "postulaciones_por_estado", "doughnut", "Total", "col-lg-5"],
-    ["Mis notas recientes", "notas_recientes", "bar", "Nota", "col-lg-7"],
+    ["Mis postulaciones", "postulaciones_por_estado", "doughnut", "Total", "med"],
+    ["Mis notas recientes", "notas_recientes", "bar", "Nota", "wide"],
   ],
-  EXPERTO: [["Votos por hackathon", "votos_por_hackathon", "bar", "Votos", "col-lg-7"]],
+  EXPERTO: [["Votos por hackathon", "votos_por_hackathon", "bar", "Votos", "wide"]],
 };
+
 const ACCESOS = {
   ADMIN: [
     ["usuarios", "Gestionar usuarios", "people"],
     ["retos", "Revisar retos", "trophy"],
     ["empresas", "Empresas", "building"],
-    ["reportes", "Ver reportes", "bar-chart"],
+    ["reportes", "Ver reportes", "bar-chart-line"],
   ],
   EMPRESA: [
     ["retos", "Mis retos", "trophy"],
@@ -100,9 +111,114 @@ const ACCESOS = {
   ],
   EXPERTO: [["hackathons", "Mis hackathones", "lightning-charge"]],
 };
+
 let dashboardQuery = "";
+
+/* ── Helpers privados (prefijo dash_, propios del área dashboard) ─────────── */
+
+// Tipo de gráfica en español, para el texto alternativo del canvas.
+function dash_tipoEs(tipo) {
+  return tipo === "doughnut" ? "de dona" : tipo === "bar" ? "de barras" : "de líneas";
+}
+
+// Lee un token CSS (custom property) con un valor de respaldo.
+function dash_token(name, fallback) {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name);
+  return (value && value.trim()) || fallback;
+}
+
+// Inserta un encabezado de sección antes de `target` (idempotente) y lo devuelve.
+function dash_sectionTitle(target, id, text) {
+  let heading = document.getElementById(id);
+  if (!heading) {
+    heading = el("h2", "dash-section-title", text);
+    heading.id = id;
+    target.before(heading);
+  } else {
+    heading.textContent = text;
+  }
+  return heading;
+}
+
+// Esqueleto de la cuadrícula de KPIs mientras llega la respuesta (UX audit #1).
+function dash_kpiSkeletons() {
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < 8; i++) {
+    const tile = el("div", "surface kpi dash-kpi dash-skeleton-tile");
+    tile.setAttribute("aria-hidden", "true");
+    const iconBox = el("div", "kpi__icon");
+    iconBox.append(el("span", "skeleton dash-skeleton-avatar"));
+    const textBox = el("div", "dash-kpi-text dash-skeleton-lines");
+    textBox.append(
+      el("span", "skeleton skeleton--title"),
+      el("span", "skeleton skeleton--text"),
+    );
+    tile.append(iconBox, textBox);
+    frag.append(tile);
+  }
+  return frag;
+}
+
+// Esqueleto de los paneles de gráfica mientras llega la respuesta.
+function dash_chartSkeletons() {
+  const frag = document.createDocumentFragment();
+  for (const width of ["med", "wide"]) {
+    const panel = el("div", "card-panel dash-chart dash-chart--" + width);
+    panel.setAttribute("aria-hidden", "true");
+    const header = el("div", "card-panel-header");
+    header.append(el("span", "skeleton skeleton--title"));
+    const box = el("div", "chart-box dash-chart-box");
+    box.append(el("div", "skeleton dash-chart-skeleton-block"));
+    panel.append(header, box);
+    frag.append(panel);
+  }
+  return frag;
+}
+
 async function loadDashboard() {
-  const data = await api("/api/dashboard" + dashboardQuery);
+  const kpis = $("kpis");
+  const graficas = $("graficas");
+  const accesos = $("accesos");
+  const periodForm = $("periodo-form");
+  const applyBtn = periodForm ? periodForm.querySelector('[type="submit"]') : null;
+
+  // ── Estado de carga: esqueletos + aria-busy en las regiones dinámicas ──
+  charts.forEach((c) => c.destroy());
+  charts = [];
+  kpis.className = "dash-kpis mb-4";
+  graficas.className = "dash-graficas mb-4";
+  accesos.className = "cluster cluster--sm";
+  kpis.setAttribute("aria-busy", "true");
+  graficas.setAttribute("aria-busy", "true");
+  kpis.replaceChildren(dash_kpiSkeletons());
+  graficas.replaceChildren(dash_chartSkeletons());
+  accesos.replaceChildren();
+
+  const request = api("/api/dashboard" + dashboardQuery);
+  let data;
+  try {
+    // busy() deshabilita el botón «Aplicar» con spinner hasta que termine.
+    data = applyBtn ? await busy(applyBtn, request) : await request;
+  } catch (error) {
+    kpis.removeAttribute("aria-busy");
+    graficas.removeAttribute("aria-busy");
+    kpis.className = "mb-4";
+    graficas.className = "mb-4";
+    kpis.replaceChildren(
+      ui.empty(
+        "exclamation-triangle",
+        "No se pudieron cargar los indicadores",
+        "Tuvimos un problema al consultar el panel. Intenta de nuevo en unos instantes.",
+      ),
+    );
+    graficas.replaceChildren();
+    showError(error);
+    return;
+  }
+  kpis.removeAttribute("aria-busy");
+  graficas.removeAttribute("aria-busy");
+
+  // ── Filtros + etiqueta de periodo (comportamiento del API sin cambios) ──
   const select = $("periodo");
   select.replaceChildren(
     ...data.periodos.map(([value, text]) => {
@@ -119,62 +235,131 @@ async function loadDashboard() {
   document.querySelectorAll(".admin-filter").forEach((n) => (n.hidden = !isAdmin));
   if (isAdmin) {
     const params = new URLSearchParams(dashboardQuery);
-    const fill = (id, empty, rows) => {
+    const fill = (id, empty, lista) => {
       const current = params.get(id) || "";
-      $(id).replaceChildren(new Option(empty, ""), ...rows.map((r) => new Option(r.nombre, r.id, false, String(r.id) === current)));
+      $(id).replaceChildren(new Option(empty, ""), ...lista.map((r) => new Option(r.nombre, r.id, false, String(r.id) === current)));
     };
     fill("facultad", "Todas", data.facultades);
     fill("programa", "Todos", data.programas);
     fill("ecosistema", "Todos", data.ecosistemas);
   }
-  const kpis = $("kpis");
+
+  // ── Encabezados de sección (jerarquía visual); ocultos si no hay rol ──
+  const sinRol = !!data.sin_rol;
+  const kpiTitle = dash_sectionTitle(kpis, "dash-kpis-title", "Indicadores clave");
+  kpiTitle.hidden = sinRol;
+  kpis.setAttribute("aria-labelledby", "dash-kpis-title");
+  const chartTitle = dash_sectionTitle(graficas, "dash-charts-title", "Distribución y tendencias");
+  chartTitle.hidden = sinRol;
+  graficas.setAttribute("aria-labelledby", "dash-charts-title");
+
+  // ── Tarjetas KPI ──
   kpis.replaceChildren();
-  for (const [text, key, iconName, color, note] of data.sin_rol ? [] : KPIS[data.rol]) {
+  for (const [text, key, iconName, tone, note] of sinRol ? [] : KPIS[data.rol]) {
     let value = data.kpis[key];
-    if (key === "nota_promedio" || key === "puntaje_promedio")
-      value = value == null ? "" : Number(value).toFixed(2);
-    const col = el("div", "col-6 col-lg-3");
-    const card = el("div", "card border-0 shadow-sm h-100");
-    const body = el("div", "card-body d-flex align-items-center gap-3");
-    const box = el("div", "kpi-icon rounded-3 d-flex align-items-center justify-content-center flex-shrink-0");
-    box.style.background = color + "1a";
-    const i = icon(iconName);
-    i.style.color = color;
-    box.append(i);
-    const textBox = el("div", "min-w-0");
+    const isAverage = key === "nota_promedio" || key === "puntaje_promedio";
+    if (isAverage) value = value == null ? "" : Number(value).toFixed(2);
+    // «—» para datos ausentes; «0» solo para un cero real (UX audit #15).
+    const display = value == null || value === "" ? "—" : String(value);
+    const tile = el("article", "surface kpi dash-kpi");
+    const iconBox = el("div", "kpi__icon kpi__icon--" + (tone || "brand"));
+    iconBox.append(icon(iconName));
+    const textBox = el("div", "dash-kpi-text");
     textBox.append(
-      el("div", "kpi-label text-muted text-uppercase fw-bold", text),
-      el("div", "kpi-value fw-bold text-dark", value || "0"),
+      el("div", "kpi__label", text),
+      el("div", "kpi__value", display),
     );
-    if (note) textBox.append(el("div", "kpi-note text-muted", note(data.kpis)));
-    body.append(box, textBox);
-    card.append(body);
-    col.append(card);
-    kpis.append(col);
+    if (note) textBox.append(el("div", "kpi__note", note(data.kpis)));
+    tile.append(iconBox, textBox);
+    kpis.append(tile);
   }
-  charts.forEach((c) => c.destroy());
-  charts = [];
+
+  // ── Gráficas ──
   if (window.Chart) {
-    Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
-    Chart.defaults.color = "#6b7280";
+    Chart.defaults.font.family = dash_token("--font-sans", "system-ui, sans-serif");
+    Chart.defaults.color = dash_token("--ink-muted", "#6b7280");
     Chart.defaults.plugins.legend.labels.boxWidth = 12;
   }
-  const graficas = $("graficas");
+  const accent = dash_token("--accent", "#005e85");
+  const surfaceColor = dash_token("--surface", "#ffffff");
+
   graficas.replaceChildren();
-  for (const [heading, serieName, tipo, etiqueta, colClass] of data.sin_rol ? [] : GRAFICAS[data.rol]) {
-    const col = el("div", "col-12 " + colClass);
-    const panel = el("div", "card-panel h-100");
-    const box = el("div", "p-3 chart-box");
-    panel.append(el("div", "card-panel-header", heading), box);
-    col.append(panel);
-    graficas.append(col);
+  let chartIndex = 0;
+  for (const [heading, serieName, tipo, etiqueta, width] of sinRol ? [] : GRAFICAS[data.rol]) {
+    chartIndex += 1;
     const serie = data.series[serieName];
-    if (!serie || !serie.data.length || !window.Chart) {
-      box.replaceChildren(el("p", "text-muted text-center small py-5 mb-0", "Sin datos en el periodo seleccionado."));
+    const hasData = !!(serie && serie.data && serie.data.length && window.Chart);
+
+    const panel = el("div", "card-panel dash-chart dash-chart--" + (width || "med"));
+    const header = el("div", "card-panel-header");
+    const headingEl = el("h3", "dash-chart-title", heading);
+    header.append(headingEl);
+    panel.append(header);
+
+    const box = el("div", "chart-box dash-chart-box");
+
+    if (!hasData) {
+      box.replaceChildren(
+        ui.empty(
+          "bar-chart-line",
+          "Sin datos",
+          "Aún no hay valores para este indicador en el periodo seleccionado.",
+          ui.button("Cambiar periodo", {
+            variant: "ghost",
+            icon: "funnel",
+            onClick: () => {
+              const period = $("periodo");
+              if (!period) return;
+              period.scrollIntoView({ block: "center" });
+              period.focus();
+            },
+          }),
+        ),
+      );
+      panel.append(box);
+      graficas.append(panel);
       continue;
     }
+
     const canvas = el("canvas");
+    canvas.setAttribute("role", "img");
+    canvas.setAttribute(
+      "aria-label",
+      `${heading}. Gráfica ${dash_tipoEs(tipo)}, serie ${etiqueta}. Usa «Ver datos» para consultar los valores en una tabla.`,
+    );
     box.append(canvas);
+    panel.append(box);
+
+    // Alternativa accesible: tabla de datos tras un control de difusión (UX audit #8).
+    const dataId = "dash-chart-data-" + chartIndex;
+    const dataBox = el("div", "dash-chart-data");
+    dataBox.id = dataId;
+    dataBox.hidden = true;
+    const datosGrafica = serie.labels.map((label, i) => ({ categoria: label, valor: serie.data[i] }));
+    dataBox.append(
+      ui.table(
+        [{ key: "categoria", label: "Categoría" }, { key: "valor", label: etiqueta, align: "right" }],
+        datosGrafica,
+        { caption: `Datos de ${heading}`, empty: "Sin valores para mostrar." },
+      ),
+    );
+    panel.append(dataBox);
+
+    const toggle = ui.button("Ver datos", {
+      variant: "ghost",
+      icon: "table",
+      onClick: () => {
+        dataBox.hidden = !dataBox.hidden;
+        toggle.setAttribute("aria-expanded", String(!dataBox.hidden));
+      },
+    });
+    toggle.classList.add("btn--sm", "dash-chart-toggle");
+    toggle.setAttribute("aria-controls", dataId);
+    toggle.setAttribute("aria-expanded", "false");
+    header.append(toggle);
+
+    graficas.append(panel);
+
     const circular = tipo === "doughnut";
     charts.push(
       new Chart(canvas, {
@@ -185,8 +370,8 @@ async function loadDashboard() {
             {
               label: etiqueta,
               data: serie.data,
-              backgroundColor: circular ? serie.colors : tipo === "line" ? "rgba(37,99,235,.12)" : serie.colors,
-              borderColor: tipo === "line" ? "#2563eb" : "#ffffff",
+              backgroundColor: circular ? serie.colors : tipo === "line" ? accent + "1f" : serie.colors,
+              borderColor: tipo === "line" ? accent : surfaceColor,
               borderWidth: tipo === "line" ? 2 : 1,
               fill: tipo === "line",
               tension: 0.3,
@@ -205,14 +390,21 @@ async function loadDashboard() {
       }),
     );
   }
-  const accesos = $("accesos");
-  accesos.replaceChildren();
-  for (const [target, text, iconName] of data.sin_rol ? [] : ACCESOS[data.rol]) {
-    if (!["publicar", "reportes"].includes(target) && !resources.some((r) => r.table === target)) continue;
-    const a = el("a", "btn btn-outline-secondary btn-sm");
-    a.href = "#" + target;
-    a.append(icon(iconName), " " + text);
-    accesos.append(a);
-  }
-}
 
+  // ── Accesos rápidos ──
+  accesos.replaceChildren();
+  let accesosCount = 0;
+  for (const [target, text, iconName] of sinRol ? [] : ACCESOS[data.rol]) {
+    if (!["publicar", "reportes"].includes(target) && !resources.some((r) => r.table === target)) continue;
+    const a = el("a", "btn btn--secondary btn--sm");
+    a.href = "#" + target;
+    a.append(icon(iconName), el("span", "", text));
+    accesos.append(a);
+    accesosCount += 1;
+  }
+  const accesosTitle = dash_sectionTitle(accesos, "dash-accesos-title", "Accesos rápidos");
+  accesosTitle.hidden = !accesosCount;
+  accesos.hidden = !accesosCount;
+  accesos.setAttribute("role", "navigation");
+  accesos.setAttribute("aria-labelledby", "dash-accesos-title");
+}

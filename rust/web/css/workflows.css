@@ -1,1 +1,155 @@
-/* workflows.css */
+/* ═══════════════════════════════════════════════════════════════════════════
+   RetosEAN — Flujos (integraciones, seguimiento, cierre, logística) y
+   evaluación/calificación. Estilos propios del área, basados en tokens.
+   Estos estilos reemplazan lo que legacy.css aportaba a este marcado
+   (.form-grid, .full, .actions, labels de #dialog-content, td de diálogo).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Rejilla de formularios (2 columnas → 1 en móvil) ── */
+.wf-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--space-4);
+  align-items: start;
+}
+.wf-grid > div {
+  margin-block-end: var(--space-3);
+}
+.wf-grid > .full,
+.wf-grid > .field--full {
+  grid-column: 1 / -1;
+}
+/* Separación de los envoltorios simples que genera el helper input() */
+.wf-form > div {
+  margin-block-end: var(--space-3);
+}
+
+@media (max-width: 768px) {
+  .wf-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Apilado simple dentro de formularios sin rejilla */
+.wf-stack > div {
+  margin-block-end: var(--space-3);
+}
+
+/* Etiquetas generadas por el helper compartido input() */
+.wf-form label {
+  display: block;
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+  margin-block-end: 0.3rem;
+}
+.wf-form :where(.checkbox, .switch) label {
+  display: inline;
+  margin: 0;
+  font-weight: var(--weight-normal);
+  font-size: var(--text-sm);
+  color: inherit;
+}
+
+/* Entrada de archivos (el helper input() no añade la clase .file) */
+.wf-form input[type="file"] {
+  padding: 0.5rem;
+  border-style: dashed;
+  cursor: pointer;
+}
+.wf-form input[type="file"]::file-selector-button {
+  font: inherit;
+  font-weight: var(--weight-semibold);
+  color: var(--ink-soft);
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.7rem;
+  margin-inline-end: 0.6rem;
+  cursor: pointer;
+}
+.wf-form input[type="file"]::file-selector-button:hover {
+  background: var(--brand-subtle);
+}
+
+/* Resumen de archivos seleccionados */
+.wf-files {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+  overflow-wrap: anywhere;
+}
+
+/* Barra de progreso de subida */
+.wf-upload-progress {
+  margin-top: var(--space-2);
+}
+
+/* ── Títulos de sección dentro de diálogos ── */
+.wf-section {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  color: var(--ink);
+  margin: var(--space-5) 0 var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+.wf-section:first-child {
+  margin-top: 0;
+}
+.wf-section .icon {
+  color: var(--brand);
+}
+
+/* ── Barra de acciones ── */
+.wf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: var(--space-4);
+}
+
+/* ── Tablas del área (compactas; el envoltorio lo pone table-wrap) ── */
+.wf-table :where(th, td) {
+  padding: 0.45rem 0.65rem;
+  font-size: var(--text-sm);
+}
+.wf-table td {
+  overflow-wrap: anywhere;
+}
+.wf-table .empty {
+  padding: var(--space-5) var(--space-4);
+}
+.wf-table--editor :where(input, select) {
+  min-width: 7.5rem;
+}
+
+/* Celdas con icono de estado */
+.wf-cell-nombre {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.wf-cell-nombre .icon {
+  color: var(--success);
+}
+
+/* Enlace con icono (p. ej. descargar acta) */
+.wf-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-block-end: var(--space-3);
+}
+.wf-link .icon {
+  flex-shrink: 0;
+}

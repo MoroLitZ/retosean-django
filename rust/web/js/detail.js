@@ -1,13 +1,29 @@
 "use strict";
+// ── Detalle de registro dentro del <dialog> (openRecord) ──
+// Presentación con el design system: esqueleto mientras carga, ficha
+// clave/valor, badges de estado, acciones y tablas responsivas.
 async function openRecord(id) {
-  const record = await api(`/api/records/${selected}/${id}`);
-  const parent = modal(
+  const parent = modal("Cargando…");
+  parent.setAttribute("aria-busy", "true");
+  parent.replaceChildren(ui.skeleton(6, { kind: "row" }));
+  let record;
+  try {
+    record = await api(`/api/records/${selected}/${id}`);
+  } catch (error) {
+    parent.removeAttribute("aria-busy");
+    $("detail-dialog").close();
+    throw error;
+  }
+  const heading =
     record.titulo ||
-      record.razon_social ||
-      record.nombre ||
-      (record.reto && `${capfirst(meta(selected)?.verbose_name || selected)}: ${record.reto}`) ||
-      `${capfirst(meta(selected)?.verbose_name || selected)} #${id}`,
-  );
+    record.razon_social ||
+    record.nombre ||
+    (record.reto && `${capfirst(meta(selected)?.verbose_name || selected)}: ${record.reto}`) ||
+    `${capfirst(meta(selected)?.verbose_name || selected)} #${id}`;
+  $("dialog-title").textContent = heading;
+  parent.removeAttribute("aria-busy");
+  parent.replaceChildren();
+
   const dl = document.createElement("dl");
   dl.className = "details";
   // Model field order, related names instead of raw foreign keys, codigo instead of its parts.
@@ -17,32 +33,33 @@ async function openRecord(id) {
     .filter((k) => k in record && !["id", "eliminado_en", "anio_consecutivo"].includes(k));
   for (const key of keys) {
     const value = record[key];
+    const f = field(selected, key);
     const dt = document.createElement("dt");
     dt.textContent =
       key === "codigo" && selected === "retos"
         ? "Consecutivo"
-        : capfirst(
-            field(selected, key)?.verbose_name ||
-              field(selected, key + "_id")?.verbose_name ||
-              key,
-          );
+        : capfirst(f?.verbose_name || field(selected, key + "_id")?.verbose_name || key);
     const dd = document.createElement("dd");
-    dd.textContent = field(selected, key)?.choices.length
-      ? choice(selected, key, value)
-      : display(value);
-    if (value && field(selected, key)?.type === "FileField") {
+    const chosen = f?.choices.length ? choice(selected, key, value) : display(value);
+    if (value && f?.type === "FileField") {
       const a = document.createElement("a");
-      a.className = "secondary";
-      a.textContent = "Descargar archivo";
+      a.className = "btn btn--secondary btn--sm";
       a.href = `/api/archivo/${selected}/${id}/${key}`;
-      dd.replaceChildren(a);
+      a.append(icon("download"), el("span", "", "Descargar archivo"));
+      dd.append(a);
+    } else if (value != null && value !== "" && key.includes("estado")) {
+      dd.append(el("span", "badge " + badgeClass(value) + " dot", chosen));
+    } else {
+      dd.textContent = chosen;
     }
     dl.append(dt, dd);
   }
   parent.append(dl);
+
   const actions = document.createElement("div");
-  actions.className = "actions";
+  actions.className = "detail-actions";
   parent.append(actions);
+
   if (selected === "retos") {
     if (
       user.rol === "EMPRESA" &&
@@ -106,7 +123,8 @@ async function openRecord(id) {
       action(actions, "Ver avance", () => progressPanel(id));
     if (user.rol === "EMPRESA" && record.empresa_id === user.id && record.estado === "borrador")
       action(actions, "Eliminar reto", async () => {
-        if (confirm("¿Eliminar este reto en borrador?")) await mutate(`/api/retos/${id}/eliminar`, {});
+        if (await ui.confirm("¿Eliminar este reto en borrador?", { title: "Eliminar reto", confirmText: "Eliminar" }))
+          await mutate(`/api/retos/${id}/eliminar`, {});
       });
     if (admin() || (user.rol === "EMPRESA" && record.empresa_id === user.id && ["borrador", "rechazado"].includes(record.estado)))
       action(actions, "Adjuntar archivos de soporte", () => filesForm(`/api/retos/${id}/archivos`, "Archivos de soporte"));
@@ -192,9 +210,9 @@ async function openRecord(id) {
     });
   if (selected === "certificados") {
     const a = document.createElement("a");
-    a.className = "primary";
-    a.textContent = "Descargar certificado PDF";
+    a.className = "btn btn--primary btn--sm";
     a.href = `/api/certificados/${id}/pdf`;
+    a.append(icon("award"), el("span", "", "Descargar certificado PDF"));
     actions.append(a);
   }
   if (selected === "integraciones_academicas") {
@@ -254,27 +272,42 @@ async function openRecord(id) {
   if (selected === "presupuestos") {
     const summary = await api(`/api/presupuestos/${id}/resumen`);
     const p = document.createElement("p");
+    p.className = "text-soft small";
     p.textContent = `Comprometido: ${cop(summary.comprometido)} · Ejecutado: ${cop(summary.ejecutado)} · Disponible: ${cop(summary.disponible)} · ${summary.porcentaje}% asignado${summary.alerta ? " · Umbral de alerta alcanzado" : ""}`;
     parent.prepend(p);
     // HU07: expenses with their state; admins execute commitments or remove them.
-    const list = el("div", "mb-2");
-    list.append(table(["Fecha", "Categoría", "Estado", "Descripción", "Monto"],
-      summary.gastos.map((g) => [fecha(g.creado_en), choiceLabel(g.categoria), choiceLabel(g.estado), g.descripcion, cop(g.monto)])));
+    const list = el("div", "mb-3");
+    list.append(
+      ui.table(
+        [
+          { label: "Fecha" },
+          { label: "Categoría" },
+          { label: "Estado" },
+          { label: "Descripción" },
+          { label: "Monto", align: "right" },
+        ],
+        summary.gastos.map((g) => [fecha(g.creado_en), choiceLabel(g.categoria), choiceLabel(g.estado), g.descripcion, cop(g.monto)]),
+        { empty: "Aún no se registran gastos.", caption: "Gastos del presupuesto" },
+      ),
+    );
     if (admin())
       for (const g of summary.gastos) {
-        const line = el("div", "actions small mb-1");
-        line.append(el("span", "me-2", `${choiceLabel(g.categoria)} ${cop(g.monto)}:`));
+        const line = el("div", "cluster cluster--sm small mb-2");
+        line.append(el("span", "me-1 fw-semibold", `${choiceLabel(g.categoria)} ${cop(g.monto)}:`));
         if (g.estado === "COMPROMETIDO")
           action(line, "Marcar ejecutado", () => mutate(`/api/gastos/${g.id}/ejecutar`, {}));
         action(line, "Eliminar", async () => {
-          if (confirm("¿Eliminar este gasto?")) await mutate(`/api/gastos/${g.id}/eliminar`, {});
+          if (await ui.confirm("¿Eliminar este gasto?", { title: "Eliminar gasto", confirmText: "Eliminar" }))
+            await mutate(`/api/gastos/${g.id}/eliminar`, {});
         });
         list.append(line);
       }
     parent.insertBefore(list, actions);
     for (const [format, text] of [["xlsx", "Exportar gastos (Excel)"], ["pdf", "Exportar gastos (PDF)"]]) {
-      const a = el("a", "secondary", text);
+      const a = document.createElement("a");
+      a.className = "btn btn--secondary btn--sm";
       a.href = `/api/retos/${summary.reto}/presupuesto/${format}`;
+      a.append(icon("download"), el("span", "", text));
       actions.append(a);
     }
     if (admin())
@@ -425,7 +458,7 @@ async function openRecord(id) {
         teamFields("Editar Equipo Académico", `/api/equipos-academicos/${id}`, team.nombre_equipo, team.opciones),
       );
       action(actions, "Eliminar equipo", async () => {
-        if (confirm(`¿Eliminar el equipo "${team.nombre_equipo}"? También se elimina su equipo operativo.`))
+        if (await ui.confirm(`¿Eliminar el equipo "${team.nombre_equipo}"? También se elimina su equipo operativo.`, { title: "Eliminar equipo", confirmText: "Eliminar" }))
           await mutate(`/api/equipos-academicos/${id}/eliminar`, {});
       });
     }
@@ -466,15 +499,22 @@ async function openRecord(id) {
     if (event.cierre && !record.resultados_publicados)
       info.append(el("p", "small text-muted mt-2 mb-1", `Los resultados se publican automáticamente el ${fecha(event.cierre, true)}.`));
     if (event.invitados.length)
-      info.append(table(["Invitado", "Tipo", "Organización", "Confirmado"],
-        event.invitados.map((g) => [g.nombre, label(TIPOS_INVITADO, g.tipo), g.organizacion, g.confirmado ? "Sí" : "Pendiente"])));
+      info.append(
+        ui.table(
+          ["Invitado", "Tipo", "Organización", "Confirmado"],
+          event.invitados.map((g) => [g.nombre, label(TIPOS_INVITADO, g.tipo), g.organizacion, g.confirmado ? "Sí" : "Pendiente"]),
+          { empty: "Sin invitados.", caption: "Invitados del evento" },
+        ),
+      );
     parent.insertBefore(info, actions);
     if (event.puede_gestionar && !["finalizado", "cancelado"].includes(record.estado))
       action(actions, "Logística e invitados", () => logisticsForm(id, event));
     if (event.puede_exportar)
       for (const [format, text] of [["pdf", "Informe final PDF"], ["xlsx", "Informe final Excel"]]) {
-        const a = el("a", "secondary", text);
+        const a = document.createElement("a");
+        a.className = "btn btn--secondary btn--sm";
         a.href = `/api/hackathons/${id}/informe/${format}`;
+        a.append(icon("download"), el("span", "", text));
         actions.append(a);
       }
     if (admin() || user.rol === "PROFESOR") {
@@ -565,13 +605,16 @@ async function openRecord(id) {
       action(actions, "Ver ranking", async () => {
         const data = await api(`/api/hackathons/${id}/ranking`);
         const content = modal("Ranking del hackathon");
+        if (!data.ranking.length) {
+          content.append(ui.empty("star", "Sin votos", "Todavía no se han registrado votos para este hackathon."));
+          return;
+        }
         const ol = document.createElement("ol");
         for (const row of data.ranking) {
           const li = document.createElement("li");
           li.textContent = `${row.equipo} · ${row.promedio} puntos · ${row.votos} ${row.votos === 1 ? "voto" : "votos"}`;
           ol.append(li);
         }
-        if (!data.ranking.length) ol.textContent = "Todavía no hay votos.";
         content.append(ol);
       });
   }
@@ -585,4 +628,3 @@ async function openRecord(id) {
           mutate(`/api/inscripciones/${id}/estado`, { estado }),
         );
 }
-// ── HU03: structured team and dated schedule (Django ParticipanteIntegracion) ──

@@ -1,26 +1,51 @@
 "use strict";
-$("login-form").onsubmit = async (e) => {
+// Marca o limpia el error inline de los campos del login estático (#login-form).
+function auth_loginError(input, message) {
+  const wrap = input.closest(".field");
+  let err = wrap.querySelector(".field__error");
+  if (!err) {
+    err = el("p", "field__error");
+    err.id = input.id + "-error";
+    input.setAttribute("aria-describedby", err.id);
+    wrap.append(err);
+  }
+  if (message) {
+    err.replaceChildren(icon("exclamation-circle-fill"), el("span", "", message));
+    input.setAttribute("aria-invalid", "true");
+  } else {
+    err.replaceChildren();
+    input.removeAttribute("aria-invalid");
+  }
+}
+$("login-form").onsubmit = (e) => {
   e.preventDefault();
   $("login-error").hidden = true;
-  const button = e.target.querySelector("button");
-  button.disabled = true;
-  try {
-    const response = await api(
-      "/api/login",
-      Object.fromEntries(new FormData(e.target)),
-    );
-    csrf = response.csrf;
-    $("password").value = "";
-    await start();
-  } catch (error) {
-    $("login-error").replaceChildren(
-      icon("exclamation-circle-fill"),
-      el("span", "", error.message),
-    );
-    $("login-error").hidden = false;
-  } finally {
-    button.disabled = false;
+  const submit = e.submitter || e.target.querySelector('button[type="submit"]');
+  let firstBad = null;
+  for (const name of ["username", "password"]) {
+    const input = e.target.elements[name];
+    const message = input.value.trim() ? "" : "Este campo es obligatorio.";
+    auth_loginError(input, message);
+    if (message && !firstBad) firstBad = input;
   }
+  if (firstBad) {
+    firstBad.focus();
+    return;
+  }
+  const data = Object.fromEntries(new FormData(e.target));
+  busy(submit, api("/api/login", data))
+    .then((response) => {
+      csrf = response.csrf;
+      $("password").value = "";
+      return start();
+    })
+    .catch((error) => {
+      $("login-error").replaceChildren(
+        icon("exclamation-circle-fill"),
+        el("span", "", error.message),
+      );
+      $("login-error").hidden = false;
+    });
 };
 async function logout() {
   try {
@@ -89,12 +114,12 @@ async function unitForm(record = null) {
   const form = el("form", "form-grid");
   input(form, "codigo", "Código", record?.codigo || "", "text", true);
   input(form, "nombre", "Nombre de la unidad", record?.nombre || "", "text", true);
-  choiceSelect(form, "programa", "Programa académico", [["", "Selecciona"], ...programs.records.map((p) => [String(p.id), p.nombre])], record ? String(record.programa_id) : "");
+  choiceSelect(form, "programa", "Programa académico", [["", "Seleccione"], ...programs.records.map((p) => [String(p.id), p.nombre])], record ? String(record.programa_id) : "");
   input(form, "periodo", "Periodo (ej: 2026-2)", record?.periodo || "");
   input(form, "ciclo", "Ciclo / Semestre", record?.ciclo || "");
   const file = input(form, "archivo", record?.archivo ? "Reemplazar archivo (PDF)" : "Archivo (PDF con info completa)", "", "file");
   file.accept = ".pdf";
-  form.append(el("button", "primary full", "Guardar"));
+  form.append(el("button", "btn btn--primary full", "Guardar"));
   form.onsubmit = (e) => sendUnit(e, form, record ? `/api/unidades/${record.id}` : "/api/unidades");
   parent.append(form);
   if (!record) {
@@ -107,17 +132,25 @@ async function unitForm(record = null) {
     accion.value = "cargar_csv";
     bulk.append(accion);
     input(bulk, "archivo_csv", "Archivo CSV", "", "file", true).accept = ".csv";
-    bulk.append(el("button", "secondary full", "Cargar CSV"));
+    bulk.append(el("button", "btn btn--secondary full", "Cargar CSV"));
     bulk.onsubmit = (e) => sendUnit(e, bulk, "/api/unidades");
     parent.append(bulk);
   }
 }
 async function sendUnit(e, form, url) {
   e.preventDefault();
-  const button = form.querySelector("button");
-  button.disabled = true;
+  const button = e.submitter || form.querySelector('button[type="submit"]');
+  const fileInput = form.querySelector('input[type="file"]');
+  if (fileInput && !fileInput.files[0]) {
+    toast("Elige un archivo para continuar.");
+    if (typeof fileInput.focus === "function") fileInput.focus();
+    return;
+  }
   try {
-    const response = await fetch(url, { method: "POST", headers: { "X-CSRF-Token": csrf }, body: new FormData(form) });
+    const response = await busy(
+      button,
+      fetch(url, { method: "POST", headers: { "X-CSRF-Token": csrf }, body: new FormData(form) }),
+    );
     const data = await readJson(response);
     if (!response.ok) throw new Error(data.error || "No se pudo guardar");
     $("detail-dialog").close();
@@ -125,8 +158,6 @@ async function sendUnit(e, form, url) {
     await loadRecords();
   } catch (error) {
     toast(error.message);
-  } finally {
-    button.disabled = false;
   }
 }
 function teamFields(heading, url, name, options) {
@@ -182,7 +213,7 @@ async function profileForm() {
     facultad: data.facultad ? Number(data.facultad) : null,
   }));
   const extra = el("p", "mt-3 mb-0");
-  const change = el("button", "secondary", "Cambiar contraseña");
+  const change = el("button", "btn btn--secondary", "Cambiar contraseña");
   change.type = "button";
   change.onclick = () => {
     simpleForm(
@@ -207,9 +238,12 @@ function choiceLabel(value) {
 }
 $("toggle-password").onclick = () => {
   const input = $("password");
-  input.type = input.type === "password" ? "text" : "password";
-  $("toggle-password").firstElementChild.className =
-    "bi " + (input.type === "password" ? "bi-eye" : "bi-eye-slash");
+  const show = input.type === "password";
+  input.type = show ? "text" : "password";
+  const btn = $("toggle-password");
+  btn.replaceChildren(icon(show ? "eye-slash" : "eye"));
+  btn.setAttribute("aria-label", show ? "Ocultar la contraseña" : "Mostrar la contraseña");
+  btn.setAttribute("aria-pressed", String(show));
 };
 $("import-users").onclick = importForm;
 $("bell").onclick = () => {

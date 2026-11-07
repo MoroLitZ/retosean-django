@@ -1,1 +1,185 @@
-/* dashboard.css */
+/* ═══════════════════════════════════════════════════════════════════════════
+   dashboard.css — estilos exclusivos del área Dashboard de Indicadores.
+   Consume tokens (tokens.css) y las clases del design system
+   (.surface, .kpi, .kpi__*, .card-panel, .chart-box, .empty, .skeleton…).
+   Sin Bootstrap. Preferimos var(--…) sobre colores literales; los dos tonos
+   decorativos sin token (violeta/rosa) quedan acotados como --kpi-*.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --kpi-violet: #7c3aed; /* decorativo: "Finalizados" */
+  --kpi-pink: #db2777; /* decorativo: "Docentes"/"Entregables" */
+}
+
+/* ── Encabezados de sección (jerarquía visual) ── */
+.dash-section-title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Barra de filtros (formulario de periodo) ─────────────────────────────
+   `.form-grid` solo se definía en legacy.css (que se eliminará). Se recrea
+   aquí acotada a #dashboard-panel para no chocar con un `.form-grid` global
+   que pueda aportar otra área. Ver SHARED_SUGGESTIONS. */
+#dashboard-panel .form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 var(--space-4);
+}
+#dashboard-panel .form-grid .field--full {
+  grid-column: 1 / -1;
+}
+@media (max-width: 768px) {
+  #dashboard-panel .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Cuadrícula de KPIs: 2 columnas en móvil, 4 en escritorio ── */
+.dash-kpis {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (min-width: 992px) {
+  .dash-kpis {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Tarjeta KPI: superficie + relleno (usa .surface y .kpi del sistema). */
+.dash-kpi {
+  height: 100%;
+  padding: var(--space-4);
+}
+.dash-kpi-text {
+  min-width: 0;
+}
+
+/* Movimiento sutil solo si el usuario no pidió movimiento reducido. */
+@media (prefers-reduced-motion: no-preference) {
+  .dash-kpi {
+    transition:
+      box-shadow var(--duration-base) var(--ease-out),
+      transform var(--duration-fast) var(--ease-out);
+  }
+  .dash-kpi:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+  }
+}
+
+/* ── Tonos del icono KPI (color de acento + fondo tenue) ── */
+.kpi__icon--brand {
+  color: var(--brand);
+  background: var(--brand-subtle);
+}
+.kpi__icon--success {
+  color: var(--success);
+  background: var(--success-bg);
+}
+.kpi__icon--warning {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+.kpi__icon--danger {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+.kpi__icon--info {
+  color: var(--info);
+  background: var(--info-bg);
+}
+.kpi__icon--accent {
+  color: var(--accent);
+  background: var(--info-bg);
+}
+.kpi__icon--violet {
+  color: var(--kpi-violet);
+  background: rgba(124, 58, 237, 0.14);
+}
+.kpi__icon--pink {
+  color: var(--kpi-pink);
+  background: rgba(219, 39, 119, 0.14);
+}
+
+/* ── Cuadrícula de gráficas: 12 columnas, med=5 / wide=7 en escritorio ── */
+.dash-graficas {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+.dash-chart {
+  grid-column: span 12;
+  display: flex;
+  flex-direction: column;
+}
+@media (min-width: 992px) {
+  .dash-chart--med {
+    grid-column: span 5;
+  }
+  .dash-chart--wide {
+    grid-column: span 7;
+  }
+}
+.dash-chart .chart-box {
+  flex: 1 1 auto;
+}
+.dash-chart-box {
+  padding: var(--space-4);
+}
+.dash-chart-title {
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  color: var(--ink);
+}
+.dash-chart-toggle {
+  margin-inline-start: auto;
+}
+.dash-chart-data {
+  padding: 0 var(--space-4) var(--space-4);
+  border-top: 1px solid var(--border);
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+}
+
+/* Estado «sin datos» centrado dentro del alto fijo del chart-box. */
+.dash-chart-box .empty {
+  height: 100%;
+  justify-content: center;
+}
+
+/* ── Esqueletos de carga ── */
+.dash-skeleton-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-md);
+}
+.dash-skeleton-lines {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-2);
+}
+.dash-skeleton-lines .skeleton {
+  display: block;
+  width: 100%;
+}
+.dash-skeleton-lines .skeleton--title {
+  width: 55%;
+}
+.dash-skeleton-tile .kpi__icon .skeleton {
+  width: 100%;
+  height: 100%;
+}
+.dash-chart-skeleton-block {
+  height: 100%;
+  width: 100%;
+  border-radius: var(--radius-md);
+}

@@ -1,1 +1,40 @@
-/* records.css */
+/* records.css — listado genérico de registros (búsqueda, tabla, paginación).
+   Recrea, con tokens del design system, el estilo que antes vivía en legacy.css
+   y añade lo específico de la vista de listados. */
+
+/* Truncado accesible de las celdas de datos: el texto completo sigue disponible
+   en el atributo `title` y en el DOM para lectores de pantalla. */
+#table-body td {
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* La celda de acciones no debe recortar el anillo de foco del botón. */
+#table-body td:last-child {
+  max-width: none;
+  overflow: visible;
+}
+
+/* Filas fantasma de la tabla mientras la consulta está en vuelo. */
+.records-skeleton-row td {
+  padding-block: var(--space-2);
+}
+.records-skeleton-row .skeleton--row {
+  margin-bottom: 0;
+}
+
+/* Ancho del buscador dentro del panel de la lista. */
+.search-input {
+  max-width: 20rem;
+}
+
+/* Herramientas extra del listado (acciones, filtros de área, enlaces). */
+#extra-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}

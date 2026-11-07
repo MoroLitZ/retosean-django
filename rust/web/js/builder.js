@@ -1,4 +1,5 @@
 "use strict";
+// ── HU06: report builder (Django reportes/constructor.html) ──
 const PERIODOS_REPORTE = [["30d", "Últimos 30 días"], ["90d", "Últimos 90 días"], ["anio", "Último año"], ["todo", "Histórico completo"], ["custom", "Rango personalizado"]];
 const FILTROS_REPORTE = {
   facultad: ["Facultad", "Todas"],
@@ -10,53 +11,170 @@ const FILTROS_REPORTE = {
 };
 let builderData = null;
 async function loadBuilder() {
-  builderData = builderData || (await api("/api/reportes/catalogo"));
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const pares = (list) => list.map(([value, label]) => ({ value, label }));
+
   const panel = $("builder-panel");
+  panel.className = "stack";
+  panel.setAttribute("aria-busy", "true");
+  const loading = el("section", "surface");
+  const loadingBody = el("div", "surface__body");
+  loadingBody.append(ui.skeleton(1, { kind: "title" }), ui.skeleton(6, { kind: "row" }));
+  loading.append(loadingBody);
+  panel.replaceChildren(loading);
+  try {
+    builderData = builderData || (await api("/api/reportes/catalogo"));
+  } catch (error) {
+    panel.replaceChildren();
+    throw error;
+  } finally {
+    panel.setAttribute("aria-busy", "false");
+  }
   panel.replaceChildren();
-  const card = el("div", "card-panel");
-  const header = el("div", "card-panel-header");
-  header.append(el("span", "", "Constructor de reportes"));
+
+  const head = el("div", "builder-head");
+  const titles = el("div", "stack stack--sm");
+  titles.append(
+    el("h2", "builder-title", "Constructor de reportes"),
+    el("p", "builder-subtitle", "Elige el reporte, ajusta el periodo, los filtros y las variables, revisa la vista previa y descárgalo o envíalo por correo."),
+  );
+  head.append(titles);
   if (resources.some((r) => r.table === "reportes_generados")) {
-    const history = el("a", "btn btn-sm btn-outline-secondary");
+    const history = el("a", "btn btn--secondary btn--sm");
     history.href = "#reportes_generados";
-    history.append(icon("clock-history"), " Historial");
-    header.append(history);
+    history.append(icon("clock-history"), el("span", "", "Historial"));
+    head.append(history);
   }
-  const body = el("div", "p-4");
+
   const form = el("form");
-  const row = el("div", "row g-3 mb-3");
-  const field = (parent, name, label, options, col = "col-md-4") => {
-    const wrap = el("div", col);
-    const l = el("label", "form-label small fw-semibold text-secondary", label);
-    l.htmlFor = "rep-" + name;
-    const select = el("select", "form-select form-select-sm");
-    select.id = "rep-" + name;
-    select.name = name;
-    options.forEach(([v, t]) => select.append(new Option(t, v)));
-    wrap.append(l, select);
-    parent.append(wrap);
-    return select;
-  };
-  const reporte = field(row, "reporte", "Reporte", builderData.reportes.map((r) => [r.clave, r.nombre]), "col-md-6");
-  field(row, "formato", "Formato", [["PDF", "PDF"], ["EXCEL", "Excel"]], "col-md-3");
-  const periodo = field(row, "periodo", "Periodo", PERIODOS_REPORTE, "col-md-3");
-  periodo.value = "90d";
-  const range = el("div", "row g-3 mb-3");
-  for (const [name, label] of [["desde", "Desde"], ["hasta", "Hasta"]]) {
-    const wrap = el("div", "col-md-3");
-    const l = el("label", "form-label small fw-semibold text-secondary", label);
-    l.htmlFor = "rep-" + name;
-    const f = el("input", "form-control form-control-sm");
-    f.type = "date";
-    f.id = "rep-" + name;
-    f.name = name;
-    wrap.append(l, f);
-    range.append(wrap);
-  }
-  periodo.onchange = () => (range.hidden = periodo.value !== "custom");
+  form.noValidate = true;
+
+  const reporteField = ui.field({
+    name: "reporte",
+    label: "Reporte",
+    type: "select",
+    options: pares(builderData.reportes.map((r) => [r.clave, r.nombre])),
+  });
+  const reporte = reporteField.querySelector("select");
+  const periodoField = ui.field({
+    name: "periodo",
+    label: "Periodo",
+    type: "select",
+    options: pares(PERIODOS_REPORTE),
+    value: "90d",
+  });
+  const periodo = periodoField.querySelector("select");
+  const basics = el("div", "builder-grid");
+  basics.append(
+    reporteField,
+    ui.field({ name: "formato", label: "Formato", type: "select", options: pares([["PDF", "PDF"], ["EXCEL", "Excel"]]) }),
+    periodoField,
+  );
+
+  const desdeField = ui.field({ name: "desde", label: "Desde", type: "date" });
+  const hastaField = ui.field({ name: "hasta", label: "Hasta", type: "date" });
+  const desde = desdeField.querySelector("input");
+  const hasta = hastaField.querySelector("input");
+  const range = el("div", "builder-grid");
+  range.append(desdeField, hastaField);
   range.hidden = true;
-  const filters = el("div", "row g-3 mb-3");
-  const columns = el("div", "row g-2 mb-4 p-3 bg-light rounded");
+
+  const destinatariosField = ui.field({
+    name: "destinatarios",
+    label: "Enviar a (correos separados por coma)",
+    type: "text",
+    placeholder: "Por defecto, tu correo",
+  });
+  const destinatarios = destinatariosField.querySelector("input");
+
+  let attempted = false;
+  const setFieldError = (control, message) => {
+    const wrap = control.closest(".field");
+    const err = wrap && wrap.querySelector(".field__error");
+    if (err) {
+      err.replaceChildren();
+      if (message) err.append(icon("exclamation-circle-fill"), el("span", "", message));
+    }
+    if (message) control.setAttribute("aria-invalid", "true");
+    else control.removeAttribute("aria-invalid");
+  };
+  const markRequired = (wrap, on) => {
+    const control = wrap.querySelector(".input");
+    if (control) control.required = on;
+    const label = wrap.querySelector(".field__label");
+    if (!label) return;
+    const marker = label.querySelector(".req");
+    if (on && !marker) label.append(el("span", "req", " *"));
+    if (!on && marker) marker.remove();
+  };
+  const validate = (focusFirst = true) => {
+    let invalid = null;
+    const fail = (control, message) => {
+      setFieldError(control, message);
+      if (!invalid) invalid = control;
+    };
+    if (periodo.value === "custom") {
+      if (!desde.value) fail(desde, "Indica la fecha de inicio.");
+      else setFieldError(desde, "");
+      if (!hasta.value) fail(hasta, "Indica la fecha final.");
+      else if (desde.value && desde.value > hasta.value) fail(hasta, "La fecha final no puede ser anterior a la inicial.");
+      else setFieldError(hasta, "");
+    } else {
+      setFieldError(desde, "");
+      setFieldError(hasta, "");
+    }
+    const raw = destinatarios.value.trim();
+    if (raw) {
+      const parts = raw.split(",").map((s) => s.trim()).filter(Boolean);
+      const bad = parts.find((p) => !EMAIL_RE.test(p));
+      if (!parts.length) fail(destinatarios, "Indica al menos un correo.");
+      else if (bad) fail(destinatarios, `«${bad}» no es un correo válido.`);
+      else setFieldError(destinatarios, "");
+    } else {
+      setFieldError(destinatarios, "");
+    }
+    if (invalid && focusFirst) invalid.focus();
+    return !invalid;
+  };
+  const revalidate = () => {
+    if (attempted) validate(false);
+  };
+  const syncRange = () => {
+    const custom = periodo.value === "custom";
+    range.hidden = !custom;
+    markRequired(desdeField, custom);
+    markRequired(hastaField, custom);
+    if (!custom) {
+      setFieldError(desde, "");
+      setFieldError(hasta, "");
+    }
+  };
+  periodo.onchange = () => {
+    syncRange();
+    revalidate();
+  };
+  syncRange();
+  desde.addEventListener("input", revalidate);
+  hasta.addEventListener("input", revalidate);
+  destinatarios.addEventListener("input", revalidate);
+
+  const filtersTitle = el("h3", "builder-section");
+  filtersTitle.id = "builder-filtros-title";
+  filtersTitle.append(icon("funnel"), el("span", "", "Filtros"));
+  const filters = el("div", "builder-grid");
+  filters.setAttribute("role", "group");
+  filters.setAttribute("aria-labelledby", filtersTitle.id);
+
+  const columnsTitle = el("h3", "builder-section");
+  columnsTitle.id = "builder-columnas-title";
+  columnsTitle.append(icon("list"), el("span", "", "Variables a incluir"));
+  const columnsHint = el("p", "builder-hint mb-2", "Si no eliges ninguna se incluyen todas.");
+  columnsHint.id = "builder-columnas-hint";
+  const columns = el("div", "builder-cols");
+  columns.setAttribute("role", "group");
+  columns.setAttribute("aria-labelledby", columnsTitle.id);
+  columns.setAttribute("aria-describedby", columnsHint.id);
+
   const choice = (table, name) =>
     (meta(table)?.fields.find((f) => f.name === name)?.choices || []).filter(([v]) => v !== "");
   const filterOptions = {
@@ -70,19 +188,28 @@ async function loadBuilder() {
   const draw = () => {
     const def = builderData.reportes.find((r) => r.clave === reporte.value);
     filters.replaceChildren();
+    if (!def.filtros.length)
+      filters.append(el("p", "builder-hint", "Este reporte no admite filtros adicionales."));
     for (const name of def.filtros) {
       const [label, empty] = FILTROS_REPORTE[name];
-      field(filters, name, label, [["", empty], ...filterOptions[name]]);
+      filters.append(ui.field({
+        name,
+        label,
+        type: "select",
+        options: [{ value: "", label: empty }, ...pares(filterOptions[name])],
+      }));
     }
     columns.replaceChildren();
+    if (!def.columnas.length)
+      columns.append(el("p", "builder-hint", "Este reporte incluye siempre las mismas variables."));
     for (const [key, label] of def.columnas) {
-      const wrap = el("div", "col-md-4 col-sm-6 form-check");
-      const box = el("input", "form-check-input");
+      const wrap = el("div", "checkbox");
+      const box = el("input", "checkbox__input");
       box.type = "checkbox";
-      box.id = "col-" + key;
+      box.id = "builder-var-" + key;
       box.value = key;
       box.name = "columnas";
-      const l = el("label", "form-check-label small", label);
+      const l = el("label", "checkbox__label", label);
       l.htmlFor = box.id;
       wrap.append(box, l);
       columns.append(wrap);
@@ -90,15 +217,22 @@ async function loadBuilder() {
   };
   reporte.onchange = draw;
   draw();
-  const destinatarios = el("input", "form-control form-control-sm");
-  destinatarios.name = "destinatarios";
-  destinatarios.placeholder = "Por defecto, tu correo";
-  destinatarios.id = "rep-destinatarios";
-  const dWrap = el("div", "mb-3");
-  const dLabel = el("label", "form-label small fw-semibold text-secondary", "Enviar a (correos separados por coma)");
-  dLabel.htmlFor = destinatarios.id;
-  dWrap.append(dLabel, destinatarios);
-  const preview = el("div", "mt-3");
+
+  const preview = el("div");
+  preview.id = "builder-preview";
+  preview.setAttribute("role", "region");
+  preview.setAttribute("aria-label", "Vista previa del reporte");
+  const previewStatus = el("p", "visually-hidden");
+  previewStatus.setAttribute("role", "status");
+  const previewContent = el("div");
+  preview.append(previewStatus, previewContent);
+  const previewEmpty = () => {
+    const box = el("section", "surface");
+    box.append(ui.empty("eye", "Sin vista previa todavía", "Configura el reporte y pulsa «Vista previa» para revisar los datos antes de generarlo."));
+    return box;
+  };
+  previewContent.append(previewEmpty());
+
   const payload = () => {
     const data = Object.fromEntries(new FormData(form));
     data.columnas = [...form.querySelectorAll("input[name=columnas]:checked")].map((b) => b.value);
@@ -106,36 +240,48 @@ async function loadBuilder() {
     for (const k of ["desde", "hasta"]) data[k] = data[k] || null;
     return data;
   };
-  const buttons = el("div", "d-flex flex-wrap gap-2");
-  const add = (label, iconName, cls, handler) => {
-    const b = el("button", "btn fw-bold " + cls);
-    b.type = "button";
-    b.append(icon(iconName), " " + label);
-    b.onclick = async () => {
-      b.disabled = true;
-      try {
-        await handler();
-      } catch (e) {
-        toast(e.message);
-      } finally {
-        b.disabled = false;
-      }
-    };
-    buttons.append(b);
+
+  const actions = el("div", "cluster builder-actions");
+  const add = (label, iconName, variant, handler) => {
+    const b = ui.button(label, { variant, icon: iconName });
+    b.addEventListener("click", () => {
+      attempted = true;
+      if (!validate()) return;
+      busy(b, Promise.resolve().then(handler).catch((e) => toast(e.message, "error")));
+    });
+    actions.append(b);
+    return b;
   };
-  add("Vista previa", "eye", "btn-outline-secondary", async () => {
-    const data = await api("/api/reportes/vista-previa", payload());
-    const box = el("div", "card-panel");
-    const head = el("div", "card-panel-header");
-    head.append(el("span", "", `Vista previa · ${data.nombre}`), el("span", "small text-muted fw-normal", `${data.mostradas} de ${data.total} registro${data.total === 1 ? "" : "s"}`));
-    const inner = el("div", "p-3");
-    inner.append(el("p", "text-muted small mb-2", data.filtros), table(data.encabezados, data.filas));
+  const previewButton = add("Vista previa", "eye", "secondary", async () => {
+    previewStatus.textContent = "";
+    const loadingBox = el("section", "surface");
+    const loadingInner = el("div", "surface__body");
+    loadingInner.append(ui.skeleton(1, { kind: "title" }), ui.skeleton(4, { kind: "row" }));
+    loadingBox.append(loadingInner);
+    previewContent.replaceChildren(loadingBox);
+    let data;
+    try {
+      data = await api("/api/reportes/vista-previa", payload());
+    } catch (error) {
+      previewContent.replaceChildren(previewEmpty());
+      throw error;
+    }
+    const box = el("section", "surface");
+    const boxHead = el("header", "surface__header");
+    boxHead.append(
+      el("span", "", `Vista previa · ${data.nombre}`),
+      ui.badge("neutral", { dot: false, label: `${data.mostradas} de ${data.total} registro${data.total === 1 ? "" : "s"}` }),
+    );
+    const inner = el("div", "surface__body");
+    inner.append(el("p", "text-muted small mb-2", data.filtros));
+    inner.append(ui.table(data.encabezados, data.filas, { empty: "Sin registros.", caption: "Primeras filas del reporte generado." }));
     if (data.total > data.mostradas)
       inner.append(el("p", "text-muted small mt-2 mb-0", `Se muestran las primeras ${data.mostradas} filas; el archivo incluye todas.`));
-    box.append(head, inner);
-    preview.replaceChildren(box);
+    box.append(boxHead, inner);
+    previewContent.replaceChildren(box);
+    previewStatus.textContent = `Vista previa lista: ${data.mostradas} de ${data.total} registro${data.total === 1 ? "" : "s"}.`;
   });
-  add("Generar y descargar", "download", "btn-primary", async () => {
+  add("Generar y descargar", "download", "primary", async () => {
     const response = await fetch("/api/reportes/generar", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
@@ -150,15 +296,20 @@ async function loadBuilder() {
     a.click();
     URL.revokeObjectURL(url);
   });
-  add("Generar y enviar por correo", "envelope", "btn-outline-primary", async () => {
+  add("Generar y enviar por correo", "envelope", "accent", async () => {
     const data = await api("/api/reportes/enviar", payload());
-    toast(`Reporte enviado a ${data.destinatarios.join(", ")}.`);
+    toast(`Reporte enviado a ${data.destinatarios.join(", ")}.`, "success");
   });
-  form.append(row, range, el("h6", "fw-bold text-dark mt-4 mb-2", "Filtros"), filters,
-    el("h6", "fw-bold text-dark mt-4 mb-1", "Variables a incluir"),
-    el("p", "text-muted small mb-2", "Si no eliges ninguna se incluyen todas."), columns, dWrap, buttons);
-  body.append(form);
-  card.append(header, body);
-  panel.append(card, preview);
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    previewButton.click();
+  });
+  form.append(basics, range, filtersTitle, filters, columnsTitle, columnsHint, columns, destinatariosField, actions);
+
+  const card = el("section", "surface");
+  const cardBody = el("div", "surface__body");
+  cardBody.append(form);
+  card.append(cardBody);
+  panel.append(head, card, preview);
 }
-// ── HU13: bulk user import (Django usuarios/admin/importar_usuarios.html) ──

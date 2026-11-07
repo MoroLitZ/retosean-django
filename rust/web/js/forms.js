@@ -1,279 +1,647 @@
 "use strict";
+/* RetosEAN — create/edit forms: field rendering, validation, file uploads and
+   submit flows. Consumes the design-system helpers (ui.*, icon, toast, api,
+   modal, mutate, busy) from ui.js / core.js. */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Local helpers (forms area). Prefixed with `forms_` to avoid clashing with
+   other shared-scope globals.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+// Normalise an <option> spec to {value,label,selected}. Accepted forms:
+// a bare string (label via choiceLabel), a {value,label,selected?} object, or
+// a [value,label] tuple.
+function forms_option(v) {
+  if (Array.isArray(v)) return { value: v[0], label: v[1], selected: false };
+  if (typeof v === "object") {
+    return {
+      value: v.value,
+      label: v.label,
+      selected: !!v.selected,
+      disabled: !!v.disabled,
+    };
+  }
+  return { value: v, label: choiceLabel(v), selected: false };
+}
+
+// A labelled <select> built on the design-system classes, with inline error
+// and optional multiple selection.
+function forms_selectField(name, label, options, opts = {}) {
+  const { required = false, multiple = false, hint = "", value, onInput } = opts;
+  const wrap = el("div", "field");
+  const id = "field-" + name;
+  const l = el("label", "field__label", label);
+  l.htmlFor = id;
+  if (required) l.append(el("span", "req", " *"));
+  const select = el("select", "select");
+  select.id = id;
+  select.name = name;
+  select.required = required;
+  select.multiple = multiple;
+  for (const v of options) {
+    const o = forms_option(v);
+    const option = document.createElement("option");
+    option.value = o.value;
+    option.textContent = o.label;
+    option.selected =
+      o.selected || (value !== undefined && String(o.value) === String(value));
+    if (o.disabled) option.disabled = true;
+    select.append(option);
+  }
+  const err = el("p", "field__error");
+  err.id = id + "-error";
+  select.setAttribute("aria-describedby", err.id);
+  wrap.append(l, select);
+  if (hint) wrap.append(el("p", "field__hint", hint));
+  wrap.append(err);
+  if (onInput) select.addEventListener("input", onInput);
+  return wrap;
+}
+
+// A checkbox using the .checkbox design-system classes. Optional description
+// renders stacked under the label.
+function forms_checkbox(name, label, opts = {}) {
+  const { checked = false, required = false, description = "", value, id } = opts;
+  const wrap = el("div", "checkbox field--full");
+  const boxId = id || (name ? "field-" + name : "");
+  const box = el("input", "checkbox__input");
+  box.type = "checkbox";
+  if (boxId) box.id = boxId;
+  if (name) box.name = name;
+  if (value !== undefined) box.value = value;
+  box.checked = !!checked;
+  box.required = !!required;
+  const lab = el("label", "checkbox__label", label);
+  if (boxId) lab.htmlFor = boxId;
+  if (required) lab.append(el("span", "req", " *"));
+  wrap.append(box);
+  if (description) {
+    const text = el("div", "min-w-0");
+    text.append(lab, el("div", "small text-muted", description));
+    wrap.append(text);
+  } else {
+    wrap.append(lab);
+  }
+  return wrap;
+}
+
+function forms_formatSize(bytes) {
+  if (!Number.isFinite(bytes)) return "";
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + " KB";
+  return (bytes / 1024 / 1024).toFixed(1) + " MB";
+}
+
+// Validate a file input's extension (from its accept list) and size. Returns an
+// error message or "" when valid.
+function forms_validateFile(input, maxMb) {
+  const f = input.files && input.files[0];
+  if (!f) return input.required ? "Selecciona un archivo." : "";
+  const exts = (input.accept || "")
+    .split(",")
+    .map((s) => s.trim().replace(/^\./, ""))
+    .filter(Boolean);
+  if (exts.length) {
+    const ext = String(f.name.split(".").pop() || "").toLowerCase();
+    if (!exts.some((e) => e.toLowerCase() === ext))
+      return "Formato no admitido. Usa: " + input.accept.replace(/,/g, ", ");
+  }
+  if (maxMb && f.size > maxMb * 1024 * 1024)
+    return `El archivo supera el límite de ${maxMb} MB.`;
+  return "";
+}
+
+// A file field with dropzone styling, selected-file meta and an indeterminate
+// upload progress bar.
+function forms_fileField(name, label, opts = {}) {
+  const { accept = "", required = false, hint = "" } = opts;
+  const wrap = el("div", "field field--full");
+  const id = "field-" + name;
+  const l = el("label", "field__label", label);
+  l.htmlFor = id;
+  if (required) l.append(el("span", "req", " *"));
+  const fileBox = el("div", "file");
+  const input = el("input", "input");
+  input.type = "file";
+  input.id = id;
+  input.name = name;
+  if (accept) input.accept = accept;
+  input.required = !!required;
+  fileBox.append(input);
+  const err = el("p", "field__error");
+  err.id = id + "-error";
+  input.setAttribute("aria-describedby", err.id);
+  const meta = el("p", "small text-muted mt-1");
+  meta.hidden = true;
+  const progress = el("div", "progress forms-progress mt-2");
+  progress.hidden = true;
+  progress.setAttribute("role", "progressbar");
+  progress.setAttribute("aria-label", "Subiendo archivo");
+  progress.append(el("div", "progress__bar"));
+  input.addEventListener("change", () => {
+    const f = input.files && input.files[0];
+    if (!f) {
+      meta.hidden = true;
+      meta.textContent = "";
+    } else {
+      meta.hidden = false;
+      meta.textContent = `${f.name} · ${forms_formatSize(f.size)}`;
+    }
+    forms_setError(wrap, "");
+  });
+  wrap.append(l, fileBox, meta, progress);
+  if (hint) wrap.append(el("p", "field__hint", hint));
+  wrap.append(err);
+  return wrap;
+}
+
+// Set or clear the inline validation error for a built field.
+function forms_setError(field, message) {
+  const control = field.querySelector(
+    ".input, .select, .textarea, .checkbox__input",
+  );
+  const err = field.querySelector(".field__error");
+  if (!err) return;
+  err.replaceChildren();
+  if (message) {
+    err.append(el("span", "", message));
+    if (control) control.setAttribute("aria-invalid", "true");
+  } else if (control) {
+    control.removeAttribute("aria-invalid");
+  }
+}
+
+// Toggle the indeterminate upload progress bar inside a file field.
+function forms_setProgress(field, busy) {
+  const p = field.querySelector(".forms-progress");
+  if (!p) return;
+  p.hidden = !busy;
+  p.classList.toggle("progress--busy", !!busy);
+}
+
+// A row of action buttons at the foot of a form (spans both grid columns).
+function forms_actions(...nodes) {
+  const a = el("div", "forms-actions");
+  for (const n of nodes) a.append(n);
+  return a;
+}
+
+// An inline status message (alert) with a matching icon and role.
+function forms_alert(text, variant = "danger") {
+  const a = el("div", "alert alert--" + variant);
+  a.setAttribute(
+    "role",
+    variant === "danger" || variant === "warning" ? "alert" : "status",
+  );
+  const icons = {
+    danger: "exclamation-circle-fill",
+    warning: "exclamation-triangle-fill",
+    info: "info-circle-fill",
+    success: "check-circle-fill",
+  };
+  a.append(icon(icons[variant] || "info-circle-fill"), el("span", "", text));
+  return a;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Forms
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 function importForm() {
   const parent = modal("Importación Masiva de Usuarios");
   parent.append(
-    el("p", "small text-muted mb-1", "Columnas: username, email, first_name, last_name, rol, telefono, password. Obligatorias: username, email, rol."),
-    el("p", "small text-muted", "Sin contraseña, la cuenta recibe por correo un enlace para definirla."),
+    el(
+      "p",
+      "small text-muted mb-1",
+      "Columnas: username, email, first_name, last_name, rol, telefono, password. Obligatorias: username, email, rol.",
+    ),
+    el(
+      "p",
+      "small text-muted mb-3",
+      "Sin contraseña, la cuenta recibe por correo un enlace para definirla.",
+    ),
   );
-  const template = el("a", "secondary mb-3 d-inline-block", "Descargar plantilla CSV");
+  const template = el("a", "btn btn--secondary mb-3");
+  template.append(icon("download"), el("span", "", "Descargar plantilla CSV"));
   template.href = "/api/usuarios/plantilla";
+
   const form = el("form");
-  const file = input(form, "archivo", "Archivo .csv o .xlsx (máximo 1000 filas)", "", "file", true);
-  file.accept = ".csv,.xlsx,.xlsm";
-  const result = el("div", "mt-3");
+  const fileField = forms_fileField(
+    "archivo",
+    "Archivo .csv o .xlsx (máximo 1000 filas)",
+    { accept: ".csv,.xlsx,.xlsm", required: true, hint: "Máximo 1000 filas por archivo." },
+  );
+  form.append(fileField);
+  const file = fileField.querySelector("input");
+
+  const result = el("div", "field--full mt-3");
+
   const send = async (accion) => {
     const data = new FormData();
     data.append("accion", accion);
     data.append("archivo", file.files[0]);
-    const response = await fetch("/api/usuarios/importar", { method: "POST", headers: { "X-CSRF-Token": csrf }, body: data });
+    const response = await fetch("/api/usuarios/importar", {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrf },
+      body: data,
+    });
     const body = await readJson(response);
     if (!response.ok) throw new Error(body.error || "No se pudo leer el archivo");
     return body;
   };
-  const preview = el("button", "secondary", "Previsualizar");
+
+  const preview = el("button", "btn btn--secondary");
   preview.type = "button";
-  const confirm = el("button", "primary ms-2", "Confirmar importación");
+  preview.append(icon("eye"), el("span", "", "Previsualizar"));
+
+  const confirm = el("button", "btn btn--primary ms-2");
   confirm.type = "button";
+  confirm.append(icon("check2-circle"), el("span", "", "Confirmar importación"));
   confirm.hidden = true;
-  preview.onclick = async () => {
-    if (!file.files[0]) return toast("Elige un archivo");
-    try {
-      const data = await send("previsualizar");
-      result.replaceChildren();
-      if (data.error_global) {
-        result.append(el("div", "alert alert-danger py-2", data.error_global));
-        confirm.hidden = true;
-        return;
-      }
-      const rows = [...data.validas, ...data.invalidas].sort((a, b) => a.fila - b.fila);
-      result.append(
-        el("p", "small", `${data.validas.length} fila(s) válida(s) · ${data.invalidas.length} con errores`),
-        table(["Fila", "Usuario", "Correo", "Nombre", "Rol", "Estado"], rows.map((r) => [
-          r.fila, r.datos.username, r.datos.email, `${r.datos.first_name || ""} ${r.datos.last_name || ""}`.trim(), r.datos.rol,
-          r.errores.length ? r.errores.join(" ") : "Lista para crear",
-        ])),
-      );
-      confirm.hidden = data.validas.length === 0;
-    } catch (e) {
-      toast(e.message);
-    }
-  };
-  confirm.onclick = async () => {
-    confirm.disabled = true;
-    try {
-      const data = await send("confirmar");
-      if (data.error_global) {
-        result.replaceChildren(el("div", "alert alert-danger py-2", data.error_global));
-        confirm.hidden = true;
-        return;
-      }
-      $("detail-dialog").close();
-      toast(`${data.creados} usuario(s) creado(s) correctamente.` + (data.omitidas ? ` ${data.omitidas} fila(s) se omitieron por errores de validación.` : ""));
-      await loadRecords();
-    } catch (e) {
-      toast(e.message);
-    } finally {
-      confirm.disabled = false;
-    }
-  };
-  file.onchange = () => {
+
+  preview.onclick = () =>
+    busy(
+      preview,
+      (async () => {
+        const error = forms_validateFile(file);
+        if (error) {
+          forms_setError(fileField, error);
+          return;
+        }
+        try {
+          const data = await send("previsualizar");
+          result.replaceChildren();
+          if (data.error_global) {
+            result.append(forms_alert(data.error_global));
+            confirm.hidden = true;
+            return;
+          }
+          const rows = [...data.validas, ...data.invalidas].sort(
+            (a, b) => a.fila - b.fila,
+          );
+          result.append(
+            el(
+              "p",
+              "small fw-semibold",
+              `${data.validas.length} fila(s) válida(s) · ${data.invalidas.length} con errores`,
+            ),
+            ui.table(
+              ["Fila", "Usuario", "Correo", "Nombre", "Rol", "Estado"],
+              rows.map((r) => [
+                r.fila,
+                r.datos.username,
+                r.datos.email,
+                `${r.datos.first_name || ""} ${r.datos.last_name || ""}`.trim(),
+                r.datos.rol,
+                r.errores.length ? r.errores.join(" ") : "Lista para crear",
+              ]),
+              { empty: "Sin filas para previsualizar." },
+            ),
+          );
+          confirm.hidden = data.validas.length === 0;
+        } catch (e) {
+          toast(e.message, "error");
+        }
+      })(),
+    );
+
+  confirm.onclick = () =>
+    busy(
+      confirm,
+      (async () => {
+        try {
+          const data = await send("confirmar");
+          if (data.error_global) {
+            result.replaceChildren(forms_alert(data.error_global));
+            confirm.hidden = true;
+            return;
+          }
+          $("detail-dialog").close();
+          toast(
+            `${data.creados} usuario(s) creado(s) correctamente.` +
+              (data.omitidas
+                ? ` ${data.omitidas} fila(s) se omitieron por errores de validación.`
+                : ""),
+            "success",
+          );
+          await loadRecords();
+        } catch (e) {
+          toast(e.message, "error");
+        }
+      })(),
+    );
+
+  file.addEventListener("change", () => {
     confirm.hidden = true;
     result.replaceChildren();
-  };
-  form.append(el("div", "mt-2"), preview, confirm, result);
+  });
+
+  form.append(forms_actions(preview, confirm), result);
   parent.append(template, form);
 }
+
 function simpleForm(title, path, fields, transform = (data) => data) {
-  const parent = modal(title),
-    form = document.createElement("form");
-  form.className = "form-grid";
+  const parent = modal(title);
+  const form = el("form", "form-grid");
   for (const [name, label, type = "text", value = ""] of fields) {
     if (type === "select" || type === "multiselect" || type === "optional") {
-      const wrap = document.createElement("div"),
-        l = document.createElement("label");
-      l.htmlFor = "field-" + name;
-      l.textContent = label;
-      const select = document.createElement("select");
-      select.id = "field-" + name;
-      select.name = name;
-      select.required = type === "select";
-      select.multiple = type === "multiselect";
-      for (const v of value) {
-        const option = document.createElement("option");
-        option.value = typeof v === "object" ? v.value : v;
-        option.textContent = typeof v === "object" ? v.label : choiceLabel(v);
-        option.selected = typeof v === "object" && !!v.selected;
-        select.append(option);
-      }
-      wrap.append(l, select);
-      form.append(wrap);
-    } else {
-      const field = input(
-        form,
-        name,
-        label,
-        value,
-        type,
-        ![
-          "comentario",
-          "observaciones",
-          "acuerdos",
-          "eventos_silenciados",
-          "descripcion",
-          "fecha_vencimiento",
-          "nit",
-          "razon_social",
-          "telefono",
-          "sector_industrial",
-          "area_responsable",
-          "sitio_web",
-        ].includes(name),
+      form.append(
+        forms_selectField(name, label, value, {
+          required: type === "select",
+          multiple: type === "multiselect",
+        }),
       );
-      if (type === "number") {
-        field.step = "0.01";
-        field.min = "0";
-      }
+    } else {
+      form.append(
+        ui.field({
+          name,
+          label,
+          type,
+          value,
+          required: ![
+            "comentario",
+            "observaciones",
+            "acuerdos",
+            "eventos_silenciados",
+            "descripcion",
+            "fecha_vencimiento",
+            "nit",
+            "razon_social",
+            "telefono",
+            "sector_industrial",
+            "area_responsable",
+            "sitio_web",
+          ].includes(name),
+          step: type === "number" ? "0.01" : undefined,
+          min: type === "number" ? "0" : undefined,
+        }),
+      );
     }
   }
-  const button = document.createElement("button");
-  button.className = "primary full";
-  button.textContent = "Guardar";
-  form.append(button);
-  form.onsubmit = async (e) => {
+  const button = ui.button("Guardar", {
+    variant: "primary",
+    icon: "check",
+    type: "submit",
+  });
+  form.append(forms_actions(button));
+  form.addEventListener("submit", (e) => {
     e.preventDefault();
-    button.disabled = true;
-    try {
-      const data = Object.fromEntries(new FormData(form));
-      for (const [name, , type] of fields)
-        if (type === "multiselect")
-          data[name] = Array.from(form.elements[name].selectedOptions).map(
-            (o) => o.value,
-          );
-      await mutate(path, transform(data));
-    } catch (error) {
-      toast(error.message);
-    } finally {
-      button.disabled = false;
-    }
-  };
+    busy(
+      button,
+      (async () => {
+        try {
+          const data = Object.fromEntries(new FormData(form));
+          for (const [name, , type] of fields)
+            if (type === "multiselect")
+              data[name] = Array.from(form.elements[name].selectedOptions).map(
+                (o) => o.value,
+              );
+          await mutate(path, transform(data));
+        } catch (error) {
+          toast(error.message, "error");
+        }
+      })(),
+    );
+  });
   parent.append(form);
 }
+
 function deliveryForm(id) {
   const parent = modal("Entregar un archivo");
-  const form = document.createElement("form");
-  input(form, "titulo", "Título del entregable", "", "text", true).maxLength =
-    180;
-  input(form, "comentario", "Comentario", "", "textarea");
-  const file = input(
-    form,
+  const form = el("form");
+  const titulo = ui.field({
+    name: "titulo",
+    label: "Título del entregable",
+    type: "text",
+    required: true,
+  });
+  titulo.querySelector(".input").maxLength = 180;
+  form.append(titulo);
+  form.append(
+    ui.field({ name: "comentario", label: "Comentario", type: "textarea" }),
+  );
+  const fileField = forms_fileField(
     "archivo",
     "Archivo (PDF, PNG, JPG o TXT; máximo 9 MB)",
-    "",
-    "file",
-    true,
+    { accept: ".pdf,.png,.jpg,.jpeg,.txt", required: true },
   );
-  file.accept = ".pdf,.png,.jpg,.jpeg,.txt";
-  const button = document.createElement("button");
-  button.className = "primary";
-  button.textContent = "Enviar entregable";
-  form.append(button);
-  form.onsubmit = async (e) => {
+  form.append(fileField);
+  const file = fileField.querySelector("input");
+  const button = ui.button("Enviar entregable", {
+    variant: "primary",
+    icon: "upload",
+    type: "submit",
+  });
+  form.append(forms_actions(button));
+  form.addEventListener("submit", (e) => {
     e.preventDefault();
-    button.disabled = true;
-    try {
-      const response = await fetch(`/api/retos/${id}/entregar`, {
-        method: "POST",
-        headers: { "X-CSRF-Token": csrf },
-        body: new FormData(form),
-      });
-      const data = await readJson(response);
-      if (!response.ok)
-        throw new Error(data.error || "No se pudo cargar el archivo");
-      $("detail-dialog").close();
-      toast("Archivo entregado");
-      await loadRecords();
-    } catch (error) {
-      toast(error.message);
-    } finally {
-      button.disabled = false;
+    const error = forms_validateFile(file, 9);
+    if (error) {
+      forms_setError(fileField, error);
+      return;
     }
-  };
+    forms_setProgress(fileField, true);
+    busy(
+      button,
+      (async () => {
+        try {
+          const response = await fetch(`/api/retos/${id}/entregar`, {
+            method: "POST",
+            headers: { "X-CSRF-Token": csrf },
+            body: new FormData(form),
+          });
+          const data = await readJson(response);
+          if (!response.ok)
+            throw new Error(data.error || "No se pudo cargar el archivo");
+          $("detail-dialog").close();
+          toast("Archivo entregado", "success");
+          await loadRecords();
+        } catch (error) {
+          toast(error.message, "error");
+        } finally {
+          forms_setProgress(fileField, false);
+        }
+      })(),
+    );
+  });
   parent.append(form);
 }
+
 function documentForm(url) {
   const parent = modal("Cargar documento legal");
-  const form = document.createElement("form");
-  input(form, "fecha_expedicion", "Fecha de expedición", "", "date", true);
-  const file = input(
-    form,
+  const form = el("form");
+  form.append(
+    ui.field({
+      name: "fecha_expedicion",
+      label: "Fecha de expedición",
+      type: "date",
+      required: true,
+    }),
+  );
+  const fileField = forms_fileField(
     "archivo",
     "Documento PDF (máximo 9 MB)",
-    "",
-    "file",
-    true,
+    { accept: ".pdf", required: true },
   );
-  file.accept = ".pdf";
-  const button = document.createElement("button");
-  button.className = "primary";
-  button.textContent = "Cargar documento";
-  form.append(button);
-  form.onsubmit = async (e) => {
+  form.append(fileField);
+  const file = fileField.querySelector("input");
+  const button = ui.button("Cargar documento", {
+    variant: "primary",
+    icon: "upload",
+    type: "submit",
+  });
+  form.append(forms_actions(button));
+  form.addEventListener("submit", (e) => {
     e.preventDefault();
-    button.disabled = true;
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "X-CSRF-Token": csrf },
-        body: new FormData(form),
-      });
-      const data = await readJson(response);
-      if (!response.ok)
-        throw new Error(data.error || "No se pudo cargar el documento");
-      $("detail-dialog").close();
-      toast("Documento enviado a revisión");
-      await loadRecords();
-    } catch (error) {
-      toast(error.message);
-    } finally {
-      button.disabled = false;
+    const error = forms_validateFile(file, 9);
+    if (error) {
+      forms_setError(fileField, error);
+      return;
     }
-  };
+    busy(
+      button,
+      (async () => {
+        try {
+          const response = await fetch(url, {
+            method: "POST",
+            headers: { "X-CSRF-Token": csrf },
+            body: new FormData(form),
+          });
+          const data = await readJson(response);
+          if (!response.ok)
+            throw new Error(data.error || "No se pudo cargar el documento");
+          $("detail-dialog").close();
+          toast("Documento enviado a revisión", "success");
+          await loadRecords();
+        } catch (error) {
+          toast(error.message, "error");
+        }
+      })(),
+    );
+  });
   parent.append(form);
 }
+
 async function permissionsForm(id) {
-  const data = await api(`/api/usuarios/${id}/permisos`);
   const parent = modal("Permisos especiales");
-  const form = document.createElement("form");
-  for (const p of data.permisos) {
-    const wrap = el("div", "form-check mb-2");
-    const box = document.createElement("input");
-    box.type = "checkbox";
-    box.className = "form-check-input";
-    box.id = "perm-" + p.codigo;
-    box.value = p.codigo;
-    box.checked = p.otorgado;
-    const l = el("label", "form-check-label", p.nombre);
-    l.htmlFor = box.id;
-    wrap.append(box, l, el("div", "small text-muted", p.descripcion));
-    form.append(wrap);
+  parent.append(ui.skeleton(4, { kind: "row" }));
+  let data;
+  try {
+    data = await api(`/api/usuarios/${id}/permisos`);
+  } catch (e) {
+    $("detail-dialog").close();
+    throw e;
   }
-  const button = el("button", "primary", "Guardar permisos");
-  form.append(button);
-  form.onsubmit = async (e) => {
+  parent.replaceChildren();
+  const form = el("form");
+  for (const p of data.permisos) {
+    form.append(
+      forms_checkbox(null, p.nombre, {
+        id: "perm-" + p.codigo,
+        value: p.codigo,
+        checked: p.otorgado,
+        description: p.descripcion,
+      }),
+    );
+  }
+  const button = ui.button("Guardar permisos", {
+    variant: "primary",
+    icon: "check",
+    type: "submit",
+  });
+  form.append(forms_actions(button));
+  form.addEventListener("submit", (e) => {
     e.preventDefault();
-    const codigos = Array.from(form.querySelectorAll("input:checked")).map((b) => b.value);
-    await mutate(`/api/usuarios/${id}/permisos`, { codigos });
-  };
+    busy(
+      button,
+      (async () => {
+        const codigos = Array.from(form.querySelectorAll("input:checked")).map(
+          (b) => b.value,
+        );
+        await mutate(`/api/usuarios/${id}/permisos`, { codigos });
+      })(),
+    );
+  });
   parent.append(form);
 }
+
 // HU00: state changes of the company's documents; automatic ones show as "Sistema".
 async function documentHistory(company) {
-  const data = await api(`/api/empresas/${company}/historial-documental`);
   const parent = modal("Historial documental");
-  parent.append(table(["Fecha", "Documento", "De", "A", "Por", "Comentario"], data.historial.map((h) => [
-    fecha(h.fecha, true), h.documento, choiceLabel(h.estado_anterior), choiceLabel(h.estado_nuevo), h.realizado_por, h.comentario,
-  ])));
+  parent.append(ui.skeleton(4, { kind: "row" }));
+  let data;
+  try {
+    data = await api(`/api/empresas/${company}/historial-documental`);
+  } catch (e) {
+    $("detail-dialog").close();
+    throw e;
+  }
+  parent.replaceChildren();
+  parent.append(
+    ui.table(
+      ["Fecha", "Documento", "De", "A", "Por", "Comentario"],
+      data.historial.map((h) => [
+        fecha(h.fecha, true),
+        h.documento,
+        choiceLabel(h.estado_anterior),
+        choiceLabel(h.estado_nuevo),
+        h.realizado_por,
+        h.comentario,
+      ]),
+      { empty: "Sin movimientos en el historial documental." },
+    ),
+  );
 }
+
 // editar_tipo_documento: the legal-document catalog.
 function documentTypeForm(record) {
-  const parent = modal(record ? "Editar tipo de documento" : "Nuevo tipo de documento");
+  const parent = modal(
+    record ? "Editar tipo de documento" : "Nuevo tipo de documento",
+  );
   const form = el("form", "form-grid");
-  if (!record) input(form, "codigo", "Código (p. ej. POLIZA_RESPONSABILIDAD)", "", "text", true);
-  input(form, "nombre", "Nombre", record?.nombre || "", "text", true);
-  input(form, "descripcion", "Descripción", record?.descripcion || "", "textarea");
-  const days = input(form, "vigencia_dias", "Vigencia máxima (días desde la expedición)", record?.vigencia_dias ?? "", "number");
-  days.min = 0;
-  input(form, "orden", "Orden", record?.orden ?? 0, "number");
+  if (!record)
+    form.append(
+      ui.field({
+        name: "codigo",
+        label: "Código (p. ej. POLIZA_RESPONSABILIDAD)",
+        type: "text",
+        required: true,
+      }),
+    );
+  form.append(
+    ui.field({
+      name: "nombre",
+      label: "Nombre",
+      type: "text",
+      value: record?.nombre || "",
+      required: true,
+    }),
+  );
+  form.append(
+    ui.field({
+      name: "descripcion",
+      label: "Descripción",
+      type: "textarea",
+      value: record?.descripcion || "",
+    }),
+  );
+  form.append(
+    ui.field({
+      name: "vigencia_dias",
+      label: "Vigencia máxima (días desde la expedición)",
+      type: "number",
+      value: record?.vigencia_dias ?? "",
+      min: "0",
+    }),
+  );
+  form.append(
+    ui.field({
+      name: "orden",
+      label: "Orden",
+      type: "number",
+      value: record?.orden ?? 0,
+    }),
+  );
   const boxes = [
     ["obligatorio", "Obligatorio"],
     ["aplica_sin_convenio", "Se exige también a empresas sin convenio"],
@@ -281,67 +649,132 @@ function documentTypeForm(record) {
     ["activo", "Activo"],
   ];
   for (const [name, text] of boxes) {
-    const wrap = el("div", "form-check full");
-    const box = el("input", "form-check-input");
-    box.type = "checkbox";
-    box.name = name;
-    box.id = "field-" + name;
-    box.checked = record ? !!record[name] : name !== "requiere_permiso_especial";
-    const l = el("label", "form-check-label", text);
-    l.htmlFor = box.id;
-    wrap.append(box, l);
-    form.append(wrap);
+    form.append(
+      forms_checkbox(name, text, {
+        checked: record ? !!record[name] : name !== "requiere_permiso_especial",
+      }),
+    );
   }
-  form.append(el("button", "primary full", "Guardar"));
-  form.onsubmit = async (e) => {
+  const button = ui.button("Guardar", {
+    variant: "primary",
+    icon: "check",
+    type: "submit",
+  });
+  form.append(forms_actions(button));
+  form.addEventListener("submit", (e) => {
     e.preventDefault();
-    const data = Object.fromEntries(new FormData(form));
-    for (const [name] of boxes) data[name] = form.elements[name].checked;
-    data.vigencia_dias = data.vigencia_dias === "" ? null : Number(data.vigencia_dias);
-    data.orden = Number(data.orden || 0);
-    try {
-      await mutate(record ? `/api/tipos-documento/${record.id}` : "/api/tipos-documento", data);
-    } catch (error) {
-      toast(error.message);
-    }
-  };
+    busy(
+      button,
+      (async () => {
+        const data = Object.fromEntries(new FormData(form));
+        for (const [name] of boxes) data[name] = form.elements[name].checked;
+        data.vigencia_dias =
+          data.vigencia_dias === "" ? null : Number(data.vigencia_dias);
+        data.orden = Number(data.orden || 0);
+        try {
+          await mutate(
+            record ? `/api/tipos-documento/${record.id}` : "/api/tipos-documento",
+            data,
+          );
+        } catch (error) {
+          toast(error.message, "error");
+        }
+      })(),
+    );
+  });
   parent.append(form);
 }
+
 // seguimiento_avance (HU14).
 async function progressPanel(reto) {
-  const data = await api(`/api/retos/${reto}/avance`);
   const parent = modal("Avance del reto");
-  parent.append(el("p", "fw-bold", `Avance según el último seguimiento: ${data.porcentaje}%`));
+  parent.append(ui.skeleton(4, { kind: "row" }));
+  let data;
+  try {
+    data = await api(`/api/retos/${reto}/avance`);
+  } catch (e) {
+    $("detail-dialog").close();
+    throw e;
+  }
+  parent.replaceChildren();
+  parent.append(
+    el(
+      "p",
+      "fw-bold",
+      `Avance según el último seguimiento: ${data.porcentaje}%`,
+    ),
+  );
   parent.append(el("h6", "fw-bold mt-2", "Bitácora de sesiones"));
-  parent.append(table(["Fecha", "Sesión", "Avance", "Avances", "Acuerdos"], data.seguimientos.map((s) => [
-    fecha(s.fecha_sesion), choiceLabel(s.tipo_sesion), `${s.porcentaje_avance}%`, s.avances, s.acuerdos,
-  ])));
+  parent.append(
+    ui.table(
+      ["Fecha", "Sesión", "Avance", "Avances", "Acuerdos"],
+      data.seguimientos.map((s) => [
+        fecha(s.fecha_sesion),
+        choiceLabel(s.tipo_sesion),
+        `${s.porcentaje_avance}%`,
+        s.avances,
+        s.acuerdos,
+      ]),
+      { empty: "Aún no hay sesiones registradas." },
+    ),
+  );
   parent.append(el("h6", "fw-bold mt-3", "Entregables de los equipos"));
   for (const e of data.entregables) {
-    const box = el("div", "mb-3");
-    box.append(el("p", "mb-1", `${e.titulo} · ${e.estudiante} · ${choiceLabel(e.estado)}`));
-    for (const c of e.comentarios) box.append(el("p", "small text-muted mb-1", `${c.autor}: ${c.comentario}`));
-    const form = el("form", "d-flex gap-2");
-    const text = el("input", "form-control form-control-sm");
+    const box = el("section", "surface mb-3");
+    const body = el("div", "surface__body");
+    const head = el("div", "cluster cluster--between");
+    head.append(
+      el("span", "fw-semibold", `${e.titulo} · ${e.estudiante}`),
+      ui.badge(badgeClass(e.estado).replace("pill--", ""), {
+        label: choiceLabel(e.estado),
+      }),
+    );
+    body.append(head);
+    for (const c of e.comentarios)
+      body.append(el("p", "small text-muted mb-1", `${c.autor}: ${c.comentario}`));
+    const form = el("form", "forms-comment mt-2");
+    const text = el("input", "input input--sm");
     text.name = "comentario";
     text.required = true;
     text.placeholder = "Comentario para el equipo";
-    form.append(text, el("button", "secondary", "Comentar"));
-    form.onsubmit = async (ev) => {
+    text.setAttribute("aria-label", "Comentario para el equipo");
+    const submit = ui.button("Comentar", {
+      variant: "secondary",
+      icon: "chat-square-text",
+      type: "submit",
+    });
+    form.append(text, submit);
+    form.addEventListener("submit", (ev) => {
       ev.preventDefault();
-      try {
-        await api(`/api/entregables/${e.id}/comentario`, { comentario: text.value });
-        toast("Comentario agregado al historial.");
-        await progressPanel(reto);
-      } catch (error) {
-        toast(error.message);
-      }
-    };
-    box.append(form);
+      busy(
+        submit,
+        (async () => {
+          try {
+            await api(`/api/entregables/${e.id}/comentario`, {
+              comentario: text.value,
+            });
+            toast("Comentario agregado al historial.", "success");
+            await progressPanel(reto);
+          } catch (error) {
+            toast(error.message, "error");
+          }
+        })(),
+      );
+    });
+    body.append(form);
+    box.append(body);
     parent.append(box);
   }
-  if (!data.entregables.length) parent.append(el("p", "small text-muted", "Aún no hay entregables."));
+  if (!data.entregables.length)
+    parent.append(
+      ui.empty(
+        "folder2-open",
+        "Aún no hay entregables",
+        "Los equipos no han cargado entregables todavía.",
+      ),
+    );
 }
+
 // HU13: the activity log filtered by action, user and dates.
 // Display labels for log_actividad.accion codes (values sent to the API stay the codes).
 const ACCIONES_LOG = {
@@ -382,199 +815,368 @@ const EVENTOS_NOTIFICACION = {
   RETO_FINALIZADO: "Reto finalizado",
   RETO_SIN_ACTUALIZAR: "Reto vencido sin actualizaciones",
 };
+
 async function activityLog(filters) {
-  const query = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString();
-  const data = await api(`/api/log-actividad?${query}`);
   const parent = modal("Registro de actividad");
+  parent.append(ui.skeleton(4, { kind: "row" }));
+  let data;
+  try {
+    const query = new URLSearchParams(
+      Object.entries(filters).filter(([, v]) => v),
+    ).toString();
+    data = await api(`/api/log-actividad?${query}`);
+  } catch (e) {
+    $("detail-dialog").close();
+    throw e;
+  }
+  parent.replaceChildren();
   const form = el("form", "form-grid");
-  choiceSelect(form, "accion", "Acción", [["", "Todas"], ...Object.entries(ACCIONES_LOG)], filters.accion || "");
-  input(form, "usuario", "Usuario", filters.usuario || "");
-  input(form, "desde", "Desde", filters.desde || "", "date");
-  input(form, "hasta", "Hasta", filters.hasta || "", "date");
-  form.append(el("button", "secondary full", "Filtrar"));
-  form.onsubmit = (e) => {
+  form.append(
+    forms_selectField(
+      "accion",
+      "Acción",
+      [["", "Todas"], ...Object.entries(ACCIONES_LOG)],
+      { value: filters.accion || "" },
+    ),
+  );
+  form.append(ui.field({ name: "usuario", label: "Usuario", value: filters.usuario || "" }));
+  form.append(ui.field({ name: "desde", label: "Desde", type: "date", value: filters.desde || "" }));
+  form.append(ui.field({ name: "hasta", label: "Hasta", type: "date", value: filters.hasta || "" }));
+  const apply = ui.button("Filtrar", {
+    variant: "secondary",
+    icon: "funnel",
+    type: "submit",
+  });
+  form.append(forms_actions(apply));
+  form.addEventListener("submit", (e) => {
     e.preventDefault();
     activityLog(Object.fromEntries(new FormData(form))).catch(showError);
-  };
-  parent.append(form, table(["Fecha", "Acción", "Identificador", "Usuario", "Realizado por", "IP", "Detalle"], data.registros.map((r) => [
-    fecha(r.creado_en, true), ACCIONES_LOG[r.accion] || choiceLabel(r.accion), r.identificador, r.usuario, r.realizado_por, r.ip, r.detalle,
-  ])));
+  });
+  parent.append(
+    form,
+    ui.table(
+      [
+        "Fecha",
+        "Acción",
+        "Identificador",
+        "Usuario",
+        "Realizado por",
+        "IP",
+        "Detalle",
+      ],
+      data.registros.map((r) => [
+        fecha(r.creado_en, true),
+        ACCIONES_LOG[r.accion] || choiceLabel(r.accion),
+        r.identificador,
+        r.usuario,
+        r.realizado_por,
+        r.ip,
+        r.detalle,
+      ]),
+      { empty: "No hay actividad registrada con esos filtros." },
+    ),
+  );
 }
+
 // HU15: delivery state of every notification, filterable.
 async function deliveryLog(estado) {
-  const data = await api(`/api/notificaciones/registro?estado=${encodeURIComponent(estado)}`);
   const parent = modal("Registro de envíos");
+  parent.append(ui.skeleton(4, { kind: "row" }));
+  let data;
+  try {
+    data = await api(
+      `/api/notificaciones/registro?estado=${encodeURIComponent(estado)}`,
+    );
+  } catch (e) {
+    $("detail-dialog").close();
+    throw e;
+  }
+  parent.replaceChildren();
   const r = data.resumen;
-  parent.append(el("p", "small", `Total: ${r.total} · Enviadas por correo: ${r.enviadas} · Fallidas: ${r.fallidas} · Leídas: ${r.leidas}`));
-  const filter = choiceSelect(parent, "estado-envio", "Estado", [["", "Todos"], ["enviado", "Enviado por correo"], ["fallido", "Fallido"], ["leido", "Leído"], ["no_leido", "No leído"], ["solo_app", "Solo en la plataforma"]], estado);
-  filter.onchange = () => deliveryLog(filter.value).catch(showError);
-  parent.append(table(["Fecha", "Usuario", "Evento", "Título", "Correo", "Leída"], data.registros.map((n) => [
-    fecha(n.creada_en, true), n.username, EVENTOS_NOTIFICACION[n.evento] || human(n.evento || ""), n.titulo,
-    n.error_envio ? `Fallido: ${n.error_envio}` : n.enviada_por_correo ? "Enviado" : "Solo plataforma",
-    n.leida ? "Sí" : "No",
-  ])));
+  parent.append(
+    el(
+      "p",
+      "small",
+      `Total: ${r.total} · Enviadas por correo: ${r.enviadas} · Fallidas: ${r.fallidas} · Leídas: ${r.leidas}`,
+    ),
+  );
+  const filterField = forms_selectField(
+    "estado-envio",
+    "Estado",
+    [
+      ["", "Todos"],
+      ["enviado", "Enviado por correo"],
+      ["fallido", "Fallido"],
+      ["leido", "Leído"],
+      ["no_leido", "No leído"],
+      ["solo_app", "Solo en la plataforma"],
+    ],
+    { value: estado },
+  );
+  const filter = filterField.querySelector("select");
+  filter.addEventListener("change", () =>
+    deliveryLog(filter.value).catch(showError),
+  );
+  parent.append(filterField);
+  parent.append(
+    ui.table(
+      ["Fecha", "Usuario", "Evento", "Título", "Correo", "Leída"],
+      data.registros.map((n) => [
+        fecha(n.creada_en, true),
+        n.username,
+        EVENTOS_NOTIFICACION[n.evento] || human(n.evento || ""),
+        n.titulo,
+        n.error_envio
+          ? `Fallido: ${n.error_envio}`
+          : n.enviada_por_correo
+            ? "Enviado"
+            : "Solo plataforma",
+        n.leida ? "Sí" : "No",
+      ]),
+      { empty: "Sin envíos registrados." },
+    ),
+  );
 }
+
 async function changeState(id, estado, comentario = "") {
   await mutate(`/api/retos/${id}/estado`, { estado, comentario });
 }
+
 function stateForm(id, estado) {
   const parent = modal(choice("retos", "estado", estado));
-  const form = document.createElement("form");
-  const comment = input(
-    form,
-    "comentario",
-    "Motivo / comentario",
-    "",
-    "textarea",
-    true,
+  const form = el("form");
+  form.append(
+    ui.field({
+      name: "comentario",
+      label: "Motivo / comentario",
+      type: "textarea",
+      required: true,
+    }),
   );
-  const submit = document.createElement("button");
-  submit.className = "primary";
-  submit.textContent = "Confirmar";
-  form.append(submit);
-  form.onsubmit = async (e) => {
+  const submit = ui.button("Confirmar", {
+    variant: "primary",
+    icon: "check",
+    type: "submit",
+  });
+  form.append(forms_actions(submit));
+  form.addEventListener("submit", (e) => {
     e.preventDefault();
-    try {
-      await changeState(id, estado, comment.value);
-    } catch (error) {
-      toast(error.message);
-    }
-  };
+    busy(
+      submit,
+      (async () => {
+        try {
+          const data = Object.fromEntries(new FormData(form));
+          await changeState(id, estado, data.comentario);
+        } catch (error) {
+          toast(error.message, "error");
+        }
+      })(),
+    );
+  });
   parent.append(form);
 }
+
 function challengeForm(record = {}) {
   const parent = modal(record.id ? "Editar reto" : "Crear un reto");
-  const form = document.createElement("form");
-  form.className = "form-grid";
-  input(form, "titulo", "Título", record.titulo, "text", true).maxLength = 180;
+  const form = el("form", "form-grid");
+  const titleField = ui.field({
+    name: "titulo",
+    label: "Título",
+    type: "text",
+    value: record.titulo,
+    required: true,
+  });
+  titleField.querySelector(".input").maxLength = 180;
+  form.append(titleField);
   if (!record.id) {
-    const wrap = document.createElement("div");
-    const label = document.createElement("label");
-    label.textContent = "Tipo";
-    label.htmlFor = "field-tipo";
-    const select = document.createElement("select");
-    select.id = "field-tipo";
-    select.name = "tipo";
-    for (const name of ["reto", "hackathon"]) {
-      const option = document.createElement("option");
-      option.value = name;
-      option.textContent = choice("retos", "tipo", name);
-      select.append(option);
-    }
-    wrap.append(label, select);
-    form.append(wrap);
+    form.append(
+      forms_selectField(
+        "tipo",
+        "Tipo",
+        ["reto", "hackathon"].map((name) => ({
+          value: name,
+          label: choice("retos", "tipo", name),
+        })),
+      ),
+    );
   }
-  input(
-    form,
-    "area",
-    "Área",
-    record.area || "Tecnología",
-    "text",
-    true,
-  ).maxLength = 120;
-  input(
-    form,
-    "descripcion",
-    "Descripción",
-    record.descripcion,
-    "textarea",
-    true,
+  const areaField = ui.field({
+    name: "area",
+    label: "Área",
+    type: "text",
+    value: record.area || "Tecnología",
+    required: true,
+  });
+  areaField.querySelector(".input").maxLength = 120;
+  form.append(areaField);
+  form.append(
+    ui.field({
+      name: "descripcion",
+      label: "Descripción",
+      type: "textarea",
+      value: record.descripcion,
+      required: true,
+    }),
   );
-  input(
-    form,
-    "nivel_academico",
-    "Nivel académico",
-    record.nivel_academico || "Pregrado",
+  form.append(
+    ui.field({
+      name: "nivel_academico",
+      label: "Nivel académico",
+      type: "text",
+      value: record.nivel_academico || "Pregrado",
+    }),
   );
-  input(
-    form,
-    "fecha_inicio_tentativa",
-    "Inicio tentativo",
-    record.fecha_inicio_tentativa,
-    "date",
-    true,
+  form.append(
+    ui.field({
+      name: "fecha_inicio_tentativa",
+      label: "Inicio tentativo",
+      type: "date",
+      value: record.fecha_inicio_tentativa,
+      required: true,
+    }),
   );
-  input(
-    form,
-    "fecha_fin_tentativa",
-    "Fin tentativo",
-    record.fecha_fin_tentativa,
-    "date",
-    true,
+  form.append(
+    ui.field({
+      name: "fecha_fin_tentativa",
+      label: "Fin tentativo",
+      type: "date",
+      value: record.fecha_fin_tentativa,
+      required: true,
+    }),
   );
-  input(
-    form,
-    "fecha_limite_postulacion",
-    "Límite de postulación",
-    record.fecha_limite_postulacion,
-    "date",
-    true,
+  form.append(
+    ui.field({
+      name: "fecha_limite_postulacion",
+      label: "Límite de postulación",
+      type: "date",
+      value: record.fecha_limite_postulacion,
+      required: true,
+    }),
   );
-  const button = document.createElement("button");
-  button.className = "primary full";
-  button.textContent = "Guardar borrador";
-  form.append(button);
-  form.onsubmit = async (e) => {
+  const button = ui.button("Guardar borrador", {
+    variant: "primary",
+    icon: "check",
+    type: "submit",
+  });
+  form.append(forms_actions(button));
+  form.addEventListener("submit", (e) => {
     e.preventDefault();
-    button.disabled = true;
-    try {
-      const data = Object.fromEntries(new FormData(form));
-      data.tipo = record.tipo || data.tipo || "reto";
-      for (const key of [
-        "fecha_inicio_tentativa",
-        "fecha_fin_tentativa",
-        "fecha_limite_postulacion",
-      ])
-        data[key] ||= null;
-      await mutate(record.id ? `/api/retos/${record.id}` : "/api/retos", data);
-    } catch (error) {
-      toast(error.message);
-    } finally {
-      button.disabled = false;
-    }
-  };
+    busy(
+      button,
+      (async () => {
+        try {
+          const data = Object.fromEntries(new FormData(form));
+          data.tipo = record.tipo || data.tipo || "reto";
+          for (const key of [
+            "fecha_inicio_tentativa",
+            "fecha_fin_tentativa",
+            "fecha_limite_postulacion",
+          ])
+            data[key] ||= null;
+          await mutate(
+            record.id ? `/api/retos/${record.id}` : "/api/retos",
+            data,
+          );
+        } catch (error) {
+          toast(error.message, "error");
+        }
+      })(),
+    );
+  });
   parent.append(form);
 }
+
 async function applicationForm(id) {
   // PostulacionForm: catalog program, optional PDF CV, required terms.
-  const options = await api("/api/registro/opciones");
   const parent = modal("Postularme al reto");
+  parent.append(ui.skeleton(4, { kind: "row" }));
+  let options;
+  try {
+    options = await api("/api/registro/opciones");
+  } catch (e) {
+    $("detail-dialog").close();
+    throw e;
+  }
+  parent.replaceChildren();
   const form = el("form", "form-grid");
-  input(form, "motivacion", "¿Por qué quieres participar?", "", "textarea", true);
-  input(form, "habilidades", "Habilidades", "", "textarea");
-  choiceSelect(form, "programa", "Programa académico", [["", "Selecciona tu programa académico"], ...options.programas.map((p) => [p.nombre, p.label])]);
-  const semester = input(form, "semestre", "Semestre", "1", "number", true);
-  semester.min = 1;
-  semester.max = 12;
-  const cv = input(form, "hoja_de_vida", "Hoja de vida o portafolio (PDF, opcional)", "", "file");
-  cv.accept = ".pdf";
-  const terms = el("div", "form-check full");
-  const box = el("input", "form-check-input");
-  box.type = "checkbox";
-  box.name = "acepta_terminos";
-  box.id = "field-acepta_terminos";
-  box.required = true;
-  const label = el("label", "form-check-label", "Acepto los términos y condiciones del reto y el tratamiento de mis datos personales");
-  label.htmlFor = box.id;
-  terms.append(box, label);
-  form.append(terms);
-  const button = el("button", "primary full", "Enviar postulación");
-  form.append(button);
-  form.onsubmit = async (e) => {
+  form.append(
+    ui.field({
+      name: "motivacion",
+      label: "¿Por qué quieres participar?",
+      type: "textarea",
+      required: true,
+    }),
+  );
+  form.append(
+    ui.field({ name: "habilidades", label: "Habilidades", type: "textarea" }),
+  );
+  form.append(
+    forms_selectField("programa", "Programa académico", [
+      ["", "Selecciona tu programa académico"],
+      ...options.programas.map((p) => [p.nombre, p.label]),
+    ]),
+  );
+  form.append(
+    ui.field({
+      name: "semestre",
+      label: "Semestre",
+      type: "number",
+      value: "1",
+      min: "1",
+      max: "12",
+      required: true,
+    }),
+  );
+  const cvField = forms_fileField(
+    "hoja_de_vida",
+    "Hoja de vida o portafolio (PDF, opcional)",
+    { accept: ".pdf" },
+  );
+  form.append(cvField);
+  const cv = cvField.querySelector("input");
+  form.append(
+    forms_checkbox(
+      "acepta_terminos",
+      "Acepto los términos y condiciones del reto y el tratamiento de mis datos personales",
+      { required: true },
+    ),
+  );
+  const button = ui.button("Enviar postulación", {
+    variant: "primary",
+    icon: "send",
+    type: "submit",
+  });
+  form.append(forms_actions(button));
+  form.addEventListener("submit", (e) => {
     e.preventDefault();
-    button.disabled = true;
-    try {
-      const response = await fetch(`/api/retos/${id}/postular`, { method: "POST", headers: { "X-CSRF-Token": csrf }, body: new FormData(form) });
-      const data = await readJson(response);
-      if (!response.ok) throw new Error(data.error || "No se pudo enviar la postulación");
-      $("detail-dialog").close();
-      toast("¡Tu postulación fue enviada! La empresa fue notificada y revisará tu solicitud.");
-      await loadRecords();
-    } catch (error) {
-      toast(error.message);
-    } finally {
-      button.disabled = false;
+    const error = forms_validateFile(cv);
+    if (error) {
+      forms_setError(cvField, error);
+      return;
     }
-  };
+    busy(
+      button,
+      (async () => {
+        try {
+          const response = await fetch(`/api/retos/${id}/postular`, {
+            method: "POST",
+            headers: { "X-CSRF-Token": csrf },
+            body: new FormData(form),
+          });
+          const data = await readJson(response);
+          if (!response.ok)
+            throw new Error(data.error || "No se pudo enviar la postulación");
+          $("detail-dialog").close();
+          toast(
+            "¡Tu postulación fue enviada! La empresa fue notificada y revisará tu solicitud.",
+            "success",
+          );
+          await loadRecords();
+        } catch (error) {
+          toast(error.message, "error");
+        }
+      })(),
+    );
+  });
   parent.append(form);
 }

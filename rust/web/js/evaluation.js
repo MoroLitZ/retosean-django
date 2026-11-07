@@ -1,17 +1,28 @@
 "use strict";
 async function gradeForm(id, record) {
-  const { rubricas } = await api(`/api/entregables/${id}/rubricas`);
-  const parent = modal("Evaluar entregable");
-  const form = el("form");
-  const modo = el("select", "form-select mb-2");
-  modo.setAttribute("aria-label", "Forma de calificar");
+  const parent = wf_modalLoading("Evaluar entregable", 5);
+  let rubricas;
+  try {
+    ({ rubricas } = await api(`/api/entregables/${id}/rubricas`));
+  } catch (error) {
+    wf_modalFailed(parent, error);
+  }
+  parent.removeAttribute("aria-busy");
+  parent.replaceChildren();
+  const form = el("form", "wf-form");
+  const modoWrap = el("div", "field");
+  const modoLabel = el("label", "field__label", "Forma de calificar");
+  modoLabel.htmlFor = "wf-modo-rubrica";
+  const modo = el("select", "select");
+  modo.id = "wf-modo-rubrica";
+  modoWrap.append(modoLabel, modo);
   modo.append(new Option("Puntaje libre", ""));
   rubricas.forEach((r) => modo.append(new Option(`Rúbrica: ${r.nombre}`, r.id)));
-  const libre = el("div");
+  const libre = el("div", "wf-stack");
   const nota = input(libre, "nota", `Nota (máximo ${record.puntaje_maximo})`, "", "number");
   nota.step = "0.01";
   nota.min = "0";
-  const criterios = el("div");
+  const criterios = el("div", "wf-stack");
   const draw = () => {
     const rubrica = rubricas.find((r) => String(r.id) === modo.value);
     libre.hidden = !!rubrica;
@@ -25,22 +36,24 @@ async function gradeForm(id, record) {
   };
   modo.onchange = draw;
   draw();
-  form.append(modo, libre, criterios);
+  form.append(modoWrap, libre, criterios);
   input(form, "comentario", "Retroalimentación", record.comentario_profesor || "", "textarea");
   let confirmar = null;
   if (record.estado === "CALIFICADO") {
-    const wrap = el("div", "form-check mt-2");
-    confirmar = el("input", "form-check-input");
+    const wrap = el("div", "checkbox mt-2");
+    confirmar = el("input", "checkbox__input");
     confirmar.type = "checkbox";
     confirmar.id = "confirmar-recalificacion";
-    const l = el("label", "form-check-label", `Ya tiene nota (${record.nota}). Confirmo que quiero volver a calificarlo.`);
+    const l = el("label", "checkbox__label", `Ya tiene nota (${record.nota}). Confirmo que quiero volver a calificarlo.`);
     l.htmlFor = confirmar.id;
     wrap.append(confirmar, l);
     form.append(wrap);
   }
-  form.append(el("p", "small text-muted mt-2 mb-0", "La nota queda sin publicar hasta que publiques las calificaciones del reto."));
-  const button = el("button", "primary", "Guardar evaluación");
-  form.append(button);
+  form.append(el("p", "field__hint mt-2", "La nota queda sin publicar hasta que publiques las calificaciones del reto."));
+  const button = ui.button("Guardar evaluación", { variant: "primary", type: "submit", icon: "check2-circle" });
+  const actions = el("div", "wf-actions");
+  actions.append(button);
+  form.append(actions);
   submitForm(form, button, `/api/entregables/${id}/calificar`, () => ({
     nota: nota.value,
     rubrica_id: modo.value ? Number(modo.value) : null,
@@ -52,15 +65,19 @@ async function gradeForm(id, record) {
 }
 function rubricForm(retoId) {
   const parent = modal("Nueva rúbrica");
-  const form = el("form");
-  input(form, "nombre", "Nombre", "", "text", true);
-  input(form, "descripcion", "Descripción", "", "textarea");
+  const form = el("form", "wf-form");
+  const campos = el("div", "wf-stack");
+  input(campos, "nombre", "Nombre", "", "text", true);
+  input(campos, "descripcion", "Descripción", "", "textarea");
+  form.append(campos);
   const criterios = editableRows(form, "Criterios", [
     { name: "nombre", label: "Criterio" },
     { name: "puntaje_maximo", label: "Puntaje máximo", type: "number" },
   ], [{}, {}]);
-  const button = el("button", "primary", "Crear rúbrica");
-  form.append(el("div", "mt-3"), button);
+  const button = ui.button("Crear rúbrica", { variant: "primary", type: "submit", icon: "plus-lg" });
+  const actions = el("div", "wf-actions");
+  actions.append(button);
+  form.append(actions);
   submitForm(form, button, `/api/retos/${retoId}/rubrica`, () => ({
     nombre: form.elements.nombre.value,
     descripcion: form.elements.descripcion.value,
