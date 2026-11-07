@@ -18,6 +18,8 @@ pub struct CompanyReview {
     #[serde(default)]
     observaciones: String,
 }
+/// Estado, archivo, dueño, vencido y empresa de un documento.
+type DocumentRow = (String, Option<String>, Option<i64>, bool, i64);
 pub async fn review(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -271,7 +273,7 @@ pub async fn document(
         return Err(AppError::bad("Indica una decisión y el motivo del rechazo"));
     }
     let mut tx = state.pool.begin().await?;
-    let row:Option<(String,Option<String>,Option<i64>,bool,i64)>=sqlx::query_as("SELECT d.estado,d.archivo,e.usuario_id,(d.fecha_vencimiento IS NOT NULL AND d.fecha_vencimiento<(now() at time zone 'America/Bogota')::date),e.id FROM documentos_empresas d JOIN empresas e ON e.id=d.empresa_id WHERE d.id=$1 FOR UPDATE OF d").bind(id).fetch_optional(&mut *tx).await?;
+    let row: Option<DocumentRow> =sqlx::query_as("SELECT d.estado,d.archivo,e.usuario_id,(d.fecha_vencimiento IS NOT NULL AND d.fecha_vencimiento<(now() at time zone 'America/Bogota')::date),e.id FROM documentos_empresas d JOIN empresas e ON e.id=d.empresa_id WHERE d.id=$1 FOR UPDATE OF d").bind(id).fetch_optional(&mut *tx).await?;
     let (from, file, owner, expired, company) = row.ok_or_else(AppError::not_found)?;
     domain::transition("MAQUINA_DOCUMENTO", &from, &input.estado)?;
     if input.estado == "VERIFICADO" && (expired || file.as_deref().unwrap_or("").is_empty()) {

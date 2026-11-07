@@ -51,18 +51,16 @@ jobs:
       - name: Formato
         run: cargo fmt --check
 
-      # CFG-09: quality gate equivalent to quality.yml's ruff/bandit.
-      # It runs as warnings (not -D warnings) because some pre-existing files
-      # still have clippy warnings to clean up.
+      # CFG-09: quality gate; any clippy warning fails the build.
       - name: Clippy (lint)
-        run: cargo clippy --locked --all-targets -- -W clippy::all
+        run: cargo clippy --locked --all-targets -- -D warnings
 
       - name: Instalar cargo-audit
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-audit
 
-      # CFG-09: dependency audit gate (pip-audit equivalent). RUSTSEC-2023-0071
+      # CFG-09: dependency audit gate RUSTSEC-2023-0071
       # (rsa) is ignored: no fixed version exists and rsa is an optional sqlx
       # dependency that this feature set never builds.
       - name: Auditoría de dependencias

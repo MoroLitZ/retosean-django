@@ -493,10 +493,10 @@ pub async fn report(
 
 /// Hackathon detail in the generic browser also applies the schedule first.
 pub async fn advance_before_read(state: &AppState, name: &str, id: i64) {
-    if name == "hackathons" {
-        if let Err(error) = advance(&state.pool, id).await {
-            tracing::warn!(?error, "hackathon schedule advance failed");
-        }
+    if name == "hackathons"
+        && let Err(error) = advance(&state.pool, id).await
+    {
+        tracing::warn!(?error, "hackathon schedule advance failed");
     }
 }
 

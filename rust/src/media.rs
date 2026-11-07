@@ -108,12 +108,12 @@ pub async fn submit(
     }
     let previous:Option<(i64,String,bool,bool)>=sqlx::query_as("SELECT id,estado,es_final,calificacion_publicada FROM entregables WHERE reto_id=$1 AND estudiante_id=$2 AND titulo=$3 FOR UPDATE").bind(reto).bind(user.id).bind(&title).fetch_optional(&mut *tx).await?;
     // PAR-03: un entregable final o con calificación publicada no se reemplaza.
-    if let Some((_, _, es_final, publicada)) = &previous {
-        if *es_final || *publicada {
-            return Err(AppError::bad(
-                "No puedes reemplazar un entregable final o con calificación publicada.",
-            ));
-        }
+    if let Some((_, _, es_final, publicada)) = &previous
+        && (*es_final || *publicada)
+    {
+        return Err(AppError::bad(
+            "No puedes reemplazar un entregable final o con calificación publicada.",
+        ));
     }
     let id:i64=sqlx::query_scalar("INSERT INTO entregables(reto_id,estudiante_id,titulo,es_final,puntaje_maximo,archivo,comentario_estudiante,fecha_entrega,actualizado_en,estado) VALUES($1,$2,$3,$4,5.00,$5,$6,now(),now(),'ENVIADO') ON CONFLICT(reto_id,estudiante_id,titulo) DO UPDATE SET archivo=excluded.archivo,comentario_estudiante=excluded.comentario_estudiante,es_final=excluded.es_final,estado='ENVIADO',nota=NULL,comentario_profesor=NULL,calificacion_publicada=false,calificacion_publicada_en=NULL,actualizado_en=now() RETURNING id")
         .bind(reto).bind(user.id).bind(&title).bind(final_file).bind(&key).bind(&comment).fetch_one(&mut *tx).await?;
@@ -429,29 +429,6 @@ async fn store_document(
     }
     Ok(Json(json!({"id":id,"estado":"CARGADO"})))
 }
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn paths_cannot_escape_private_storage() {
-        for key in [
-            "../secret.pdf",
-            "C:\\secret.pdf",
-            "a/b.pdf",
-            "../../.env",
-            "",
-        ] {
-            assert!(!safe_key(key));
-        }
-        assert!(safe_key("09df6e9134944ef89f4af98922ae8322.pdf"));
-    }
-    #[test]
-    fn formats_are_detected_from_content() {
-        assert_eq!(extension(b"%PDF-1.4").unwrap(), "pdf");
-        assert_eq!(extension(b"text").unwrap(), "txt");
-        assert!(extension(b"\0\xff\0").is_err());
-    }
-}
 
 /// MultipleFileField: up to 50 MB per file (retos and follow-ups).
 pub const ATTACHMENT_LIMIT: usize = 50 * 1024 * 1024;
@@ -630,4 +607,27 @@ pub async fn reto_files(
         return Err(error.into());
     }
     Ok(Json(json!({"archivos": saved.len()})))
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn paths_cannot_escape_private_storage() {
+        for key in [
+            "../secret.pdf",
+            "C:\\secret.pdf",
+            "a/b.pdf",
+            "../../.env",
+            "",
+        ] {
+            assert!(!safe_key(key));
+        }
+        assert!(safe_key("09df6e9134944ef89f4af98922ae8322.pdf"));
+    }
+    #[test]
+    fn formats_are_detected_from_content() {
+        assert_eq!(extension(b"%PDF-1.4").unwrap(), "pdf");
+        assert_eq!(extension(b"text").unwrap(), "txt");
+        assert!(extension(b"\0\xff\0").is_err());
+    }
 }

@@ -48,6 +48,16 @@ pub struct RubricInput {
 }
 
 /// POST: a rubric for a reto the professor integrated (crear_rubrica).
+/// Entregable, estudiante, título, reto, nota, máximo y retroalimentación.
+type PendingGrade = (
+    i64,
+    i64,
+    String,
+    String,
+    Option<Decimal>,
+    Decimal,
+    Option<String>,
+);
 pub async fn create_rubric(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -249,7 +259,7 @@ pub async fn publish(
     let user = auth::current(&state, &headers, true).await?;
     owns(&state, &user, reto).await?;
     let mut tx = state.pool.begin().await?;
-    let pending: Vec<(i64, i64, String, String, Option<Decimal>, Decimal, Option<String>)> = sqlx::query_as("UPDATE entregables e SET calificacion_publicada=true,calificacion_publicada_en=now(),actualizado_en=now() FROM retos r WHERE r.id=e.reto_id AND e.reto_id=$1 AND e.estado='CALIFICADO' AND NOT e.calificacion_publicada RETURNING e.id,e.estudiante_id,e.titulo,r.titulo,e.nota,e.puntaje_maximo,e.comentario_profesor")
+    let pending: Vec<PendingGrade> = sqlx::query_as("UPDATE entregables e SET calificacion_publicada=true,calificacion_publicada_en=now(),actualizado_en=now() FROM retos r WHERE r.id=e.reto_id AND e.reto_id=$1 AND e.estado='CALIFICADO' AND NOT e.calificacion_publicada RETURNING e.id,e.estudiante_id,e.titulo,r.titulo,e.nota,e.puntaje_maximo,e.comentario_profesor")
         .bind(reto).fetch_all(&mut *tx).await?;
     let stamp = chrono::Utc::now().format("%Y%m%d%H%M%S");
     for (id, student, title, reto_title, nota, max, feedback) in &pending {
