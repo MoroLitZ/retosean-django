@@ -9,19 +9,6 @@
       type="image/svg+xml"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a0a0a'/%3E%3Ccircle cx='8' cy='8' r='3.2' fill='%233bac52'/%3E%3Ccircle cx='16' cy='8' r='3.2' fill='%233bac52'/%3E%3Ccircle cx='24' cy='8' r='3.2' fill='%233bac52'/%3E%3Ccircle cx='8' cy='16' r='3.2' fill='%233bac52'/%3E%3Ccircle cx='16' cy='16' r='3.2' fill='%23ffffff33'/%3E%3Ccircle cx='24' cy='16' r='3.2' fill='%233bac52'/%3E%3Ccircle cx='8' cy='24' r='3.2' fill='%233bac52'/%3E%3Ccircle cx='16' cy='24' r='3.2' fill='%233bac52'/%3E%3Ccircle cx='24' cy='24' r='3.2' fill='%233bac52'/%3E%3C/svg%3E"
     />
-    <!-- Same fonts, Bootstrap and icons as the Django templates/base.html -->
-    <link
-      href="https://fonts.googleapis.com/css2?family=Poppins:wght@700;800;900&family=Open+Sans:ital,wght@0,300;0,400;0,600;0,700;1,400&display=swap"
-      rel="stylesheet"
-    />
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-    />
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
-      rel="stylesheet"
-    />
     <link rel="stylesheet" href="/assets/legacy.css" />
     <link rel="stylesheet" href="/assets/tokens.css" />
     <link rel="stylesheet" href="/assets/base.css" />
@@ -32,9 +19,12 @@
     <link rel="stylesheet" href="/assets/records.css" />
     <link rel="stylesheet" href="/assets/detail.css" />
     <link rel="stylesheet" href="/assets/forms.css" />
+    <link rel="stylesheet" href="/assets/workflows.css" />
+    <link rel="stylesheet" href="/assets/builder.css" />
     <script defer src="/assets/chart.js"></script>
     <script defer src="/assets/icons.js"></script>
     <script defer src="/assets/core.js"></script>
+    <script defer src="/assets/ui.js"></script>
     <script defer src="/assets/dashboard.js"></script>
     <script defer src="/assets/records.js"></script>
     <script defer src="/assets/detail.js"></script>
@@ -46,92 +36,147 @@
     <script defer src="/assets/main.js"></script>
   </head>
   <body class="auth">
-    <!-- ══ LOGIN (usuarios/login.html) ══ -->
+    <!-- Icon sprite for the static (non-JS) shell chrome. -->
+    <svg hidden aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-building" viewBox="0 0 24 24">
+        <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z" />
+        <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" />
+        <path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2" />
+        <path d="M10 6h4" /><path d="M10 10h4" /><path d="M10 14h4" /><path d="M10 18h4" />
+      </symbol>
+      <symbol id="i-journal-text" viewBox="0 0 24 24">
+        <path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1" />
+        <path d="M16 3h1a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2 2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1" />
+        <path d="M8 7h3" /><path d="M8 11h3" />
+      </symbol>
+      <symbol id="i-mortarboard" viewBox="0 0 24 24">
+        <path d="M22 10 12 5 2 10l10 5 10-5z" />
+        <path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" />
+        <path d="M22 10v6" />
+      </symbol>
+      <symbol id="i-person" viewBox="0 0 24 24">
+        <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
+      </symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24">
+        <rect width="18" height="10" x="3" y="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+      </symbol>
+      <symbol id="i-box-arrow-in-right" viewBox="0 0 24 24">
+        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+        <path d="m12 17 5-5-5-5" /><path d="M17 12H3" />
+      </symbol>
+      <symbol id="i-list" viewBox="0 0 24 24">
+        <path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" />
+        <path d="M3 6h.01" /><path d="M3 12h.01" /><path d="M3 18h.01" />
+      </symbol>
+      <symbol id="i-bell" viewBox="0 0 24 24">
+        <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+        <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+      </symbol>
+      <symbol id="i-box-arrow-right" viewBox="0 0 24 24">
+        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+        <path d="m8 7-5 5 5 5" /><path d="M3 12h13" />
+      </symbol>
+      <symbol id="i-funnel" viewBox="0 0 24 24">
+        <path d="M3 4h18l-7 8v6l-4 3v-9z" />
+      </symbol>
+      <symbol id="i-calendar3" viewBox="0 0 24 24">
+        <rect width="18" height="18" x="3" y="4" rx="2" />
+        <path d="M16 2v4" /><path d="M8 2v4" /><path d="M3 10h18" />
+      </symbol>
+      <symbol id="i-exclamation-triangle" viewBox="0 0 24 24">
+        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+        <path d="M12 9v4" /><path d="M12 17h.01" />
+      </symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <path d="m7 10 5-5 5 5" /><path d="M12 5v12" />
+      </symbol>
+      <symbol id="i-plus-lg" viewBox="0 0 24 24">
+        <path d="M5 12h14" /><path d="M12 5v14" />
+      </symbol>
+      <symbol id="i-search" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
+      </symbol>
+      <symbol id="i-file-earmark-text" viewBox="0 0 24 24">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+        <path d="M14 2v6h6" /><path d="M16 13H8" /><path d="M16 17H8" /><path d="M10 9H8" />
+      </symbol>
+      <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></symbol>
+      <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></symbol>
+    </svg>
+
+    <div class="app-progress" id="app-progress" role="progressbar" aria-label="Cargando" hidden></div>
+    <a class="skip-link" href="#main-content">Saltar al contenido principal</a>
+
+    <!-- ══ LOGIN ══ -->
     <main id="login-view" class="auth-card">
-      <div class="row g-0">
-        <div class="col-md-5 auth-panel-left">
-          <div>
-            <div class="brand-logo-auth mb-1">
-              <div class="brand-dots-auth">
-                <span></span><span></span><span></span><span></span
-                ><span></span><span></span><span></span><span></span
-                ><span></span>
-              </div>
-              <div class="brand-wordmark-auth">
-                <span class="brand-retos">retos</span
-                ><span class="brand-ean">ean</span>
-              </div>
+      <div class="auth-panel-left">
+        <div>
+          <div class="brand-logo-auth">
+            <div class="brand-dots-auth" aria-hidden="true">
+              <span></span><span></span><span></span><span></span
+              ><span></span><span></span><span></span><span></span><span></span>
             </div>
-            <div class="brand-sub-auth mb-4">
-              Universidad EAN · Plataforma Académica
+            <div class="brand-wordmark-auth">
+              <span class="brand-retos">retos</span><span class="brand-ean">ean</span>
             </div>
-            <p class="auth-intro">
-              Conectamos empresas, profesores y estudiantes a través de retos y
-              hackathons del mundo real.
-            </p>
-            <div class="auth-divider"></div>
           </div>
-          <div>
-            <div class="auth-feature-item">
-              <div class="auth-feature-icon icon-green">
-                <i class="bi bi-building"></i>
-              </div>
-              <div>
-                <div class="auth-feature-title">Empresas</div>
-                <div class="auth-feature-sub">
-                  Publica retos reales de negocio
-                </div>
-              </div>
+          <div class="brand-sub-auth">Universidad EAN · Plataforma Académica</div>
+          <p class="auth-intro">
+            Conectamos empresas, profesores y estudiantes a través de retos y
+            hackathons del mundo real.
+          </p>
+          <div class="auth-divider"></div>
+        </div>
+        <div>
+          <div class="auth-feature-item">
+            <div class="auth-feature-icon icon-green" aria-hidden="true">
+              <svg class="icon icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-building"></use></svg>
             </div>
-            <div class="auth-feature-item">
-              <div class="auth-feature-icon icon-blue">
-                <i class="bi bi-journal-text"></i>
-              </div>
-              <div>
-                <div class="auth-feature-title">Profesores</div>
-                <div class="auth-feature-sub">
-                  Vincula tus cursos con la industria
-                </div>
-              </div>
+            <div>
+              <div class="auth-feature-title">Empresas</div>
+              <div class="auth-feature-sub">Publica retos reales de negocio</div>
             </div>
-            <div class="auth-feature-item">
-              <div class="auth-feature-icon icon-green-soft">
-                <i class="bi bi-mortarboard"></i>
-              </div>
-              <div>
-                <div class="auth-feature-title">Estudiantes</div>
-                <div class="auth-feature-sub">
-                  Resuelve retos y gana experiencia
-                </div>
-              </div>
+          </div>
+          <div class="auth-feature-item">
+            <div class="auth-feature-icon icon-blue" aria-hidden="true">
+              <svg class="icon icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-journal-text"></use></svg>
             </div>
-            <div class="auth-university-badge mt-3">
-              <span class="dot"></span> © 2026 Universidad EAN · Bogotá,
-              Colombia
+            <div>
+              <div class="auth-feature-title">Profesores</div>
+              <div class="auth-feature-sub">Vincula tus cursos con la industria</div>
             </div>
+          </div>
+          <div class="auth-feature-item">
+            <div class="auth-feature-icon icon-green-soft" aria-hidden="true">
+              <svg class="icon icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-mortarboard"></use></svg>
+            </div>
+            <div>
+              <div class="auth-feature-title">Estudiantes</div>
+              <div class="auth-feature-sub">Resuelve retos y gana experiencia</div>
+            </div>
+          </div>
+          <div class="auth-university-badge">
+            <span class="dot"></span> © 2026 Universidad EAN · Bogotá, Colombia
           </div>
         </div>
-        <div class="col-md-7 auth-panel-right">
-          <div id="auth-login">
+      </div>
+      <div class="auth-panel-right">
+        <div id="auth-login">
           <h2>Bienvenido de vuelta</h2>
-          <p class="auth-subtitle">
-            Ingresa tus credenciales para acceder al sistema
-          </p>
-          <div
-            id="login-error"
-            class="alert alert-danger align-items-center gap-2 py-2 mb-3"
-            role="alert"
-            hidden
-          ></div>
+          <p class="auth-subtitle">Ingresa tus credenciales para acceder al sistema</p>
+          <div id="login-error" class="alert alert--danger" role="alert" hidden></div>
           <form id="login-form" novalidate>
-            <div class="mb-3">
-              <label for="username" class="form-label">Usuario o correo</label>
+            <div class="field">
+              <label for="username" class="field__label">Usuario o correo</label>
               <div class="input-group">
-                <span class="input-group-text"><i class="bi bi-person"></i></span
-                ><input
+                <span class="input-group-text" aria-hidden="true">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-person"></use></svg>
+                </span>
+                <input
                   id="username"
                   name="username"
-                  class="form-control"
+                  class="input"
                   placeholder="usuario"
                   autocomplete="username"
                   required
@@ -139,70 +184,70 @@
                 />
               </div>
             </div>
-            <div class="mb-4">
-              <label for="password" class="form-label">Contraseña</label>
+            <div class="field">
+              <label for="password" class="field__label">Contraseña</label>
               <div class="input-group">
-                <span class="input-group-text"><i class="bi bi-lock"></i></span
-                ><input
+                <span class="input-group-text" aria-hidden="true">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-lock"></use></svg>
+                </span>
+                <input
                   id="password"
                   name="password"
                   type="password"
-                  class="form-control"
+                  class="input"
                   autocomplete="current-password"
                   required
                   maxlength="1024"
-                /><button
-                  class="btn input-group-text toggle-password"
+                />
+                <button
+                  class="input-group-text toggle-password"
                   type="button"
                   id="toggle-password"
                   title="Mostrar/ocultar"
                   aria-label="Mostrar u ocultar la contraseña"
                 >
-                  <i class="bi bi-eye"></i>
+                  <i class="eye-icon" aria-hidden="true"></i>
                 </button>
               </div>
             </div>
-            <button type="submit" class="btn btn-auth w-100">
-              <i class="bi bi-box-arrow-in-right me-2"></i>Ingresar al Sistema
+            <button type="submit" class="btn btn--primary w-100">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-box-arrow-in-right"></use></svg>
+              Ingresar al Sistema
             </button>
           </form>
           <p class="text-center mt-3 mb-0">
-            <a href="#recuperar" class="text-link-green small">¿Olvidaste tu contraseña?</a>
+            <a href="#recuperar" class="text-link small">¿Olvidaste tu contraseña?</a>
           </p>
           <hr class="auth-hr" />
           <p class="text-center mb-0 auth-note">
             ¿No tienes una cuenta?
-            <a href="#registro" class="text-link-green ms-1">Regístrate aquí</a>
+            <a href="#registro" class="text-link ms-1">Regístrate aquí</a>
           </p>
-          </div>
-          <!-- Registration, recovery and reset (usuarios/registro.html, password_reset*.html) -->
-          <div id="auth-alt" hidden></div>
         </div>
+        <div id="auth-alt" hidden></div>
       </div>
     </main>
 
-    <!-- ══ APP (templates/base.html) ══ -->
+    <!-- ══ APP ══ -->
     <div id="app-view" hidden>
       <div class="sidebar-overlay" id="sidebar-overlay"></div>
-      <nav id="sidebar">
+      <nav id="sidebar" aria-label="Navegación principal">
         <div class="sidebar-brand">
           <div class="brand-logo">
-            <div class="brand-dots">
+            <div class="brand-dots" aria-hidden="true">
               <span></span><span></span><span></span><span></span
-              ><span></span><span></span><span></span><span></span
-              ><span></span>
+              ><span></span><span></span><span></span><span></span><span></span>
             </div>
             <div class="brand-wordmark">
-              <span class="brand-retos">retos</span
-              ><span class="brand-ean">ean</span>
+              <span class="brand-retos">retos</span><span class="brand-ean">ean</span>
             </div>
           </div>
           <div class="brand-sub">Plataforma Académica</div>
         </div>
-        <ul id="navigation" class="nav flex-column py-2"></ul>
+        <ul id="navigation"></ul>
         <div class="sidebar-user">
-          <div class="d-flex align-items-center gap-2">
-            <div class="user-avatar" id="user-avatar"></div>
+          <div class="cluster">
+            <div class="avatar user-avatar" id="user-avatar"></div>
             <div class="min-w-0">
               <div class="user-name text-truncate" id="user-name"></div>
               <div class="user-role" id="user-role"></div>
@@ -211,146 +256,155 @@
         </div>
       </nav>
       <header id="topbar">
-        <button class="btn-sidebar-toggle" id="sidebar-toggle" aria-label="Menú">
-          <i class="bi bi-list"></i>
+        <button class="btn-sidebar-toggle" id="sidebar-toggle" aria-label="Abrir menú" aria-expanded="false">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-list"></use></svg>
         </button>
-        <h1 class="page-heading" id="page-heading">Dashboard</h1>
+        <h1 class="page-heading" id="page-heading" tabindex="-1">Dashboard</h1>
         <div class="position-relative">
           <button
             id="bell"
-            class="btn btn-sm btn-link position-relative text-decoration-none p-1 bell"
             type="button"
             aria-label="Notificaciones"
             aria-expanded="false"
+            aria-controls="bell-menu"
+            aria-haspopup="menu"
           >
-            <i class="bi bi-bell"></i
-            ><span
-              id="bell-count"
-              class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
-              hidden
-            ></span>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-bell"></use></svg>
+            <span id="bell-count" class="pill" hidden></span>
           </button>
-          <div id="bell-menu" class="dropdown-menu dropdown-menu-end shadow bell-menu" hidden>
-            <h6 class="dropdown-header">Notificaciones</h6>
+          <div id="bell-menu" class="menu bell-menu" role="menu" aria-labelledby="bell-menu-title" hidden>
+            <h6 id="bell-menu-title" class="menu__header">Notificaciones</h6>
             <div id="bell-items" class="bell-items"></div>
-            <div class="dropdown-divider"></div>
-            <a class="dropdown-item text-center small fw-semibold" href="#notificaciones">Ver todas</a>
+            <div class="menu__divider"></div>
+            <a class="menu__item" href="#notificaciones">Ver todas</a>
           </div>
         </div>
-        <span class="topbar-email d-none d-lg-inline" id="topbar-email"></span>
-        <button
-          id="logout"
-          type="button"
-          class="btn btn-sm btn-outline-danger d-none d-md-flex align-items-center gap-1"
-        >
-          <i class="bi bi-box-arrow-right"></i> Salir
+        <span class="topbar-email" id="topbar-email"></span>
+        <button id="logout" type="button" class="btn btn--danger btn--sm">
+          <svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-box-arrow-right"></use></svg>
+          Salir
         </button>
       </header>
-      <main id="main-content">
+      <main id="main-content" tabindex="-1">
         <div class="content-wrapper">
-          <div id="app-error" class="alert alert-danger" role="alert" hidden></div>
+          <nav aria-label="Migas de pan" class="breadcrumbs" id="breadcrumbs"></nav>
+          <div id="app-error" class="alert alert--danger" role="alert" hidden></div>
 
-          <!-- Dashboard de Indicadores (apps/dashboard/templates) -->
+          <!-- Dashboard de Indicadores -->
           <section id="dashboard-panel">
             <div class="card-panel mb-4">
               <div class="p-3">
-                <form id="periodo-form" class="row g-2 align-items-end">
-                  <div class="col-sm-6 col-md-3">
-                    <label for="periodo" class="form-label small fw-semibold text-secondary mb-1">Periodo</label>
-                    <select name="periodo" id="periodo" class="form-select form-select-sm"></select>
+                <form id="periodo-form" class="form-grid">
+                  <div class="field">
+                    <label for="periodo" class="field__label">Periodo</label>
+                    <select name="periodo" id="periodo" class="select"></select>
                   </div>
-                  <div class="col-sm-6 col-md-2 custom-range" hidden>
-                    <label for="desde" class="form-label small fw-semibold text-secondary mb-1">Desde</label>
-                    <input type="date" name="desde" id="desde" class="form-control form-control-sm" />
+                  <div class="field custom-range" hidden>
+                    <label for="desde" class="field__label">Desde</label>
+                    <input type="date" name="desde" id="desde" class="input" />
                   </div>
-                  <div class="col-sm-6 col-md-2 custom-range" hidden>
-                    <label for="hasta" class="form-label small fw-semibold text-secondary mb-1">Hasta</label>
-                    <input type="date" name="hasta" id="hasta" class="form-control form-control-sm" />
+                  <div class="field custom-range" hidden>
+                    <label for="hasta" class="field__label">Hasta</label>
+                    <input type="date" name="hasta" id="hasta" class="input" />
                   </div>
-                  <div class="col-sm-6 col-md-3 admin-filter" hidden>
-                    <label for="facultad" class="form-label small fw-semibold text-secondary mb-1">Facultad</label>
-                    <select name="facultad" id="facultad" class="form-select form-select-sm"></select>
+                  <div class="field admin-filter" hidden>
+                    <label for="facultad" class="field__label">Facultad</label>
+                    <select name="facultad" id="facultad" class="select"></select>
                   </div>
-                  <div class="col-sm-6 col-md-2 admin-filter" hidden>
-                    <label for="programa" class="form-label small fw-semibold text-secondary mb-1">Programa</label>
-                    <select name="programa" id="programa" class="form-select form-select-sm"></select>
+                  <div class="field admin-filter" hidden>
+                    <label for="programa" class="field__label">Programa</label>
+                    <select name="programa" id="programa" class="select"></select>
                   </div>
-                  <div class="col-sm-6 col-md-2 admin-filter" hidden>
-                    <label for="ecosistema" class="form-label small fw-semibold text-secondary mb-1">Ecosistema</label>
-                    <select name="ecosistema" id="ecosistema" class="form-select form-select-sm"></select>
+                  <div class="field admin-filter" hidden>
+                    <label for="ecosistema" class="field__label">Ecosistema</label>
+                    <select name="ecosistema" id="ecosistema" class="select"></select>
                   </div>
-                  <div class="col-sm-6 col-md-2">
-                    <button type="submit" class="btn btn-sm btn-primary w-100">
-                      <i class="bi bi-funnel"></i> Aplicar
+                  <div class="field field--full">
+                    <button type="submit" class="btn btn--primary">
+                      <svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-funnel"></use></svg>
+                      Aplicar
                     </button>
                   </div>
                 </form>
                 <p class="text-muted small mb-0 mt-2">
-                  <i class="bi bi-calendar3"></i> Mostrando:
+                  <svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-calendar3"></use></svg>
+                  Mostrando:
                   <strong id="etiqueta-periodo"></strong>
                 </p>
               </div>
             </div>
-            <div id="sin-rol" class="alert alert-warning mb-4" hidden>
-              <i class="bi bi-exclamation-triangle"></i>
+            <div id="sin-rol" class="alert alert--warning mb-4" hidden>
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-exclamation-triangle"></use></svg>
               Tu usuario no tiene un rol asignado, por lo que no hay indicadores
               que mostrar. Contacta con el administrador para que te asigne uno.
             </div>
             <div id="kpis" class="row g-3 mb-4"></div>
             <div id="graficas" class="row g-3 mb-4"></div>
-            <div id="accesos" class="d-flex flex-wrap gap-2"></div>
+            <div id="accesos" class="cluster"></div>
           </section>
 
-          <!-- Listados -->
+          <!-- Constructor de reportes -->
           <section id="builder-panel" hidden></section>
+
+          <!-- Listados -->
           <section id="records-panel" hidden>
-            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-4">
-              <div>
+            <div class="cluster cluster--lg cluster--between align-items-start mb-4">
+              <div class="stack stack--sm">
                 <h2 class="page-title" id="page-title"></h2>
                 <p class="page-subtitle mb-0" id="record-count"></p>
               </div>
-              <button id="import-users" type="button" class="btn btn-outline-secondary" hidden>
-                <i class="bi bi-upload"></i> Importar usuarios
-              </button>
-              <button id="new-challenge" type="button" class="btn btn-ean" hidden>
-                <i class="bi bi-plus-lg"></i> <span id="new-label">Nuevo</span>
-              </button>
+              <div class="cluster cluster--sm">
+                <button id="import-users" type="button" class="btn btn--secondary btn--sm" hidden>
+                  <svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-upload"></use></svg>
+                  Importar usuarios
+                </button>
+                <button id="new-challenge" type="button" class="btn btn--primary btn--sm" hidden>
+                  <svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-plus-lg"></use></svg>
+                  <span id="new-label">Nuevo</span>
+                </button>
+              </div>
             </div>
             <div class="card-panel">
               <div class="card-panel-header">
-                <form id="search-form" class="d-flex flex-wrap gap-2 w-100" role="search">
+                <form id="search-form" class="cluster cluster--sm w-100" role="search">
                   <label class="visually-hidden" for="search">Buscar registros</label>
-                  <input
-                    id="search"
-                    type="search"
-                    class="form-control form-control-sm search-input"
-                    placeholder="Buscar…"
-                    maxlength="200"
-                  />
-                  <button class="btn btn-sm btn-outline-secondary" type="submit">
-                    <i class="bi bi-search"></i> Buscar
+                  <input id="search" type="search" class="input search-input" placeholder="Buscar…" maxlength="200" />
+                  <button class="btn btn--secondary btn--sm" type="submit">
+                    <svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-search"></use></svg>
+                    Buscar
                   </button>
-                  <span id="exports" class="ms-auto d-flex gap-2">
-                    <a id="export-link" class="btn btn-sm btn-outline-secondary"><i class="bi bi-filetype-csv"></i> CSV</a>
-                    <a id="export-pdf" class="btn btn-sm btn-outline-danger"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
-                    <a id="export-xlsx" class="btn btn-sm btn-outline-success"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+                  <span id="exports" class="cluster cluster--sm ms-auto">
+                    <a id="export-link" class="btn btn--secondary btn--sm">
+                      <svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-file-earmark-text"></use></svg>
+                      CSV
+                    </a>
+                    <a id="export-pdf" class="btn btn--danger btn--sm">
+                      <svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-file-earmark-text"></use></svg>
+                      PDF
+                    </a>
+                    <a id="export-xlsx" class="btn btn--accent btn--sm">
+                      <svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-file-earmark-text"></use></svg>
+                      Excel
+                    </a>
                   </span>
                 </form>
               </div>
-              <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                  <thead class="table-light" id="table-head"></thead>
+              <div class="table-wrap">
+                <table class="data-table is-hoverable align-middle mb-0">
+                  <thead id="table-head"></thead>
                   <tbody id="table-body"></tbody>
                 </table>
               </div>
             </div>
-            <div class="d-flex justify-content-center align-items-center gap-3 mt-3">
-              <button id="previous" type="button" class="btn btn-sm btn-outline-secondary">
-                <i class="bi bi-chevron-left"></i> Anterior
+            <div class="cluster cluster--sm cluster--center mt-3">
+              <button id="previous" type="button" class="btn btn--secondary btn--sm">
+                <svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-chevron-left"></use></svg>
+                Anterior
               </button>
               <span id="page-number" class="small text-muted"></span>
-              <button id="next" type="button" class="btn btn-sm btn-outline-secondary">
-                Siguiente <i class="bi bi-chevron-right"></i>
+              <button id="next" type="button" class="btn btn--secondary btn--sm">
+                Siguiente
+                <svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
               </button>
             </div>
             <div id="extra-panel"></div>
@@ -358,13 +412,17 @@
         </div>
       </main>
     </div>
-    <dialog id="detail-dialog">
+
+    <dialog id="detail-dialog" aria-labelledby="dialog-title">
       <div class="dialog-top">
         <h2 id="dialog-title">Detalle</h2>
-        <button id="close-dialog" type="button" class="btn-close" aria-label="Cerrar"></button>
+        <button id="close-dialog" type="button" class="icon-btn" aria-label="Cerrar">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+        </button>
       </div>
-      <div id="dialog-content"></div>
+      <div id="dialog-content" class="dialog-body"></div>
     </dialog>
-    <div id="toast" role="status" popover="manual" hidden></div>
+
+    <div id="toast" role="status" aria-live="polite" aria-atomic="true" popover="manual" hidden></div>
   </body>
 </html>

@@ -177,7 +177,7 @@ From `rust/`:
 
 ```text
 cargo fmt --check
-node --check web/app.js
+for f in web/js/*.js; do node --check "$f"; done
 cargo test --locked -- --include-ignored
 ```
 

@@ -1,1 +1,571 @@
-/* base.css */
+/* ═══════════════════════════════════════════════════════════════════════════
+   RetosEAN Base — modern reset, typography, focus, utilities
+   Consumes variables from tokens.css. No external fonts, no icon fonts.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Modern reset ── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+html:focus-within {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  line-height: var(--leading-normal);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+img,
+picture,
+svg,
+canvas,
+video {
+  display: block;
+  max-width: 100%;
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  overflow-wrap: break-word;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-display);
+  line-height: var(--leading-tight);
+  font-weight: var(--weight-bold);
+  color: var(--ink);
+}
+
+ul,
+ol {
+  padding: 0;
+}
+
+ul[role="list"],
+ol[role="list"] {
+  list-style: none;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── 2. Typography ── */
+h1 {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-extrabold);
+}
+h2 {
+  font-size: var(--text-xl);
+}
+h3 {
+  font-size: var(--text-lg);
+}
+h4 {
+  font-size: var(--text-base);
+}
+h5 {
+  font-size: var(--text-sm);
+}
+h6 {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+small,
+.small {
+  font-size: var(--text-sm);
+}
+
+strong {
+  font-weight: var(--weight-semibold);
+}
+
+code,
+pre,
+kbd,
+samp {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+/* ── 3. Links ── */
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+a.text-link,
+.text-link,
+.text-link-green {
+  color: var(--brand);
+  font-weight: var(--weight-semibold);
+}
+.text-link:hover,
+.text-link-green:hover {
+  color: var(--brand-hover);
+}
+
+/* ── 4. Focus-visible (keyboard only) ── */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid rgba(59, 172, 82, 0.55);
+  outline-offset: var(--focus-offset);
+  border-radius: 2px;
+}
+
+:where(a, button, input, select, textarea, summary, [tabindex]):focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ── 5. Selection ── */
+::selection {
+  background: var(--brand);
+  color: #ffffff;
+}
+
+/* ── 6. Scrollbars ── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-faint);
+  background-clip: content-box;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   7. Documented utility set
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* --- Layout primitives --- */
+
+/* Vertical stack with a default gap. Add --sm/--lg for tighter/looser. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.stack--sm {
+  gap: var(--space-2);
+}
+.stack--lg {
+  gap: var(--space-6);
+}
+
+/* Horizontal wrapping cluster of items. */
+.cluster {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.cluster--sm {
+  gap: var(--space-2);
+}
+.cluster--lg {
+  gap: var(--space-5);
+}
+.cluster--center {
+  justify-content: center;
+}
+.cluster--between {
+  justify-content: space-between;
+}
+.cluster--start {
+  align-items: flex-start;
+}
+
+/* Responsive card grid. Defaults to one column and grows with width. */
+.grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+.grid--2 {
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+.grid--3 {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+.grid--4 {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+
+/* --- Accessibility --- */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* --- Text tones --- */
+.text-muted {
+  color: var(--ink-muted) !important;
+}
+.text-soft {
+  color: var(--ink-soft) !important;
+}
+.text-dark {
+  color: var(--ink) !important;
+}
+.text-brand {
+  color: var(--brand) !important;
+}
+.text-accent {
+  color: var(--accent) !important;
+}
+.text-success {
+  color: var(--success) !important;
+}
+.text-warning {
+  color: var(--warning) !important;
+}
+.text-danger {
+  color: var(--danger) !important;
+}
+.text-info {
+  color: var(--info) !important;
+}
+.text-center {
+  text-align: center !important;
+}
+.text-start {
+  text-align: left !important;
+}
+.text-end {
+  text-align: right !important;
+}
+.text-uppercase {
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em;
+}
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.text-wrap {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.fw-normal {
+  font-weight: var(--weight-normal) !important;
+}
+.fw-semibold {
+  font-weight: var(--weight-semibold) !important;
+}
+.fw-bold {
+  font-weight: var(--weight-bold) !important;
+}
+
+/* --- Spacing steps (margin) --- */
+.mt-0 { margin-top: 0 !important; }
+.mt-1 { margin-top: 0.25rem !important; }
+.mt-2 { margin-top: 0.5rem !important; }
+.mt-3 { margin-top: 1rem !important; }
+.mt-4 { margin-top: 1.5rem !important; }
+.mt-5 { margin-top: 3rem !important; }
+.mt-6 { margin-top: 4rem !important; }
+.mb-0 { margin-bottom: 0 !important; }
+.mb-1 { margin-bottom: 0.25rem !important; }
+.mb-2 { margin-bottom: 0.5rem !important; }
+.mb-3 { margin-bottom: 1rem !important; }
+.mb-4 { margin-bottom: 1.5rem !important; }
+.mb-5 { margin-bottom: 3rem !important; }
+.mb-6 { margin-bottom: 4rem !important; }
+.ms-0 { margin-inline-start: 0 !important; }
+.ms-1 { margin-inline-start: 0.25rem !important; }
+.ms-2 { margin-inline-start: 0.5rem !important; }
+.ms-3 { margin-inline-start: 1rem !important; }
+.ms-auto { margin-inline-start: auto !important; }
+.me-0 { margin-inline-end: 0 !important; }
+.me-1 { margin-inline-end: 0.25rem !important; }
+.me-2 { margin-inline-end: 0.5rem !important; }
+.me-3 { margin-inline-end: 1rem !important; }
+.me-auto { margin-inline-end: auto !important; }
+.mx-1 { margin-inline: 0.25rem !important; }
+.mx-2 { margin-inline: 0.5rem !important; }
+.mx-3 { margin-inline: 1rem !important; }
+.mx-auto { margin-inline: auto !important; }
+.my-1 { margin-block: 0.25rem !important; }
+.my-2 { margin-block: 0.5rem !important; }
+.my-3 { margin-block: 1rem !important; }
+.my-4 { margin-block: 1.5rem !important; }
+
+/* --- Spacing steps (padding) --- */
+.p-0 { padding: 0 !important; }
+.p-1 { padding: 0.25rem !important; }
+.p-2 { padding: 0.5rem !important; }
+.p-3 { padding: 1rem !important; }
+.p-4 { padding: 1.5rem !important; }
+.p-5 { padding: 3rem !important; }
+.px-2 { padding-inline: 0.5rem !important; }
+.px-3 { padding-inline: 1rem !important; }
+.px-4 { padding-inline: 1.5rem !important; }
+.py-1 { padding-block: 0.25rem !important; }
+.py-2 { padding-block: 0.5rem !important; }
+.py-3 { padding-block: 1rem !important; }
+.py-4 { padding-block: 1.5rem !important; }
+.py-5 { padding-block: 3rem !important; }
+.pt-1 { padding-top: 0.25rem !important; }
+.pt-3 { padding-top: 1rem !important; }
+.pb-3 { padding-bottom: 1rem !important; }
+
+/* --- Gap steps --- */
+.gap-0 { gap: 0 !important; }
+.gap-1 { gap: 0.25rem !important; }
+.gap-2 { gap: 0.5rem !important; }
+.gap-3 { gap: 1rem !important; }
+.gap-4 { gap: 1.5rem !important; }
+.gap-5 { gap: 3rem !important; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   8. TEMPORARY Bootstrap-compatibility utilities (display / flex / grid / position)
+      The view files (dashboard.js, records.js, detail.js, workflows.js, forms.js,
+      auth.js, evaluation.js, builder.js) still emit Bootstrap class names until
+      they are converted to the new system. These are stopgaps — delete them once
+      the views are migrated. See DESIGN.md § "Bootstrap → new".
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.d-flex { display: flex !important; }
+.d-inline { display: inline !important; }
+.d-inline-flex { display: inline-flex !important; }
+.d-block { display: block !important; }
+.d-none { display: none !important; }
+.d-grid { display: grid !important; }
+@media (min-width: 576px) {
+  .d-sm-none { display: none !important; }
+  .d-sm-flex { display: flex !important; }
+}
+@media (min-width: 768px) {
+  .d-md-flex { display: flex !important; }
+  .d-md-inline { display: inline !important; }
+  .d-md-none { display: none !important; }
+}
+@media (min-width: 992px) {
+  .d-lg-inline { display: inline !important; }
+  .d-lg-flex { display: flex !important; }
+  .d-lg-none { display: none !important; }
+}
+
+.flex-column { flex-direction: column !important; }
+.flex-row { flex-direction: row !important; }
+.flex-wrap { flex-wrap: wrap !important; }
+.flex-nowrap { flex-wrap: nowrap !important; }
+.flex-shrink-0 { flex-shrink: 0 !important; }
+.flex-grow-0 { flex-grow: 0 !important; }
+.flex-grow-1 { flex-grow: 1 !important; }
+
+.justify-content-start { justify-content: flex-start !important; }
+.justify-content-end { justify-content: flex-end !important; }
+.justify-content-center { justify-content: center !important; }
+.justify-content-between { justify-content: space-between !important; }
+.justify-content-around { justify-content: space-around !important; }
+.align-items-start { align-items: flex-start !important; }
+.align-items-center { align-items: center !important; }
+.align-items-end { align-items: flex-end !important; }
+.align-items-stretch { align-items: stretch !important; }
+.align-self-start { align-self: flex-start !important; }
+.align-self-center { align-self: center !important; }
+.align-self-end { align-self: flex-end !important; }
+
+/* --- Grid (row / col-*) --- */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  margin-left: -0.75rem;
+  margin-right: -0.75rem;
+}
+.row > [class*="col-"] {
+  width: 100%;
+  max-width: 100%;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+.col {
+  flex: 1 0 0%;
+}
+.col-auto {
+  flex: 0 0 auto;
+  width: auto;
+}
+.col-1 { flex: 0 0 auto; width: 8.333333%; }
+.col-2 { flex: 0 0 auto; width: 16.666667%; }
+.col-3 { flex: 0 0 auto; width: 25%; }
+.col-4 { flex: 0 0 auto; width: 33.333333%; }
+.col-5 { flex: 0 0 auto; width: 41.666667%; }
+.col-6 { flex: 0 0 auto; width: 50%; }
+.col-7 { flex: 0 0 auto; width: 58.333333%; }
+.col-8 { flex: 0 0 auto; width: 66.666667%; }
+.col-9 { flex: 0 0 auto; width: 75%; }
+.col-10 { flex: 0 0 auto; width: 83.333333%; }
+.col-11 { flex: 0 0 auto; width: 91.666667%; }
+.col-12 { flex: 0 0 auto; width: 100%; }
+
+@media (min-width: 576px) {
+  .col-sm-1 { flex: 0 0 auto; width: 8.333333%; }
+  .col-sm-2 { flex: 0 0 auto; width: 16.666667%; }
+  .col-sm-3 { flex: 0 0 auto; width: 25%; }
+  .col-sm-4 { flex: 0 0 auto; width: 33.333333%; }
+  .col-sm-6 { flex: 0 0 auto; width: 50%; }
+  .col-sm-12 { flex: 0 0 auto; width: 100%; }
+}
+@media (min-width: 768px) {
+  .col-md-1 { flex: 0 0 auto; width: 8.333333%; }
+  .col-md-2 { flex: 0 0 auto; width: 16.666667%; }
+  .col-md-3 { flex: 0 0 auto; width: 25%; }
+  .col-md-4 { flex: 0 0 auto; width: 33.333333%; }
+  .col-md-5 { flex: 0 0 auto; width: 41.666667%; }
+  .col-md-6 { flex: 0 0 auto; width: 50%; }
+  .col-md-7 { flex: 0 0 auto; width: 58.333333%; }
+  .col-md-12 { flex: 0 0 auto; width: 100%; }
+}
+@media (min-width: 992px) {
+  .col-lg-2 { flex: 0 0 auto; width: 16.666667%; }
+  .col-lg-3 { flex: 0 0 auto; width: 25%; }
+  .col-lg-4 { flex: 0 0 auto; width: 33.333333%; }
+  .col-lg-5 { flex: 0 0 auto; width: 41.666667%; }
+  .col-lg-6 { flex: 0 0 auto; width: 50%; }
+  .col-lg-7 { flex: 0 0 auto; width: 58.333333%; }
+  .col-lg-8 { flex: 0 0 auto; width: 66.666667%; }
+  .col-lg-9 { flex: 0 0 auto; width: 75%; }
+  .col-lg-12 { flex: 0 0 auto; width: 100%; }
+}
+
+/* Gutters g-0..g-3 (used by views via row g-3 etc.) */
+.g-0 { --gutter: 0; }
+.g-1 { --gutter: 0.25rem; }
+.g-2 { --gutter: 0.5rem; }
+.g-3 { --gutter: 1rem; }
+.g-4 { --gutter: 1.5rem; }
+.g-5 { --gutter: 3rem; }
+.row.g-0,
+.row.g-1,
+.row.g-2,
+.row.g-3,
+.row.g-4,
+.row.g-5 {
+  margin-left: calc(var(--gutter) * -0.5);
+  margin-right: calc(var(--gutter) * -0.5);
+}
+.row.g-0 > [class*="col-"],
+.row.g-1 > [class*="col-"],
+.row.g-2 > [class*="col-"],
+.row.g-3 > [class*="col-"],
+.row.g-4 > [class*="col-"],
+.row.g-5 > [class*="col-"] {
+  padding-left: calc(var(--gutter) * 0.5);
+  padding-right: calc(var(--gutter) * 0.5);
+}
+
+/* --- Position --- */
+.position-relative { position: relative !important; }
+.position-absolute { position: absolute !important; }
+.position-static { position: static !important; }
+.position-fixed { position: fixed !important; }
+.top-0 { top: 0 !important; }
+.start-0 { inset-inline-start: 0 !important; }
+.start-100 { inset-inline-start: 100% !important; }
+.end-0 { inset-inline-end: 0 !important; }
+.bottom-0 { bottom: 0 !important; }
+.translate-middle {
+  transform: translate(-50%, -50%) !important;
+}
+.translate-middle-y {
+  transform: translateY(-50%) !important;
+}
+
+/* --- Sizing --- */
+.w-100 { width: 100% !important; }
+.h-100 { height: 100% !important; }
+.min-w-0 { min-width: 0 !important; }
+.overflow-auto { overflow: auto !important; }
+.overflow-y-auto { overflow-y: auto !important; }
+.overflow-hidden { overflow: hidden !important; }
+
+/* --- Backgrounds & borders (stopgap) --- */
+.bg-light { background-color: var(--surface-subtle) !important; }
+.bg-dark { background-color: var(--ink-brand) !important; }
+.bg-white { background-color: var(--surface) !important; }
+.bg-success { background-color: var(--success) !important; color: #fff !important; }
+.bg-secondary { background-color: var(--ink-muted) !important; color: #fff !important; }
+.bg-warning { background-color: var(--warning); color: #241a02 !important; }
+.bg-danger { background-color: var(--danger) !important; color: #fff !important; }
+.bg-info { background-color: var(--info) !important; color: #fff !important; }
+.rounded { border-radius: var(--radius-md) !important; }
+.rounded-3 { border-radius: var(--radius-lg) !important; }
+.rounded-circle { border-radius: 50% !important; }
+.rounded-pill { border-radius: var(--radius-pill) !important; }
+.border-0 { border: 0 !important; }
+.border { border: 1px solid var(--border) !important; }
+.shadow { box-shadow: var(--shadow-md) !important; }
+.shadow-sm { box-shadow: var(--shadow-sm) !important; }
+.shadow-lg { box-shadow: var(--shadow-lg) !important; }
+/* The hidden attribute always wins over component display rules. */
+[hidden] {
+  display: none !important;
+}

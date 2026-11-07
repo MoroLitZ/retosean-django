@@ -290,9 +290,12 @@ const ASSETS: &[(&str, &str, &str)] = &[
     ("records.css", CSS, include_str!("../web/css/records.css")),
     ("detail.css", CSS, include_str!("../web/css/detail.css")),
     ("forms.css", CSS, include_str!("../web/css/forms.css")),
+    ("workflows.css", CSS, include_str!("../web/css/workflows.css")),
+    ("builder.css", CSS, include_str!("../web/css/builder.css")),
     ("legacy.css", CSS, include_str!("../web/css/legacy.css")),
     ("icons.js", JS, include_str!("../web/js/icons.js")),
     ("core.js", JS, include_str!("../web/js/core.js")),
+    ("ui.js", JS, include_str!("../web/js/ui.js")),
     ("dashboard.js", JS, include_str!("../web/js/dashboard.js")),
     ("records.js", JS, include_str!("../web/js/records.js")),
     ("detail.js", JS, include_str!("../web/js/detail.js")),
@@ -339,7 +342,7 @@ async fn security_headers(request: Request, next: Next) -> Response {
         (
             "content-security-policy",
             // Styles and fonts only from the same CDNs the Django templates use; scripts stay local.
-            "default-src 'self'; script-src 'self'; style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+            "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
         ),
     ] {
         headers.insert(name, HeaderValue::from_static(value));

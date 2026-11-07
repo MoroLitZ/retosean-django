@@ -42,7 +42,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
+          components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -51,8 +51,25 @@ jobs:
       - name: Formato
         run: cargo fmt --check
 
+      # CFG-09: quality gate equivalent to quality.yml's ruff/bandit.
+      # It runs as warnings (not -D warnings) because some pre-existing files
+      # still have clippy warnings to clean up.
+      - name: Clippy (lint)
+        run: cargo clippy --locked --all-targets -- -W clippy::all
+
+      - name: Instalar cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      # CFG-09: dependency audit gate (pip-audit equivalent). RUSTSEC-2023-0071
+      # (rsa) is ignored: no fixed version exists and rsa is an optional sqlx
+      # dependency that this feature set never builds.
+      - name: Auditoría de dependencias
+        run: cargo audit --ignore RUSTSEC-2023-0071
+
       - name: Sintaxis del frontend
-        run: node --check web/app.js
+        run: for f in web/js/*.js; do node --check "$f"; done
 
       - name: Pruebas (unitarias, extremo a extremo y paridad con Django)
         run: cargo test --locked -- --include-ignored

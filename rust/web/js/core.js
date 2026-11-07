@@ -41,11 +41,11 @@ function choice(table, name, value) {
 function badgeClass(value) {
   const v = String(value).toLowerCase();
   if (/^(aprobad[oa]|abierto|en_curso|finalizado|publicad[oa]|aceptada|verificad[oa]|calificado|firmado)$/.test(v))
-    return "bg-success";
-  if (/^(borrador|pendiente|no_radicado)$/.test(v)) return "bg-secondary";
-  if (v === "en_revision") return "bg-warning text-dark";
-  if (/^(rechazad[oa]|cancelad[oa]|retirada|vencido)$/.test(v)) return "bg-danger";
-  return "bg-info text-dark";
+    return "pill--success";
+  if (/^(borrador|pendiente|no_radicado)$/.test(v)) return "pill--neutral";
+  if (v === "en_revision") return "pill--warning";
+  if (/^(rechazad[oa]|cancelad[oa]|retirada|vencido)$/.test(v)) return "pill--danger";
+  return "pill--info";
 }
 // Sidebar per role, same sections, labels and icons as templates/base.html.
 const MENU = {
@@ -156,13 +156,28 @@ function hideToast() {
 }
 // The toast is a manual popover so it joins the top layer and stays visible
 // above an open modal <dialog> and its backdrop. Long messages stay longer.
-function toast(message) {
+function toast(message, variant = "info") {
   const t = $("toast");
   const text = String(message ?? "");
   clearTimeout(toastTimer);
-  t.textContent = text;
-  t.title = "Haz clic para cerrar";
-  t.onclick = hideToast;
+  const names = {
+    success: "check-circle-fill",
+    error: "x-circle-fill",
+    info: "info-circle-fill",
+    warning: "exclamation-triangle-fill",
+  };
+  const key = names[variant] ? variant : "info";
+  t.className = "toast--" + key;
+  t.replaceChildren();
+  t.append(icon(names[key]));
+  const msg = el("span", "toast__msg");
+  msg.textContent = text;
+  const close = el("button", "toast__close");
+  close.type = "button";
+  close.setAttribute("aria-label", "Cerrar notificación");
+  close.append(icon("x"));
+  close.onclick = hideToast;
+  t.append(msg, close);
   t.hidden = false;
   try {
     t.hidePopover();
@@ -203,8 +218,31 @@ async function allRecords(table) {
   }
   return out;
 }
+// Renders an inline <svg> from the ICONS set (icons.js). Compound names like
+// "bell-slash d-block mb-2" are tolerated: the first token is the icon, the rest
+// become extra classes on the <svg>. Unknown names fall back to a neutral dot.
 function icon(name) {
-  return el("i", "bi bi-" + name);
+  let extra = "";
+  if (typeof name === "string") {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length > 1) {
+      name = parts[0];
+      extra = parts.slice(1).join(" ");
+    }
+  }
+  const x = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  x.setAttribute("class", "icon" + (extra ? " " + extra : ""));
+  x.setAttribute("viewBox", "0 0 24 24");
+  x.setAttribute("fill", "none");
+  x.setAttribute("stroke", "currentColor");
+  x.setAttribute("stroke-width", "1.8");
+  x.setAttribute("stroke-linecap", "round");
+  x.setAttribute("stroke-linejoin", "round");
+  x.setAttribute("aria-hidden", "true");
+  x.setAttribute("focusable", "false");
+  const icons = window.ICONS || {};
+  x.innerHTML = icons[name] || icons.circle || "";
+  return x;
 }
 async function start() {
   const session = await api("/api/me");
@@ -240,19 +278,20 @@ function buildNav() {
         ? has("reportes_generados")
         : resources.some((r) => r.table === table));
   const item = (target, text, iconName) => {
-    const li = el("li", "nav-item");
-    const a = el("a", "nav-link");
+    const li = el("li", "nav__item");
+    const a = el("a", "nav__link");
     a.href = "#" + target;
     a.dataset.resource = target;
-    a.append(icon(iconName), " " + text);
+    a.append(icon(iconName), el("span", "nav__label", text));
     li.append(a);
     nav.append(li);
     navLabels[target] ??= text;
     return a;
   };
   const section = (text) => {
-    const li = el("li");
-    li.append(el("div", "nav-section-label", text));
+    const li = el("li", "nav__section");
+    li.setAttribute("aria-hidden", "true");
+    li.append(el("span", "", text));
     nav.append(li);
   };
   for (const [target, text, iconName] of MENU[role()] || [])
@@ -266,27 +305,27 @@ function buildNav() {
     for (const r of rest) item(r.table, title(r.table), "table");
   }
   section("Cuenta");
-  const perfil = el("li", "nav-item");
-  const perfilButton = el("button", "nav-link");
+  const perfil = el("li", "nav__item");
+  const perfilButton = el("button", "nav__link");
   perfilButton.type = "button";
-  perfilButton.append(icon("person-circle"), " Mi Perfil");
+  perfilButton.append(icon("person-circle"), el("span", "nav__label", "Mi Perfil"));
   perfilButton.onclick = () => profileForm().catch(showError);
   perfil.append(perfilButton);
   nav.append(perfil);
-  const salir = el("li", "nav-item");
-  const salirButton = el("button", "nav-link logout");
+  const salir = el("li", "nav__item");
+  const salirButton = el("button", "nav__link logout");
   salirButton.type = "button";
-  salirButton.append(icon("box-arrow-left"), " Cerrar Sesión");
+  salirButton.append(icon("box-arrow-left"), el("span", "nav__label", "Cerrar Sesión"));
   salirButton.onclick = logout;
   salir.append(salirButton);
   nav.append(salir);
-  const hr = el("li");
-  hr.append(el("hr", "my-2"));
-  nav.append(hr);
+  const divider = el("li", "nav__divider");
+  divider.setAttribute("aria-hidden", "true");
+  nav.append(divider);
   if (has("hackathons")) item("hackathons", "Hackathones", "lightning-charge");
   if (has("notificaciones")) {
     const a = item("notificaciones", "Notificaciones", "bell");
-    a.append(el("span", "badge bg-danger ms-1 nav-unread"));
+    a.append(el("span", "nav__badge"));
   }
 }
 async function refreshBell() {
@@ -302,21 +341,35 @@ async function refreshBell() {
     mine = data.records.filter((n) => n.usuario_id === user.id);
     unread = mine.filter((n) => !n.leida).length;
   }
-  for (const badge of [$("bell-count"), ...document.querySelectorAll(".nav-unread")]) {
+  for (const badge of [$("bell-count"), ...document.querySelectorAll(".nav__badge")]) {
     badge.hidden = !unread;
     badge.textContent = unread || "";
   }
+  $("bell").setAttribute(
+    "aria-label",
+    unread ? `Notificaciones: ${unread} sin leer` : "Notificaciones",
+  );
+  const styles = {
+    EXITO: ["check-circle-fill", "text-success"],
+    ADVERTENCIA: ["exclamation-triangle-fill", "text-warning"],
+    ERROR: ["x-circle-fill", "text-danger"],
+    INFO: ["info-circle-fill", "text-info"],
+  };
   const list = $("bell-items");
   list.replaceChildren();
   for (const n of mine.slice(0, 8)) {
-    const a = el("a", "dropdown-item d-flex gap-2 align-items-start py-2" + (n.leida ? "" : " bg-light"));
+    const a = el("a", "menu__item" + (n.leida ? "" : " menu__item--unread"));
     a.href = "#notificaciones";
-    const kind = { EXITO: "check-circle-fill text-success", ADVERTENCIA: "exclamation-triangle-fill text-warning", ERROR: "x-circle-fill text-danger" }[n.tipo] || "info-circle-fill text-info";
+    const [iname, icls] = styles[n.tipo] || styles.INFO;
+    const icn = icon(iname);
+    icn.classList.add(icls);
     const iconWrap = el("span", "pt-1");
-    iconWrap.append(icon(kind));
-    const body = el("span", "flex-grow-1");
+    iconWrap.append(icn);
+    const body = el("span", "min-w-0 flex-grow-1");
+    const title = el("span", "d-block fw-semibold small");
+    title.append(el("span", "bell-dot"), n.titulo);
     body.append(
-      el("span", "d-block fw-semibold small text-dark", n.titulo),
+      title,
       el("span", "d-block text-muted small text-wrap bell-message", String(n.mensaje || "")),
       el("span", "d-block text-muted small", fecha(n.creada_en, true)),
     );
@@ -325,7 +378,8 @@ async function refreshBell() {
   }
   if (!mine.length) {
     const empty = el("div", "text-center text-muted py-4 small");
-    empty.append(icon("bell-slash d-block mb-2"), "Sin notificaciones");
+    empty.append(icon("bell-slash"), " Sin notificaciones");
+    empty.firstElementChild.classList.add("d-block", "mb-2");
     list.append(empty);
   }
 }
@@ -373,6 +427,20 @@ async function route() {
   $("page-heading").textContent = heading;
   $("page-title").textContent = heading;
   document.title = `${heading} — Retosean`;
+  const crumbs = $("breadcrumbs");
+  if (crumbs) {
+    crumbs.replaceChildren();
+    const home = el("li", "breadcrumbs__item");
+    const homeLink = el("a", "", "Inicio");
+    homeLink.href = "#dashboard";
+    home.append(homeLink);
+    crumbs.append(home);
+    const cur = el("li", "breadcrumbs__item");
+    const curSpan = el("span", "", heading);
+    curSpan.setAttribute("aria-current", "page");
+    cur.append(curSpan);
+    crumbs.append(cur);
+  }
   $("new-challenge").hidden = !(
     (selected === "retos" && user.rol === "EMPRESA") ||
     ([
@@ -395,8 +463,22 @@ async function route() {
   $("dashboard-panel").hidden = selected !== "dashboard";
   $("builder-panel").hidden = selected !== "reportes";
   $("records-panel").hidden = ["dashboard", "reportes"].includes(selected);
-  if (selected === "dashboard") await loadDashboard();
-  else if (selected === "reportes") await loadBuilder();
-  else await loadRecords();
+  const main = $("main-content");
+  const progress = $("app-progress");
+  main.setAttribute("aria-busy", "true");
+  if (progress) progress.hidden = false;
+  try {
+    if (selected === "dashboard") await loadDashboard();
+    else if (selected === "reportes") await loadBuilder();
+    else await loadRecords();
+  } finally {
+    main.setAttribute("aria-busy", "false");
+    if (progress) progress.hidden = true;
+  }
+  // Move focus to the page heading so keyboard / screen-reader users know the
+  // page changed; announce via document.title above.
+  const headingEl = $("page-heading");
+  headingEl.setAttribute("tabindex", "-1");
+  if (typeof headingEl.focus === "function") headingEl.focus({ preventScroll: true });
 }
 // ── Dashboard de Indicadores (apps/dashboard/templates/dashboard/*.html) ──

@@ -63,7 +63,7 @@ All routes are defined in `src/lib.rs`. Requests that change data (POST) need
 the session cookie and an `X-CSRF-Token` header; the web app sends both.
 
 **Pages and status**
-- `/`, `/app.js`, `/chart.js`, `/style.css`: the web app
+- `/` and `/assets/{file}`: the web app (HTML, CSS and scripts embedded in the binary; no CDN)
 - `GET /health`
 - `GET /api/verificar/{code}`: public certificate check
 
