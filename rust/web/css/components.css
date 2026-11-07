@@ -2,9 +2,7 @@
    RetosEAN Components
    Buttons, forms, cards, tables, badges, alerts, toast, dialog, menus, tabs,
    pagination, empty/skeleton, breadcrumbs, avatar, progress, chips.
-   Consumes tokens.css. A clearly-marked Bootstrap-compat section at the bottom
-   keeps un-converted view files (dashboard/records/detail/workflows/forms/auth/
-   evaluation/builder) rendering until they are migrated — see DESIGN.md.
+   Consumes tokens.css. See DESIGN.md for the contract.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Shared focus ring ── */
@@ -216,6 +214,7 @@ a.secondary:hover,
 .icon {
   width: var(--icon-base);
   height: var(--icon-base);
+  display: inline-block;
   flex-shrink: 0;
   vertical-align: -0.125em;
 }
@@ -268,12 +267,10 @@ a.secondary:hover,
   display: none;
 }
 
-/* Text-like inputs: .input/.select/.textarea + Bootstrap .form-control/.form-select */
+/* Text-like inputs: .input/.select/.textarea */
 .input,
 .select,
 .textarea,
-.form-control,
-.form-select,
 input:not([type]),
 input[type="text"],
 input[type="search"],
@@ -292,6 +289,7 @@ textarea {
   width: 100%;
   padding: 0.55rem 0.8rem;
   font-size: var(--text-base);
+  font-weight: var(--weight-normal);
   line-height: var(--leading-normal);
   color: var(--ink);
   background: var(--surface);
@@ -304,8 +302,6 @@ textarea {
 .input:focus,
 .select:focus,
 .textarea:focus,
-.form-control:focus,
-.form-select:focus,
 input:focus,
 select:focus,
 textarea:focus {
@@ -315,23 +311,17 @@ textarea:focus {
 }
 .input:hover:not(:disabled):not(:focus),
 .select:hover:not(:disabled):not(:focus),
-.textarea:hover:not(:disabled),
-.form-control:hover:not(:disabled):not(:focus),
-.form-select:hover:not(:disabled):not(:focus) {
+.textarea:hover:not(:disabled) {
   border-color: var(--ink-faint);
 }
 .input[aria-invalid="true"],
-.form-control[aria-invalid="true"],
 .select[aria-invalid="true"],
-.form-select[aria-invalid="true"],
 .textarea[aria-invalid="true"] {
   border-color: var(--danger);
 }
 .input:disabled,
 .select:disabled,
 .textarea:disabled,
-.form-control:disabled,
-.form-select:disabled,
 input:disabled,
 select:disabled,
 textarea:disabled {
@@ -344,16 +334,13 @@ textarea {
   min-height: 90px;
   resize: vertical;
 }
-.input--sm,
-.form-control-sm,
-.form-select-sm {
+.input--sm {
   padding: 0.35rem 0.6rem;
   font-size: var(--text-sm);
 }
 
 /* Custom select chevron */
-.select,
-.form-select {
+.select {
   appearance: none;
   -webkit-appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
@@ -440,8 +427,7 @@ textarea {
 }
 
 /* File input / dropzone */
-.file input[type="file"],
-.form-control[type="file"] {
+.file input[type="file"] {
   padding: 0.5rem;
   border-style: dashed;
 }
@@ -478,7 +464,6 @@ textarea {
   border-radius: var(--radius-md);
 }
 .input-group > .input,
-.input-group > .form-control,
 .input-group > .input-group-text {
   border-radius: 0;
 }
@@ -491,9 +476,7 @@ textarea {
   border-end-end-radius: var(--radius-md);
 }
 .input-group > .input-group-text + .input,
-.input-group > .input + .input-group-text,
-.input-group > .input-group-text + .form-control,
-.input-group > .form-control + .input-group-text {
+.input-group > .input + .input-group-text {
   border-inline-start: 0;
 }
 
@@ -1210,101 +1193,8 @@ dialog::backdrop {
   cursor: pointer;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   TEMPORARY Bootstrap-compatibility components
-   The un-converted view files (dashboard/records/detail/workflows/forms/auth/
-   evaluation/builder) still emit these class names. Delete once migrated.
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-/* Buttons (remaining Bootstrap tokens) */
-.btn-dark {
-  background: var(--ink-brand);
-  color: #fff;
-  border-color: var(--ink-brand);
-}
-.btn-close {
-  box-sizing: content-box;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1em;
-  height: 1em;
-  padding: 0.5em;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  cursor: pointer;
-  color: var(--ink-muted);
-}
-
-/* Tables */
-.table-light thead th,
-thead.table-light th {
-  background: var(--surface-subtle);
-}
-.table-sm th,
-.table-sm td {
-  padding: 0.4rem 0.6rem;
-}
-.table :where(th, td) {
-  text-align: start;
-}
-
-/* Cards */
-.card {
-  display: flex;
-  flex-direction: column;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-}
-.card-body {
-  padding: 1rem 1.25rem;
-  flex: 1;
-}
-.card-header {
-  padding: 0.8rem 1.25rem;
-  border-bottom: 1px solid var(--border);
-  font-weight: var(--weight-semibold);
-}
-.card-footer {
-  padding: 0.8rem 1.25rem;
-  border-top: 1px solid var(--border);
-  background: var(--surface-subtle);
-}
-
-/* Nav (compat) */
-.nav {
-  display: flex;
-  list-style: none;
-  margin: 0;
-}
-.nav.flex-column {
-  flex-direction: column;
-}
-.nav-link {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.85rem;
-  color: var(--ink-soft);
-  text-decoration: none;
-  border-radius: var(--radius-md);
-}
-.nav-link:hover {
-  color: var(--ink);
-  text-decoration: none;
-}
-
-/* Dropdown end alignment */
-.dropdown-menu-end {
-  inset-inline-end: 0;
-  inset-inline-start: auto;
-}
-
-/* Legacy "sin datos" chart placeholder */
+/* ═══════════════ Misc helpers (ui.js / core.js) ═══════════════ */
+/* "Sin datos" chart placeholder */
 .chart-box {
   height: 280px;
 }
@@ -1338,8 +1228,8 @@ thead.table-light th {
   width: 1rem;
   height: 1rem;
 }
-/* KPI icon boxes (dashboard.js still uses the legacy class names) */
-.kpi-icon .icon {
-  width: 1.3rem;
-  height: 1.3rem;
+
+::placeholder {
+  color: var(--ink-faint);
+  opacity: 1;
 }

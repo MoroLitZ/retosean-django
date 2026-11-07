@@ -292,7 +292,6 @@ const ASSETS: &[(&str, &str, &str)] = &[
     ("forms.css", CSS, include_str!("../web/css/forms.css")),
     ("workflows.css", CSS, include_str!("../web/css/workflows.css")),
     ("builder.css", CSS, include_str!("../web/css/builder.css")),
-    ("legacy.css", CSS, include_str!("../web/css/legacy.css")),
     ("icons.js", JS, include_str!("../web/js/icons.js")),
     ("core.js", JS, include_str!("../web/js/core.js")),
     ("ui.js", JS, include_str!("../web/js/ui.js")),

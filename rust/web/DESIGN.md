@@ -1,30 +1,25 @@
-# RetosEAN Front-end Design System — Contract for View Engineers
+# RetosEAN Front-end Design System
 
-This document is the **single source of truth** for anyone converting the view
-files (`js/{dashboard,records,detail,workflows,auth,evaluation,builder,forms,main}.js`
-and their per-view `.css` files) off Bootstrap and onto the new design system.
-
-The app shell (sidebar, topbar, login, toast, dialog, icons, navigation and
-router) has already been migrated. Everything below is **stable** and ready to
-consume. Do **not** edit `tokens.css`, `base.css`, `components.css`, `shell.css`,
-`icons.js`, `ui.js`, or `core.js` — instead call the helpers and classes defined
-here and delete the Bootstrap markup as you go.
+This document is the permanent design-system reference for anyone building or
+changing screens in the RetosEAN web app. It defines the tokens, classes,
+components, and helpers that make up the front-end. All screens are built on
+this system; do not introduce an external CSS framework or inline styles.
 
 ---
 
 ## 1. File map
 
-| File | Role | You edit? |
-|---|---|---|
-| `css/tokens.css` | Design tokens (colour, type, spacing, radius, shadow, focus, motion) | No |
-| `css/base.css` | Reset, typography, utilities, **temporary Bootstrap-compat layer** | No |
-| `css/components.css` | Buttons, forms, tables, badges, alerts, toast, dialog, menus, etc. | No |
-| `css/shell.css` | Sidebar, topbar, auth layout, skip link | No |
-| `css/legacy.css` | Frozen overrides for still-unconverted views | No — leave alone |
-| `js/icons.js` | Inline SVG icon set (`window.ICONS`) | No |
-| `js/ui.js` | `ui.*` component helpers + `busy()` / `setPageTitle()` | No |
-| `js/core.js` | `el`, `icon`, `toast`, `api`, router, nav, bell | No |
-| `js/{views}.js` + `css/{view}.css` | **Your files** | Yes |
+| File | Role |
+|---|---|
+| `css/tokens.css` | Design tokens (colour, type, spacing, radius, shadow, focus, motion) |
+| `css/base.css` | Reset, typography, layout primitives, and utilities |
+| `css/components.css` | Buttons, forms, tables, badges, alerts, toast, dialog, menus, etc. |
+| `css/shell.css` | Sidebar, topbar, auth layout, skip link |
+| `js/icons.js` | Inline SVG icon set (`window.ICONS`) |
+| `js/ui.js` | `ui.*` component helpers + `busy()` / `setPageTitle()` |
+| `js/core.js` | `el`, `icon`, `toast`, `api`, router, nav, bell |
+| `js/{dashboard,records,detail,workflows,auth,evaluation,builder,forms,main}.js` | Per-view logic |
+| `css/{auth,dashboard,records,detail,forms,workflows,builder}.css` | Per-view styles |
 
 ---
 
@@ -64,7 +59,7 @@ inside view CSS without `prefers-reduced-motion` guards.**
 
 ## 3. Layout primitives & utilities (`base.css`)
 
-Use these instead of `row`/`col-*`/`d-flex`/`justify-content-*`.
+Use these layout primitives instead of ad-hoc display/flex utilities.
 
 ```css
 .stack              /* vertical flex, gap 16px */
@@ -96,8 +91,16 @@ Spacing steps (numbers follow the classic 0–6 scale; `0 .25 .5 1 1.5 3 4 rem`)
 .ms-auto .me-auto .mx-auto
 ```
 
-> These short margin/padding/gap names are **our** utilities now, not Bootstrap.
-> They are intentionally kept short; keep using them.
+These short margin/padding/gap utilities are intentionally kept short; use them.
+
+Additional layout helper classes that are available:
+
+```css
+.d-block .flex-grow-1 .align-items-start .position-relative .w-100 .min-w-0
+```
+
+No other display, flex, background, rounded, shadow, border, or position utility
+classes are available in `base.css`. Use view CSS for anything else.
 
 ---
 
@@ -131,11 +134,9 @@ which toggles `.is-loading` and injects a `.spinner`.
 </div>
 ```
 
-Controls: `.input`, `.select`, `.textarea`. Straightforward equivalents:
+Controls: `.input`, `.select`, `.textarea`, and `.input--sm` for small inputs
+and selects.
 
-- Bootstrap `form-control` → `.input` (or `.textarea`)
-- Bootstrap `form-select`  → `.select`
-- `form-control-sm` / `form-select-sm` → add class `.input--sm`
 - Required marker: `<span class="req">*</span>` inside the label (or `required` on the control)
 - Inline error: put the message in `.field__error` and set `aria-invalid="true"`
   + `aria-describedby` to the error's id on the control (see `ui.field`).
@@ -153,8 +154,8 @@ Controls: `.input`, `.select`, `.textarea`. Straightforward equivalents:
 </section>
 ```
 
-`.card-panel` / `.card-panel-header` still work during migration (used by the
-dashboard/report builder), and are token-aware.
+`.card-panel` / `.card-panel-header` also work (used by the dashboard/report
+builder), and are token-aware.
 
 ### KPI tile
 
@@ -193,7 +194,7 @@ dashboard/report builder), and are token-aware.
 
 Variants: `pill--success`, `pill--warning`, `pill--danger`, `pill--info`,
 `pill--neutral`, `pill--brand`. The `dot` class prefixes a small status dot.
-The bare `.badge`/`.chip` classes are the same base pill (used by legacy views).
+The bare `.badge`/`.chip` classes share the same pill base.
 
 ### Alerts
 
@@ -204,12 +205,12 @@ The bare `.badge`/`.chip` classes are the same base pill (used by legacy views).
 <div class="alert alert--info" role="status">…</div>
 ```
 
-### Toast / dialog / menu — already migrated in the shell
+### Toast / dialog / menu
 
 - Toast: call `toast(message, variant)`; variants `success|error|info|warning`.
   Default is `info`. It is `role="status"` `aria-live="polite"` and dismissible.
-- Modal: `modal(title)` (existing global) returns `#dialog-content`. The dialog
-  is `aria-labelledby="dialog-title"` and focus-restored by the browser.
+- Modal: `modal(title)` returns `#dialog-content`. The dialog is
+  `aria-labelledby="dialog-title"` and focus-restored by the browser.
 - Dropdown/popover menu: `<div class="menu" role="menu">…</div>` with
   `.menu__item`, `.menu__divider`, `.menu__header`. The bell already uses it.
 
@@ -272,7 +273,7 @@ setPageTitle("Mis Retos", [{ label: "RetosEAN", href: "#dashboard" }, { label: "
 
 ## 6. Badge / status colour mapping (`badgeClass`)
 
-`core.js` exports `badgeClass(value)` — keep using it; it now returns a semantic
+`core.js` exports `badgeClass(value)` — keep using it; it returns a semantic
 pill variant token (compatible with the `badge`/`pill` base class):
 
 | Value pattern (`estado` fields) | Pill class |
@@ -309,12 +310,12 @@ toggles `aria-busy` on `#main-content`).
 ```
 modal(title)                    // existing helper
 ├─ field(s) via ui.field
-├─ <dl class="details">…</dl>   // existing key/value grid (legacy) — migrate to ui.table or keep
+├─ <dl class="details">…</dl>   // existing key/value grid
 └─ <div class="dialog-actions"> … </div>
 ```
 
 Use `busy(button, api(...))` for submit buttons, and inline `.field__error` for
-validation. Always `mobile`: forms collapse via `.form-grid` (2-col → 1-col).
+validation. Forms collapse via `.form-grid` (2-col → 1-col).
 
 ### Forms
 
@@ -339,123 +340,13 @@ form.form-grid            // 2 columns, gap 16px
 
 ---
 
-## 9. Bootstrap → new migration table
+## 9. Global implementation rules
 
-Covers **every** Bootstrap class family currently emitted by the view files.
-
-### Grid & layout
-
-| Bootstrap | New |
-|---|---|
-| `row` | `.grid`, `.grid--2/--3/--4`, or `.form-grid` (forms), or `.cluster` |
-| `g-0…g-3`, `g-*` | gap on the container: `.cluster .cluster--sm/--lg` / `.grid` gap |
-| `col`, `col-*`, `col-sm-*`, `col-md-*`, `col-lg-*` | grid columns are automatic; for explicit columns use CSS grid or keep `.grid` minmax. (Temporary `row`/`col-*`/`g-*` classes still render until converted — see `base.css` compat block.) |
-
-### Flex & display
-
-| Bootstrap | New |
-|---|---|
-| `d-flex` | `.cluster` (wraps, gap 12) or bare `display:flex` in view CSS |
-| `d-block`, `d-inline`, `d-none` | hide/show via `hidden` attribute; `.d-none` still works (compat) |
-| `d-md-flex`, `d-lg-inline` etc. | media queries in view CSS |
-| `flex-column`, `flex-wrap`, `flex-shrink-0`, `flex-grow-0/1` | view CSS, or `.stack` for columns |
-| `justify-content-*` | `.cluster--center`, `.cluster--between`, `.cluster--start` |
-| `align-items-*` | `.cluster--start`, or view CSS |
-| `gap-*` | `.gap-{0..5}` / `.cluster--sm/--lg` / `.stack--sm/--lg` |
-
-### Spacing
-
-| Bootstrap | New |
-|---|---|
-| `mt-*` `mb-*` `ms-*` `me-*` `mx-*` `my-*` | same names (our utilities) — keep |
-| `p-*` `px-*` `py-*` `pt-*` `pb-*` | same names — keep |
-| `w-100`, `h-100`, `min-w-0` | `.w-100` `.h-100` `.min-w-0` (kept) |
-
-### Typography / text
-
-| Bootstrap | New |
-|---|---|
-| `text-center/start/end` | `.text-center/.text-start/.text-end` |
-| `text-muted` | `.text-muted` |
-| `text-secondary` | `.text-soft` |
-| `text-dark` | `.text-dark` |
-| `text-success/warning/danger/info` | `.text-success/…` |
-| `text-uppercase` | `.text-uppercase` |
-| `text-truncate` | `.text-truncate` |
-| `text-wrap` | `.text-wrap` |
-| `text-decoration-none` | drop (links are unstyled by default) |
-| `fw-bold` / `fw-semibold` / `fw-normal` | `.fw-bold` / `.fw-semibold` / `.fw-normal` |
-| `small` | `.small` |
-
-### Buttons
-
-| Bootstrap | New |
-|---|---|
-| `btn` | `.btn` |
-| `btn-primary` | `.btn .btn--primary` |
-| `btn-outline-secondary` | `.btn .btn--secondary` |
-| `btn-outline-danger` | `.btn .btn--danger` |
-| `btn-outline-primary` | `.btn .btn--accent` |
-| `btn-outline-success` | `.btn .btn--accent` (or `--primary`) |
-| `btn-link` | `.btn .btn--ghost` |
-| `btn-sm` / `btn-lg` | `.btn--sm` / `.btn--lg` |
-| `btn-close` | `.icon-btn` + `x` icon |
-| `w-100` on button | `.w-100` |
-
-### Forms
-
-| Bootstrap | New |
-|---|---|
-| `form-label` | `.field__label` |
-| `form-control` | `.input` (or `.textarea`) |
-| `form-control-sm` | `.input .input--sm` |
-| `form-select` | `.select` |
-| `form-select-sm` | `.select .input--sm` |
-| `form-check` | `.checkbox` |
-| `form-check-input` | `input.checkbox__input` |
-| `form-check-label` | `.checkbox__label` |
-| `input-group` | `.input-group` (kept) |
-| `input-group-text` | `.input-group-text` (kept) |
-
-### Tables
-
-| Bootstrap | New |
-|---|---|
-| `table` | `.data-table` |
-| `table-hover` | `.data-table.is-hoverable` |
-| `table-striped` | `.data-table.is-zebra` |
-| `table-light` | (unused — header sticky is automatic) |
-| `table-sm` | view CSS or tighter padding |
-| `table-responsive` | `.table-wrap` |
-| `align-middle` | `.align-middle` (kept) |
-
-### Badges / backgrounds / alerts
-
-| Bootstrap | New |
-|---|---|
-| `badge` + `bg-success/secondary/warning/danger/info` | `ui.badge(state, {label})` → `.pill--*` |
-| `bg-light` | `.bg-light` (kept) or `.surface-subtle` context |
-| `bg-*` text pills | `.pill--*` |
-| `alert alert-danger/warning` | `.alert .alert--danger/.alert--warning` |
-| `rounded`, `rounded-3`, `rounded-pill`, `rounded-circle` | `.rounded`, `.rounded-3`, `.rounded-pill`, `.rounded-circle` (kept) |
-
-### Nav / dropdown / cards
-
-| Bootstrap | New |
-|---|---|
-| `nav`, `nav-item`, `nav-link` | `.nav__item`, `.nav__link` (shell-owned; not for reuse) |
-| `dropdown-menu`, `dropdown-item`, `dropdown-header`, `dropdown-divider` | `.menu`, `.menu__item`, `.menu__header`, `.menu__divider` |
-| `dropdown-menu-end` | `.menu` positioned by parent (see bell) |
-| `card`, `card-body`, `card-header`, `card-footer` | `.surface`, `.surface__body`, `.surface__header`, `.dialog-actions` |
-| `shadow`, `shadow-sm`, `shadow-lg` | `.shadow`, `.shadow-sm`, `.shadow-lg` (kept) |
-| `border-0` | `.border-0` (kept) |
-
-### Position / icons
-
-| Bootstrap | New |
-|---|---|
-| `position-relative/absolute`, `top-0`, `start-100`, `translate-middle` | view CSS or kept utilities (needed by bell badge) |
-| `i.bi bi-*` | `icon("name")` → inline `<svg class="icon">` |
+- CSP is `style-src 'self'`. Never use inline `style="..."` attributes; use classes.
+- The `[hidden]` attribute always hides: `base.css` applies a global
+  `[hidden] { display: none !important; }` rule. Use `hidden` for conditional display.
+- Programmatic focus targets use `tabindex="-1"` and show no focus ring.
+- Icons come from `icon(name)` / `ICONS` in `js/icons.js`. Do not hard-code inline SVG.
 
 ---
 
@@ -478,16 +369,16 @@ Unknown names fall back to a neutral dot; nothing ever throws.
 
 ---
 
-## 11. Contract summary for view engineers
+## 11. Authoring checklist
 
-1. **Do not** add Bootstrap classes; import nothing new. Use the classes/helpers above.
-2. Keep **every** global (`el`, `icon`, `toast`, `api`, `readJson`, `showLogin`,
-   `start`, `buildNav`, `route`, `refreshBell`, `fecha`, `title`, `choice`,
-   `badgeClass`, `human`, `capfirst`, `meta`, `field`, `admin`, `role`,
-   `allRecords`, `cop`, and the view helpers `modal`, `showError`, `input`,
-   `choiceSelect`, `simpleForm`, `table`, `cell`, `action`, `editableRows`, etc.)
-   working with the same signatures.
-3. Loading states: use `ui.skeleton()` inside your `load*()` functions; the router
+1. Use the classes, helpers, and icons documented above. Do not import an
+   external CSS framework.
+2. Use the existing global helpers (`el`, `icon`, `toast`, `api`, `readJson`,
+   `badgeClass`, `fecha`, `title`, `choice`, `human`, `capfirst`, `meta`,
+   `field`, `admin`, `role`, `allRecords`, `cop`) and view helpers
+   (`modal`, `showError`, `input`, `choiceSelect`, `simpleForm`, `table`,
+   `cell`, `action`, `editableRows`, etc.) with their current signatures.
+3. Loading states: use `ui.skeleton()` inside load functions; the router
    already toggles `aria-busy` on `#main-content` and a top progress bar.
 4. Forms: use `ui.field()` for inline errors (`aria-invalid`, `aria-describedby`),
    and `busy(button, api(...))` for pending states.
@@ -495,7 +386,5 @@ Unknown names fall back to a neutral dot; nothing ever throws.
    validate type/size before submit.
 6. Tables: `scope="col"`, `.num` for numeric columns, `ui.empty` for empty rows,
    real `colSpan` (not a hard-coded `7`).
-7. Microcopy: Spanish (Colombia) — prefer "Seleccione", "Regístrate", consistent
-   register ("tú" is fine for the login; keep it consistent per view).
-8. After conversion, delete your per-view `.css` shims and the temporary
-   `Bootstrap-compatibility` sections in `base.css`/`components.css`.
+7. Microcopy: Spanish (Colombia) — prefer "Seleccione", "Regístrate"; keep
+   register and treatment consistent per screen.
