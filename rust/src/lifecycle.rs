@@ -89,6 +89,15 @@ pub async fn progress(
     } else {
         input.tipo_sesion.as_str()
     };
+    if input.avances.chars().count()
+        + input.observaciones.chars().count()
+        + input.acuerdos.chars().count()
+        > 20000
+    {
+        return Err(AppError::bad(
+            "Avances, observaciones y acuerdos: máximo 20000 caracteres en total.",
+        ));
+    }
     if !(0..=100).contains(&input.porcentaje_avance)
         || ![
             "inicio",
@@ -98,7 +107,6 @@ pub async fn progress(
             "otro",
         ]
         .contains(&kind)
-        || input.avances.len() + input.observaciones.len() + input.acuerdos.len() > 20000
     {
         return Err(AppError::bad(
             "Avance inválido; el porcentaje debe estar entre 0 y 100",
@@ -144,7 +152,8 @@ pub async fn close(
     Json(input): Json<CloseInput>,
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, true).await?;
-    if input.notas.len() > 10000 || input.horas.is_some_and(|h| !(0..=10000).contains(&h)) {
+    crate::domain::max_chars(&input.notas, 10000, "Notas")?;
+    if input.horas.is_some_and(|h| !(0..=10000).contains(&h)) {
         return Err(AppError::bad("Datos de cierre inválidos"));
     }
     let mut tx = state.pool.begin().await?;
@@ -174,9 +183,9 @@ pub async fn close(
             "Se necesita al menos un entregable para cerrar el reto",
         ));
     }
-    let cierre:i64=sqlx::query_scalar("INSERT INTO cierres_reto(reto_id,notas,encuesta_enviada,cerrado_por_id,cerrado_en,actualizado_en) VALUES($1,$2,true,$3,now(),now()) ON CONFLICT(reto_id) DO UPDATE SET notas=excluded.notas,encuesta_enviada=true,cerrado_por_id=excluded.cerrado_por_id,cerrado_en=COALESCE(cierres_reto.cerrado_en,now()),actualizado_en=now() RETURNING id").bind(reto).bind(&input.notas).bind(user.id).fetch_one(&mut *tx).await?;
+    let cierre:i64=sqlx::query_scalar("INSERT INTO cierres_reto(reto_id,notas,encuesta_enviada,cerrado_por_id,cerrado_en,actualizado_en) VALUES($1,$2,true,$3,now(),now()) ON CONFLICT(reto_id) DO UPDATE SET notas=CASE WHEN excluded.notas<>'' THEN excluded.notas ELSE cierres_reto.notas END,encuesta_enviada=true,cerrado_por_id=excluded.cerrado_por_id,cerrado_en=COALESCE(cierres_reto.cerrado_en,now()),actualizado_en=now() RETURNING id").bind(reto).bind(&input.notas).bind(user.id).fetch_one(&mut *tx).await?;
     sqlx::query("INSERT INTO cierre_agendacierre(reto_id,fecha_hora,espacio,recursos,invitados,agenda,actualizado_en) VALUES($1,now(),'Plataforma RetosEAN','','','Cierre formal del reto y emisión de certificados',now()) ON CONFLICT(reto_id) DO NOTHING").bind(reto).execute(&mut *tx).await?;
-    sqlx::query("INSERT INTO cierre_entregablefinal(cierre_id,nombre,archivo,cargado_por_id,creado_en) SELECT $1,left(e.titulo,180),e.archivo,$2,now() FROM entregables e WHERE e.reto_id=$3 AND e.archivo<>'' AND NOT EXISTS(SELECT 1 FROM cierre_entregablefinal f WHERE f.cierre_id=$1 AND f.archivo=e.archivo)").bind(cierre).bind(user.id).bind(reto).execute(&mut *tx).await?;
+    sqlx::query("INSERT INTO cierre_entregablefinal(cierre_id,nombre,archivo,cargado_por_id,creado_en) SELECT $1,left('Entregable de '||coalesce(nullif(trim(u.first_name||' '||u.last_name),''),u.username)||' - '||e.titulo,180),e.archivo,$2,now() FROM entregables e JOIN usuarios u ON u.id=e.estudiante_id WHERE e.reto_id=$3 AND e.archivo<>'' AND NOT EXISTS(SELECT 1 FROM cierre_entregablefinal f WHERE f.cierre_id=$1)").bind(cierre).bind(user.id).bind(reto).execute(&mut *tx).await?;
     sqlx::query("UPDATE retos SET estado='finalizado',actualizado_en=now() WHERE id=$1")
         .bind(reto)
         .execute(&mut *tx)
@@ -206,7 +215,7 @@ pub async fn close(
             &mut tx,
             company,
             "RETO_FINALIZADO",
-            &format!("Tu reto \"{title}\" paso a estado: Finalizado."),
+            &format!("Tu reto \"{title}\" pasó a estado: Finalizado."),
             &format!("reto:{reto}:{from}->finalizado"),
         )
         .await?;
@@ -237,7 +246,7 @@ pub async fn close(
             &mut tx,
             participant,
             "ENCUESTA_PENDIENTE",
-            "El reto fue cerrado formalmente. Te invitamos a responder la encuesta de satisfaccion.",
+            "El reto fue cerrado formalmente. Te invitamos a responder la encuesta de satisfacción.",
             &key,
         )
         .await?;
@@ -333,7 +342,8 @@ pub async fn survey(
     Json(input): Json<SurveyInput>,
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, true).await?;
-    if !(1..=5).contains(&input.calificacion) || input.comentario.len() > 10000 {
+    crate::domain::max_chars(&input.comentario, 10000, "Comentario")?;
+    if !(1..=5).contains(&input.calificacion) {
         return Err(AppError::bad("La calificación debe estar entre 1 y 5"));
     }
     let mut tx = state.pool.begin().await?;

@@ -26,7 +26,7 @@
       },
       {
         "name": "codigo",
-        "verbose_name": "codigo",
+        "verbose_name": "código",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -107,7 +107,7 @@
       },
       {
         "name": "descripcion",
-        "verbose_name": "descripcion",
+        "verbose_name": "descripción",
         "type": "TextField",
         "related_table": null,
         "null": false,
@@ -242,7 +242,7 @@
       },
       {
         "name": "rol_participacion",
-        "verbose_name": "rol participacion",
+        "verbose_name": "rol de participación",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -268,7 +268,7 @@
       },
       {
         "name": "codigo_verificacion",
-        "verbose_name": "codigo verificacion",
+        "verbose_name": "código de verificación",
         "type": "UUIDField",
         "related_table": null,
         "null": false,
@@ -340,7 +340,7 @@
       },
       {
         "name": "fecha_hora",
-        "verbose_name": "fecha hora",
+        "verbose_name": "fecha y hora",
         "type": "DateTimeField",
         "related_table": null,
         "null": true,
@@ -421,7 +421,7 @@
       },
       {
         "name": "acta_url",
-        "verbose_name": "acta url",
+        "verbose_name": "acta",
         "type": "FileField",
         "related_table": null,
         "null": true,
@@ -537,7 +537,7 @@
       },
       {
         "name": "nombre_destinatario",
-        "verbose_name": "nombre destinatario",
+        "verbose_name": "nombre del destinatario",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -546,7 +546,7 @@
       },
       {
         "name": "descripcion",
-        "verbose_name": "descripcion",
+        "verbose_name": "descripción",
         "type": "TextField",
         "related_table": null,
         "null": false,
@@ -569,7 +569,7 @@
     "app": "cierre",
     "table": "cierre_entregablefinal",
     "verbose_name": "entregable final",
-    "verbose_name_plural": "entregable finals",
+    "verbose_name_plural": "entregables finales",
     "fields": [
       {
         "name": "id",
@@ -631,8 +631,8 @@
     "name": "EncuestaSatisfaccion",
     "app": "cierre",
     "table": "cierre_encuestasatisfaccion",
-    "verbose_name": "encuesta satisfaccion",
-    "verbose_name_plural": "encuesta satisfaccions",
+    "verbose_name": "encuesta de satisfacción",
+    "verbose_name_plural": "encuestas de satisfacción",
     "fields": [
       {
         "name": "id",
@@ -663,7 +663,7 @@
       },
       {
         "name": "calificacion",
-        "verbose_name": "calificacion",
+        "verbose_name": "calificación",
         "type": "PositiveSmallIntegerField",
         "related_table": null,
         "null": true,
@@ -778,7 +778,7 @@
       },
       {
         "name": "descripcion",
-        "verbose_name": "descripcion",
+        "verbose_name": "descripción",
         "type": "TextField",
         "related_table": null,
         "null": false,
@@ -854,7 +854,7 @@
       },
       {
         "name": "nit",
-        "verbose_name": "nit",
+        "verbose_name": "NIT",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -863,7 +863,7 @@
       },
       {
         "name": "razon_social",
-        "verbose_name": "razon social",
+        "verbose_name": "razón social",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -881,7 +881,7 @@
       },
       {
         "name": "tipo_convocatoria",
-        "verbose_name": "tipo convocatoria",
+        "verbose_name": "tipo de convocatoria",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -903,7 +903,7 @@
       },
       {
         "name": "area_responsable",
-        "verbose_name": "area responsable",
+        "verbose_name": "área responsable",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -921,7 +921,7 @@
       },
       {
         "name": "fecha_creacion",
-        "verbose_name": "fecha creacion",
+        "verbose_name": "fecha de creación",
         "type": "DateField",
         "related_table": null,
         "null": false,
@@ -930,7 +930,7 @@
       },
       {
         "name": "estado_validacion",
-        "verbose_name": "estado validacion",
+        "verbose_name": "estado de validación",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -942,7 +942,7 @@
           ],
           [
             "EN_REVISION",
-            "En Revisión"
+            "En revisión"
           ],
           [
             "VERIFICADA",
@@ -956,7 +956,7 @@
       },
       {
         "name": "estado_listas_restrictivas",
-        "verbose_name": "estado listas restrictivas",
+        "verbose_name": "estado en listas restrictivas",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -978,7 +978,7 @@
       },
       {
         "name": "evidencia_listas",
-        "verbose_name": "evidencia listas",
+        "verbose_name": "evidencia de listas restrictivas",
         "type": "FileField",
         "related_table": null,
         "null": true,
@@ -987,7 +987,7 @@
       },
       {
         "name": "fecha_ultima_actualizacion",
-        "verbose_name": "fecha ultima actualizacion",
+        "verbose_name": "fecha de última actualización",
         "type": "DateTimeField",
         "related_table": null,
         "null": false,
@@ -996,7 +996,7 @@
       },
       {
         "name": "observaciones_admin",
-        "verbose_name": "observaciones admin",
+        "verbose_name": "observaciones del administrador",
         "type": "TextField",
         "related_table": null,
         "null": true,
@@ -1005,7 +1005,7 @@
       },
       {
         "name": "renuncio_a_convenio",
-        "verbose_name": "renuncio a convenio",
+        "verbose_name": "renunció al convenio",
         "type": "BooleanField",
         "related_table": null,
         "null": false,
@@ -1014,7 +1014,7 @@
       },
       {
         "name": "estado_convenio",
-        "verbose_name": "estado convenio",
+        "verbose_name": "estado del convenio",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -1040,7 +1040,7 @@
       },
       {
         "name": "fecha_vencimiento_convenio",
-        "verbose_name": "fecha vencimiento convenio",
+        "verbose_name": "fecha de vencimiento del convenio",
         "type": "DateField",
         "related_table": null,
         "null": true,
@@ -1049,7 +1049,7 @@
       },
       {
         "name": "participacion_bloqueada",
-        "verbose_name": "participacion bloqueada",
+        "verbose_name": "participación bloqueada",
         "type": "BooleanField",
         "related_table": null,
         "null": false,
@@ -1058,7 +1058,7 @@
       },
       {
         "name": "motivo_bloqueo",
-        "verbose_name": "motivo bloqueo",
+        "verbose_name": "motivo del bloqueo",
         "type": "TextField",
         "related_table": null,
         "null": false,
@@ -1130,7 +1130,7 @@
       },
       {
         "name": "telefono",
-        "verbose_name": "telefono",
+        "verbose_name": "teléfono",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -1166,7 +1166,7 @@
       },
       {
         "name": "codigo",
-        "verbose_name": "codigo",
+        "verbose_name": "código",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -1184,7 +1184,7 @@
       },
       {
         "name": "descripcion",
-        "verbose_name": "descripcion",
+        "verbose_name": "descripción",
         "type": "TextField",
         "related_table": null,
         "null": false,
@@ -1211,7 +1211,7 @@
       },
       {
         "name": "vigencia_dias",
-        "verbose_name": "vigencia dias",
+        "verbose_name": "vigencia (días)",
         "type": "PositiveSmallIntegerField",
         "related_table": null,
         "null": true,
@@ -1274,7 +1274,7 @@
       },
       {
         "name": "tipo_documento",
-        "verbose_name": "tipo documento",
+        "verbose_name": "tipo de documento",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -1304,7 +1304,7 @@
           ],
           [
             "CARGADO",
-            "En Revision"
+            "En revisión"
           ],
           [
             "VERIFICADO",
@@ -1322,7 +1322,7 @@
       },
       {
         "name": "fecha_expedicion",
-        "verbose_name": "fecha expedicion",
+        "verbose_name": "fecha de expedición",
         "type": "DateField",
         "related_table": null,
         "null": true,
@@ -1331,7 +1331,7 @@
       },
       {
         "name": "fecha_vencimiento",
-        "verbose_name": "fecha vencimiento",
+        "verbose_name": "fecha de vencimiento",
         "type": "DateField",
         "related_table": null,
         "null": true,
@@ -1340,7 +1340,7 @@
       },
       {
         "name": "fecha_carga",
-        "verbose_name": "fecha carga",
+        "verbose_name": "fecha de carga",
         "type": "DateTimeField",
         "related_table": null,
         "null": false,
@@ -1349,7 +1349,7 @@
       },
       {
         "name": "motivo_rechazo",
-        "verbose_name": "motivo rechazo",
+        "verbose_name": "motivo de rechazo",
         "type": "TextField",
         "related_table": null,
         "null": true,
@@ -1403,7 +1403,7 @@
       },
       {
         "name": "titulo",
-        "verbose_name": "titulo",
+        "verbose_name": "título",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -1421,7 +1421,7 @@
       },
       {
         "name": "puntaje_maximo",
-        "verbose_name": "puntaje maximo",
+        "verbose_name": "puntaje máximo",
         "type": "DecimalField",
         "related_table": null,
         "null": false,
@@ -1439,7 +1439,7 @@
       },
       {
         "name": "comentario_estudiante",
-        "verbose_name": "comentario estudiante",
+        "verbose_name": "comentario del estudiante",
         "type": "TextField",
         "related_table": null,
         "null": true,
@@ -1448,7 +1448,7 @@
       },
       {
         "name": "comentario_profesor",
-        "verbose_name": "comentario profesor",
+        "verbose_name": "comentario del profesor",
         "type": "TextField",
         "related_table": null,
         "null": true,
@@ -1466,7 +1466,7 @@
       },
       {
         "name": "calificacion_publicada",
-        "verbose_name": "calificacion publicada",
+        "verbose_name": "calificación publicada",
         "type": "BooleanField",
         "related_table": null,
         "null": false,
@@ -1475,7 +1475,7 @@
       },
       {
         "name": "calificacion_publicada_en",
-        "verbose_name": "calificacion publicada en",
+        "verbose_name": "calificación publicada en",
         "type": "DateTimeField",
         "related_table": null,
         "null": true,
@@ -1484,7 +1484,7 @@
       },
       {
         "name": "fecha_entrega",
-        "verbose_name": "fecha entrega",
+        "verbose_name": "fecha de entrega",
         "type": "DateTimeField",
         "related_table": null,
         "null": false,
@@ -1514,7 +1514,7 @@
           ],
           [
             "EN_REVISION",
-            "En Revision"
+            "En revisión"
           ],
           [
             "CALIFICADO",
@@ -1528,8 +1528,8 @@
     "name": "Rubrica",
     "app": "evaluacion",
     "table": "evaluacion_rubrica",
-    "verbose_name": "rubrica",
-    "verbose_name_plural": "rubricas",
+    "verbose_name": "rúbrica",
+    "verbose_name_plural": "rúbricas",
     "fields": [
       {
         "name": "id",
@@ -1560,7 +1560,7 @@
       },
       {
         "name": "descripcion",
-        "verbose_name": "descripcion",
+        "verbose_name": "descripción",
         "type": "TextField",
         "related_table": null,
         "null": false,
@@ -1600,8 +1600,8 @@
     "name": "CriterioRubrica",
     "app": "evaluacion",
     "table": "evaluacion_criteriorubrica",
-    "verbose_name": "criterio rubrica",
-    "verbose_name_plural": "criterio rubricas",
+    "verbose_name": "criterio de rúbrica",
+    "verbose_name_plural": "criterios de rúbrica",
     "fields": [
       {
         "name": "id",
@@ -1614,7 +1614,7 @@
       },
       {
         "name": "rubrica_id",
-        "verbose_name": "rubrica",
+        "verbose_name": "rúbrica",
         "type": "ForeignKey",
         "related_table": "evaluacion_rubrica",
         "null": false,
@@ -1632,7 +1632,7 @@
       },
       {
         "name": "descripcion",
-        "verbose_name": "descripcion",
+        "verbose_name": "descripción",
         "type": "TextField",
         "related_table": null,
         "null": false,
@@ -1641,7 +1641,7 @@
       },
       {
         "name": "puntaje_maximo",
-        "verbose_name": "puntaje maximo",
+        "verbose_name": "puntaje máximo",
         "type": "DecimalField",
         "related_table": null,
         "null": false,
@@ -1663,7 +1663,7 @@
     "name": "Evaluacion",
     "app": "evaluacion",
     "table": "evaluaciones",
-    "verbose_name": "Evaluacion",
+    "verbose_name": "Evaluación",
     "verbose_name_plural": "Evaluaciones",
     "fields": [
       {
@@ -1713,7 +1713,7 @@
       },
       {
         "name": "rubrica_id",
-        "verbose_name": "rubrica",
+        "verbose_name": "rúbrica",
         "type": "ForeignKey",
         "related_table": "evaluacion_rubrica",
         "null": true,
@@ -1744,8 +1744,8 @@
     "name": "EvaluacionCriterio",
     "app": "evaluacion",
     "table": "evaluacion_evaluacioncriterio",
-    "verbose_name": "evaluacion criterio",
-    "verbose_name_plural": "evaluacion criterios",
+    "verbose_name": "puntaje por criterio",
+    "verbose_name_plural": "puntajes por criterio",
     "fields": [
       {
         "name": "id",
@@ -1758,7 +1758,7 @@
       },
       {
         "name": "evaluacion_id",
-        "verbose_name": "evaluacion",
+        "verbose_name": "evaluación",
         "type": "ForeignKey",
         "related_table": "evaluaciones",
         "null": false,
@@ -1789,8 +1789,8 @@
     "name": "ComentarioEntregable",
     "app": "evaluacion",
     "table": "evaluacion_comentarioentregable",
-    "verbose_name": "comentario entregable",
-    "verbose_name_plural": "comentario entregables",
+    "verbose_name": "comentario de entregable",
+    "verbose_name_plural": "comentarios de entregable",
     "fields": [
       {
         "name": "id",
@@ -1891,7 +1891,7 @@
           ],
           [
             "en_curso",
-            "En Curso"
+            "En curso"
           ],
           [
             "finalizado",
@@ -1930,13 +1930,13 @@
           ],
           [
             "hibrida",
-            "Hibrida"
+            "Híbrida"
           ]
         ]
       },
       {
         "name": "lugar",
-        "verbose_name": "Espacio fisico",
+        "verbose_name": "Espacio físico",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -1945,7 +1945,7 @@
       },
       {
         "name": "enlace_transmision",
-        "verbose_name": "Enlace de transmision",
+        "verbose_name": "Enlace de transmisión",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -1954,7 +1954,7 @@
       },
       {
         "name": "notas_logistica",
-        "verbose_name": "Notas de logistica",
+        "verbose_name": "Notas de logística",
         "type": "TextField",
         "related_table": null,
         "null": false,
@@ -2043,7 +2043,7 @@
       },
       {
         "name": "organizacion",
-        "verbose_name": "organizacion",
+        "verbose_name": "organización",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -2074,8 +2074,8 @@
     "name": "EtapaHackaton",
     "app": "hackaton",
     "table": "etapas_hackaton",
-    "verbose_name": "Etapa de Hackaton",
-    "verbose_name_plural": "Etapas de Hackaton",
+    "verbose_name": "Etapa de hackathon",
+    "verbose_name_plural": "Etapas de hackathon",
     "fields": [
       {
         "name": "id",
@@ -2105,7 +2105,7 @@
         "choices": [
           [
             "inscripcion",
-            "Inscripcion"
+            "Inscripción"
           ],
           [
             "desarrollo",
@@ -2113,17 +2113,17 @@
           ],
           [
             "presentacion",
-            "Presentacion"
+            "Presentación"
           ],
           [
             "premiacion",
-            "Premiacion"
+            "Premiación"
           ]
         ]
       },
       {
         "name": "titulo",
-        "verbose_name": "titulo",
+        "verbose_name": "título",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -2226,8 +2226,8 @@
     "name": "VotacionHackaton",
     "app": "hackaton",
     "table": "votaciones_hackaton",
-    "verbose_name": "Votacion Hackaton",
-    "verbose_name_plural": "Votaciones Hackaton",
+    "verbose_name": "Votación de hackathon",
+    "verbose_name_plural": "Votaciones de hackathon",
     "fields": [
       {
         "name": "id",
@@ -2298,8 +2298,8 @@
     "name": "InscripcionHackaton",
     "app": "hackaton",
     "table": "inscripciones_hackaton",
-    "verbose_name": "Inscripcion a Hackaton",
-    "verbose_name_plural": "Inscripciones a Hackaton",
+    "verbose_name": "Inscripción a hackathon",
+    "verbose_name_plural": "Inscripciones a hackathon",
     "fields": [
       {
         "name": "id",
@@ -2374,7 +2374,7 @@
     "name": "Notificacion",
     "app": "notificaciones",
     "table": "notificaciones",
-    "verbose_name": "Notificacion",
+    "verbose_name": "Notificación",
     "verbose_name_plural": "Notificaciones",
     "fields": [
       {
@@ -2405,11 +2405,11 @@
         "choices": [
           [
             "INFO",
-            "Informacion"
+            "Información"
           ],
           [
             "EXITO",
-            "Exito"
+            "Éxito"
           ],
           [
             "ADVERTENCIA",
@@ -2432,7 +2432,7 @@
       },
       {
         "name": "titulo",
-        "verbose_name": "titulo",
+        "verbose_name": "título",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -2450,7 +2450,7 @@
       },
       {
         "name": "leida",
-        "verbose_name": "leida",
+        "verbose_name": "leída",
         "type": "BooleanField",
         "related_table": null,
         "null": false,
@@ -2459,7 +2459,7 @@
       },
       {
         "name": "leida_en",
-        "verbose_name": "leida en",
+        "verbose_name": "leída en",
         "type": "DateTimeField",
         "related_table": null,
         "null": true,
@@ -2477,7 +2477,7 @@
       },
       {
         "name": "clave_dedupe",
-        "verbose_name": "clave dedupe",
+        "verbose_name": "clave de deduplicación",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -2495,7 +2495,7 @@
       },
       {
         "name": "error_envio",
-        "verbose_name": "error envio",
+        "verbose_name": "error de envío",
         "type": "TextField",
         "related_table": null,
         "null": false,
@@ -2517,8 +2517,8 @@
     "name": "PreferenciaNotificacion",
     "app": "notificaciones",
     "table": "preferencias_notificacion",
-    "verbose_name": "Preferencia de Notificacion",
-    "verbose_name_plural": "Preferencias de Notificacion",
+    "verbose_name": "Preferencia de notificación",
+    "verbose_name_plural": "Preferencias de notificación",
     "fields": [
       {
         "name": "id",
@@ -2580,7 +2580,7 @@
     "name": "Postulacion",
     "app": "participaciones",
     "table": "postulaciones",
-    "verbose_name": "Postulacion",
+    "verbose_name": "Postulación",
     "verbose_name_plural": "Postulaciones",
     "fields": [
       {
@@ -2612,7 +2612,7 @@
       },
       {
         "name": "fecha_postulacion",
-        "verbose_name": "fecha postulacion",
+        "verbose_name": "fecha de postulación",
         "type": "DateTimeField",
         "related_table": null,
         "null": false,
@@ -2629,11 +2629,11 @@
         "choices": [
           [
             "PENDIENTE",
-            "Pendiente de Aprobacion"
+            "Pendiente de aprobación"
           ],
           [
             "EN_REVISION",
-            "En revision"
+            "En revisión"
           ],
           [
             "ACEPTADA",
@@ -2651,7 +2651,7 @@
       },
       {
         "name": "motivacion",
-        "verbose_name": "motivacion",
+        "verbose_name": "motivación",
         "type": "TextField",
         "related_table": null,
         "null": false,
@@ -2696,7 +2696,7 @@
       },
       {
         "name": "acepta_terminos",
-        "verbose_name": "acepta terminos",
+        "verbose_name": "acepta términos",
         "type": "BooleanField",
         "related_table": null,
         "null": false,
@@ -2794,7 +2794,7 @@
         "choices": [
           [
             "LIDER",
-            "Lider"
+            "Líder"
           ],
           [
             "MIEMBRO",
@@ -2804,7 +2804,7 @@
       },
       {
         "name": "fecha_ingreso",
-        "verbose_name": "fecha ingreso",
+        "verbose_name": "fecha de ingreso",
         "type": "DateTimeField",
         "related_table": null,
         "null": false,
@@ -2894,7 +2894,7 @@
       },
       {
         "name": "alerta_80_enviada",
-        "verbose_name": "alerta 80 enviada",
+        "verbose_name": "alerta del 80 % enviada",
         "type": "BooleanField",
         "related_table": null,
         "null": false,
@@ -2948,7 +2948,7 @@
       },
       {
         "name": "categoria",
-        "verbose_name": "categoria",
+        "verbose_name": "categoría",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -3005,7 +3005,7 @@
       },
       {
         "name": "descripcion",
-        "verbose_name": "descripcion",
+        "verbose_name": "descripción",
         "type": "TextField",
         "related_table": null,
         "null": false,
@@ -3176,7 +3176,7 @@
       },
       {
         "name": "titulo",
-        "verbose_name": "titulo",
+        "verbose_name": "título",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -3194,7 +3194,7 @@
       },
       {
         "name": "descripcion",
-        "verbose_name": "descripcion",
+        "verbose_name": "descripción",
         "type": "TextField",
         "related_table": null,
         "null": false,
@@ -3203,7 +3203,7 @@
       },
       {
         "name": "area",
-        "verbose_name": "area",
+        "verbose_name": "área",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -3253,7 +3253,7 @@
       },
       {
         "name": "nivel_academico",
-        "verbose_name": "nivel academico",
+        "verbose_name": "nivel académico",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -3314,7 +3314,7 @@
       },
       {
         "name": "fecha_inicio_tentativa",
-        "verbose_name": "fecha inicio tentativa",
+        "verbose_name": "fecha de inicio tentativa",
         "type": "DateField",
         "related_table": null,
         "null": true,
@@ -3323,7 +3323,7 @@
       },
       {
         "name": "fecha_fin_tentativa",
-        "verbose_name": "fecha fin tentativa",
+        "verbose_name": "fecha de fin tentativa",
         "type": "DateField",
         "related_table": null,
         "null": true,
@@ -3332,7 +3332,7 @@
       },
       {
         "name": "fecha_limite_postulacion",
-        "verbose_name": "fecha limite postulacion",
+        "verbose_name": "fecha límite de postulación",
         "type": "DateField",
         "related_table": null,
         "null": true,
@@ -3350,7 +3350,7 @@
       },
       {
         "name": "documento_soporte",
-        "verbose_name": "documento soporte",
+        "verbose_name": "documento de soporte",
         "type": "FileField",
         "related_table": null,
         "null": true,
@@ -3359,7 +3359,7 @@
       },
       {
         "name": "criterios_evaluacion",
-        "verbose_name": "criterios evaluacion",
+        "verbose_name": "criterios de evaluación",
         "type": "TextField",
         "related_table": null,
         "null": false,
@@ -3368,7 +3368,7 @@
       },
       {
         "name": "uso_esperado_resultados",
-        "verbose_name": "uso esperado resultados",
+        "verbose_name": "uso esperado de los resultados",
         "type": "TextField",
         "related_table": null,
         "null": false,
@@ -3377,7 +3377,7 @@
       },
       {
         "name": "insumos_inicio",
-        "verbose_name": "insumos inicio",
+        "verbose_name": "insumos de inicio",
         "type": "TextField",
         "related_table": null,
         "null": false,
@@ -3386,7 +3386,7 @@
       },
       {
         "name": "insumos_cierre",
-        "verbose_name": "insumos cierre",
+        "verbose_name": "insumos de cierre",
         "type": "TextField",
         "related_table": null,
         "null": false,
@@ -3407,7 +3407,7 @@
           ],
           [
             "en_revision",
-            "En Revision"
+            "En revisión"
           ],
           [
             "aprobado",
@@ -3423,7 +3423,7 @@
           ],
           [
             "en_curso",
-            "En Curso"
+            "En curso"
           ],
           [
             "pausado",
@@ -3450,7 +3450,7 @@
       },
       {
         "name": "anio_consecutivo",
-        "verbose_name": "anio consecutivo",
+        "verbose_name": "año del consecutivo",
         "type": "PositiveSmallIntegerField",
         "related_table": null,
         "null": true,
@@ -3459,7 +3459,7 @@
       },
       {
         "name": "comentarios_revision",
-        "verbose_name": "comentarios revision",
+        "verbose_name": "comentarios de revisión",
         "type": "TextField",
         "related_table": null,
         "null": false,
@@ -3468,7 +3468,7 @@
       },
       {
         "name": "fecha_envio_revision",
-        "verbose_name": "fecha envio revision",
+        "verbose_name": "fecha de envío a revisión",
         "type": "DateTimeField",
         "related_table": null,
         "null": true,
@@ -3477,7 +3477,7 @@
       },
       {
         "name": "fecha_aprobacion",
-        "verbose_name": "fecha aprobacion",
+        "verbose_name": "fecha de aprobación",
         "type": "DateTimeField",
         "related_table": null,
         "null": true,
@@ -3567,7 +3567,7 @@
       },
       {
         "name": "tamano",
-        "verbose_name": "tamano",
+        "verbose_name": "tamaño",
         "type": "PositiveBigIntegerField",
         "related_table": null,
         "null": false,
@@ -3612,7 +3612,7 @@
       },
       {
         "name": "nombre_equipo",
-        "verbose_name": "nombre equipo",
+        "verbose_name": "nombre del equipo",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -3657,7 +3657,7 @@
       },
       {
         "name": "integracion_id",
-        "verbose_name": "integracion",
+        "verbose_name": "integración",
         "type": "ForeignKey",
         "related_table": "integraciones_academicas",
         "null": true,
@@ -3692,7 +3692,7 @@
       },
       {
         "name": "fecha_hora",
-        "verbose_name": "fecha hora",
+        "verbose_name": "fecha y hora",
         "type": "DateTimeField",
         "related_table": null,
         "null": false,
@@ -3701,7 +3701,7 @@
       },
       {
         "name": "enlace_reunion",
-        "verbose_name": "enlace reunion",
+        "verbose_name": "enlace de reunión",
         "type": "CharField",
         "related_table": null,
         "null": true,
@@ -3723,8 +3723,8 @@
     "name": "IntegracionAcademica",
     "app": "seguimiento",
     "table": "integraciones_academicas",
-    "verbose_name": "Integracion Academica",
-    "verbose_name_plural": "Integraciones Academicas",
+    "verbose_name": "Integración académica",
+    "verbose_name_plural": "Integraciones académicas",
     "fields": [
       {
         "name": "id",
@@ -3764,7 +3764,7 @@
       },
       {
         "name": "nivel_formacion",
-        "verbose_name": "nivel formacion",
+        "verbose_name": "nivel de formación",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -3773,7 +3773,7 @@
       },
       {
         "name": "programa_academico",
-        "verbose_name": "programa academico",
+        "verbose_name": "programa académico",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -3791,7 +3791,7 @@
       },
       {
         "name": "descripcion",
-        "verbose_name": "descripcion",
+        "verbose_name": "descripción",
         "type": "TextField",
         "related_table": null,
         "null": false,
@@ -3827,7 +3827,7 @@
       },
       {
         "name": "requerimientos_empresa",
-        "verbose_name": "requerimientos empresa",
+        "verbose_name": "requerimientos de la empresa",
         "type": "TextField",
         "related_table": null,
         "null": false,
@@ -3845,7 +3845,7 @@
       },
       {
         "name": "espacio_fisico",
-        "verbose_name": "espacio fisico",
+        "verbose_name": "espacio físico",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -3866,7 +3866,7 @@
           ],
           [
             "en_revision",
-            "En Revision"
+            "En revisión"
           ],
           [
             "aprobada",
@@ -3884,7 +3884,7 @@
       },
       {
         "name": "comentarios_revision",
-        "verbose_name": "comentarios revision",
+        "verbose_name": "comentarios de revisión",
         "type": "TextField",
         "related_table": null,
         "null": false,
@@ -3893,7 +3893,7 @@
       },
       {
         "name": "fecha_envio_revision",
-        "verbose_name": "fecha envio revision",
+        "verbose_name": "fecha de envío a revisión",
         "type": "DateTimeField",
         "related_table": null,
         "null": true,
@@ -3902,7 +3902,7 @@
       },
       {
         "name": "fecha_aprobacion",
-        "verbose_name": "fecha aprobacion",
+        "verbose_name": "fecha de aprobación",
         "type": "DateTimeField",
         "related_table": null,
         "null": true,
@@ -3933,8 +3933,8 @@
     "name": "ParticipanteIntegracion",
     "app": "seguimiento",
     "table": "participantes_integracion",
-    "verbose_name": "Participante de integracion",
-    "verbose_name_plural": "Participantes de integracion",
+    "verbose_name": "Participante de integración",
+    "verbose_name_plural": "Participantes de integración",
     "fields": [
       {
         "name": "id",
@@ -3947,7 +3947,7 @@
       },
       {
         "name": "integracion_id",
-        "verbose_name": "integracion",
+        "verbose_name": "integración",
         "type": "ForeignKey",
         "related_table": "integraciones_academicas",
         "null": false,
@@ -3987,7 +3987,7 @@
       },
       {
         "name": "documento",
-        "verbose_name": "Cedula / documento",
+        "verbose_name": "Cédula / documento",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -4005,7 +4005,7 @@
       },
       {
         "name": "facultad",
-        "verbose_name": "Facultad u organizacion",
+        "verbose_name": "Facultad u organización",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -4068,7 +4068,7 @@
       },
       {
         "name": "tipo_sesion",
-        "verbose_name": "tipo sesion",
+        "verbose_name": "tipo de sesión",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -4084,11 +4084,11 @@
           ],
           [
             "preseleccion",
-            "Preseleccion"
+            "Preselección"
           ],
           [
             "evaluacion",
-            "Evaluacion / reconocimiento"
+            "Evaluación / reconocimiento"
           ],
           [
             "otro",
@@ -4098,7 +4098,7 @@
       },
       {
         "name": "fecha_sesion",
-        "verbose_name": "fecha sesion",
+        "verbose_name": "fecha de sesión",
         "type": "DateField",
         "related_table": null,
         "null": false,
@@ -4107,7 +4107,7 @@
       },
       {
         "name": "porcentaje_avance",
-        "verbose_name": "porcentaje avance",
+        "verbose_name": "porcentaje de avance",
         "type": "PositiveSmallIntegerField",
         "related_table": null,
         "null": false,
@@ -4206,7 +4206,7 @@
       },
       {
         "name": "tamano",
-        "verbose_name": "tamano",
+        "verbose_name": "tamaño",
         "type": "PositiveBigIntegerField",
         "related_table": null,
         "null": false,
@@ -4242,7 +4242,7 @@
       },
       {
         "name": "content_type_id",
-        "verbose_name": "content type",
+        "verbose_name": "tipo de contenido",
         "type": "ForeignKey",
         "related_table": "django_content_type",
         "null": false,
@@ -4251,7 +4251,7 @@
       },
       {
         "name": "object_id",
-        "verbose_name": "object id",
+        "verbose_name": "ID del objeto",
         "type": "PositiveBigIntegerField",
         "related_table": null,
         "null": false,
@@ -4551,7 +4551,7 @@
       },
       {
         "name": "telefono",
-        "verbose_name": "telefono",
+        "verbose_name": "teléfono",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -4569,7 +4569,7 @@
       },
       {
         "name": "fecha_creacion",
-        "verbose_name": "fecha creacion",
+        "verbose_name": "fecha de creación",
         "type": "DateTimeField",
         "related_table": null,
         "null": false,
@@ -4614,7 +4614,7 @@
       },
       {
         "name": "accion",
-        "verbose_name": "accion",
+        "verbose_name": "acción",
         "type": "CharField",
         "related_table": null,
         "null": false,
@@ -4622,19 +4622,19 @@
         "choices": [
           [
             "LOGIN",
-            "Inicio de sesion"
+            "Inicio de sesión"
           ],
           [
             "LOGIN_FALLIDO",
-            "Intento fallido de inicio de sesion"
+            "Intento fallido de inicio de sesión"
           ],
           [
             "LOGOUT",
-            "Cierre de sesion"
+            "Cierre de sesión"
           ],
           [
             "CREACION",
-            "Creacion de usuario"
+            "Creación de usuario"
           ],
           [
             "CAMBIO_ROL",
@@ -4642,11 +4642,11 @@
           ],
           [
             "CAMBIO_ESTADO",
-            "Activacion o desactivacion"
+            "Activación o desactivación"
           ],
           [
             "IMPORTACION",
-            "Importacion masiva"
+            "Importación masiva"
           ],
           [
             "CAMBIO_PERMISOS",
@@ -4674,7 +4674,7 @@
       },
       {
         "name": "ip",
-        "verbose_name": "ip",
+        "verbose_name": "dirección IP",
         "type": "GenericIPAddressField",
         "related_table": null,
         "null": true,

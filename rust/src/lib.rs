@@ -56,34 +56,7 @@ pub fn router(state: AppState) -> Router {
             "/",
             get(|| async { Html(include_str!("../web/index.html")) }),
         )
-        .route(
-            "/app.js",
-            get(|| async {
-                (
-                    [("content-type", "text/javascript; charset=utf-8")],
-                    include_str!("../web/app.js"),
-                )
-            }),
-        )
-        .route(
-            "/chart.js",
-            get(|| async {
-                (
-                    [("content-type", "text/javascript; charset=utf-8")],
-                    // Same vendored Chart.js 4.4.1 as the Django static/vendor.
-                    include_str!("../web/chart.umd.min.js"),
-                )
-            }),
-        )
-        .route(
-            "/style.css",
-            get(|| async {
-                (
-                    [("content-type", "text/css; charset=utf-8")],
-                    include_str!("../web/style.css"),
-                )
-            }),
-        )
+        .route("/assets/{file}", get(asset))
         .route("/health", get(health))
         .route("/api/login", post(auth::login))
         .route("/api/logout", post(auth::logout))
@@ -143,6 +116,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/preferencias", post(workflows::preferences))
         .route("/api/notificaciones/registro", get(workflows::delivery_log))
+        .route("/api/notificaciones/mias", get(workflows::my_notifications))
         .route("/api/usuarios/{id}/estado", post(workflows::user_status))
         .route("/api/usuarios/{id}/rol", post(permissions::role))
         .route(
@@ -296,6 +270,56 @@ pub fn router(state: AppState) -> Router {
         .layer(middleware::from_fn(security_headers))
         .with_state(state)
 }
+/// Front-end files embedded in the binary: no build step and no CDN.
+/// `index.html` loads the scripts in this order; they share the global scope.
+const ASSETS: &[(&str, &str, &str)] = &[
+    ("tokens.css", CSS, include_str!("../web/css/tokens.css")),
+    ("base.css", CSS, include_str!("../web/css/base.css")),
+    (
+        "components.css",
+        CSS,
+        include_str!("../web/css/components.css"),
+    ),
+    ("shell.css", CSS, include_str!("../web/css/shell.css")),
+    ("auth.css", CSS, include_str!("../web/css/auth.css")),
+    (
+        "dashboard.css",
+        CSS,
+        include_str!("../web/css/dashboard.css"),
+    ),
+    ("records.css", CSS, include_str!("../web/css/records.css")),
+    ("detail.css", CSS, include_str!("../web/css/detail.css")),
+    ("forms.css", CSS, include_str!("../web/css/forms.css")),
+    ("legacy.css", CSS, include_str!("../web/css/legacy.css")),
+    ("icons.js", JS, include_str!("../web/js/icons.js")),
+    ("core.js", JS, include_str!("../web/js/core.js")),
+    ("dashboard.js", JS, include_str!("../web/js/dashboard.js")),
+    ("records.js", JS, include_str!("../web/js/records.js")),
+    ("detail.js", JS, include_str!("../web/js/detail.js")),
+    ("workflows.js", JS, include_str!("../web/js/workflows.js")),
+    ("auth.js", JS, include_str!("../web/js/auth.js")),
+    ("evaluation.js", JS, include_str!("../web/js/evaluation.js")),
+    ("builder.js", JS, include_str!("../web/js/builder.js")),
+    ("forms.js", JS, include_str!("../web/js/forms.js")),
+    ("main.js", JS, include_str!("../web/js/main.js")),
+    // Same vendored Chart.js 4.4.1 the Django static/vendor used.
+    ("chart.js", JS, include_str!("../web/chart.umd.min.js")),
+];
+const CSS: &str = "text/css; charset=utf-8";
+const JS: &str = "text/javascript; charset=utf-8";
+
+async fn asset(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
+    use axum::response::IntoResponse;
+    match ASSETS.iter().find(|(name, _, _)| *name == file) {
+        Some((_, mime, body)) => (
+            [("content-type", *mime), ("cache-control", "no-cache")],
+            *body,
+        )
+            .into_response(),
+        None => axum::http::StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
 async fn health(
     axum::extract::State(state): axum::extract::State<AppState>,
 ) -> error::Result<Json<serde_json::Value>> {

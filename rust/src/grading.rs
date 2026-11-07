@@ -125,9 +125,7 @@ pub async fn grade(
     Json(input): Json<GradeInput>,
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, true).await?;
-    if input.comentario.len() > 10000 {
-        return Err(AppError::bad("Comentario demasiado largo"));
-    }
+    domain::max_chars(&input.comentario, 10000, "Comentario")?;
     let mut tx = state.pool.begin().await?;
     let record: Option<(i64, String, Decimal, String, Option<Decimal>)> = sqlx::query_as(
         "SELECT reto_id,estado,puntaje_maximo,titulo,nota FROM entregables WHERE id=$1 FOR UPDATE",
@@ -144,11 +142,15 @@ pub async fn grade(
             previous.map(|n| n.to_string()).unwrap_or_default()
         )));
     }
-    let invalid = || AppError::bad("La calificacion o los puntajes de la rubrica no son validos.");
+    let invalid = || AppError::bad("La calificación o los puntajes de la rúbrica no son válidos.");
     let (nota, scores) = if let Some(rubric) = input.rubrica_id {
         let criteria: Vec<(i64, Decimal)> = sqlx::query_as("SELECT c.id,c.puntaje_maximo FROM evaluacion_criteriorubrica c JOIN evaluacion_rubrica r ON r.id=c.rubrica_id WHERE r.id=$1 AND r.reto_id=$2 AND r.activa ORDER BY c.orden,c.id")
             .bind(rubric).bind(reto).fetch_all(&mut *tx).await?;
         if criteria.is_empty() {
+            return Err(invalid());
+        }
+        let rubric_max: Decimal = criteria.iter().map(|c| c.1).sum();
+        if rubric_max <= Decimal::ZERO {
             return Err(invalid());
         }
         let mut scores = vec![];
@@ -163,7 +165,9 @@ pub async fn grade(
             }
             scores.push((criterion, value));
         }
-        (scores.iter().map(|s| s.1).sum::<Decimal>(), scores)
+        let sum: Decimal = scores.iter().map(|s| s.1).sum();
+        let nota = (sum / rubric_max * max).round_dp(2);
+        (nota, scores)
     } else {
         let nota = crate::finance::money(&input.nota).map_err(|_| invalid())?;
         if nota > max {
@@ -236,7 +240,7 @@ pub async fn publish(
             nota.map(|n| n.to_string()).unwrap_or_default()
         );
         if !feedback.is_empty() {
-            message.push_str(&format!("\nRetroalimentacion: {feedback}"));
+            message.push_str(&format!("\nRetroalimentación: {feedback}"));
         }
         notify(
             &mut tx,
@@ -268,7 +272,7 @@ pub async fn mark_in_review(state: &AppState, user: &crate::auth::User) -> Resul
             "ENVIADO",
             "EN_REVISION",
             user.id,
-            "Entregable abierto para revision.",
+            "Entregable abierto para revisión.",
         )
         .await?;
     }

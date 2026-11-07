@@ -26,8 +26,13 @@ pub(crate) const ESPECIALIDADES: [&str; 10] = [
     "Otra",
 ];
 
-fn site() -> String {
-    std::env::var("RUST_SITE_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".into())
+/// Public base URL for links in emails: RUST_SITE_URL, else the bind address.
+/// Shared with the notification outbox (main.rs) so every link agrees.
+pub fn site_url(config: &crate::config::Config) -> String {
+    std::env::var("RUST_SITE_URL")
+        .unwrap_or_else(|_| format!("http://{}", config.bind))
+        .trim_end_matches('/')
+        .to_string()
 }
 
 /// GET (public): catalogs the registration forms need.
@@ -140,14 +145,14 @@ pub async fn register(
             return Err(AppError::bad("Revisa el semestre y la especialidad"));
         }
     } else {
-        domain::validate_text(&input.nit, 20, "NIT de la Empresa")?;
-        domain::validate_text(&input.razon_social, 150, "Razon Social")?;
-        domain::validate_text(&input.sector_industrial, 100, "Sector Industrial")?;
+        domain::validate_text(&input.nit, 20, "NIT de la empresa")?;
+        domain::validate_text(&input.razon_social, 150, "Razón social")?;
+        domain::validate_text(&input.sector_industrial, 100, "Sector industrial")?;
         domain::validate_text(&input.area_responsable, 150, "Área responsable")?;
         let web = input.sitio_web.trim();
         if !["RETO", "HACKATHON", "AMBOS"].contains(&input.tipo_convocatoria.as_str())
             || (!web.is_empty()
-                && (web.len() > 200
+                && (web.chars().count() > 200
                     || !(web.starts_with("https://") || web.starts_with("http://"))))
         {
             return Err(AppError::bad(
@@ -217,15 +222,19 @@ pub async fn register(
             .trim()
             .to_string()
     };
-    mail::send_later(
-        email,
-        "Bienvenido a RetosEAN".into(),
+    let body = if pending {
         format!(
-            "Hola {name},\n\nTe damos la bienvenida a RetosEAN, la plataforma de retos Universidad-Empresa de la Universidad EAN.\n\nUsuario: {}\nIngresa en: {}/\n\nEquipo RetosEAN",
+            "Hola {name}:\n\nRecibimos tu registro como profesor en RetosEAN. Tu cuenta está pendiente de aprobación por un administrador; te avisaremos cuando puedas ingresar.\n\nUsuario: {}\n\nEquipo RetosEAN",
+            input.username
+        )
+    } else {
+        format!(
+            "Hola {name}:\n\nTe damos la bienvenida a RetosEAN, la plataforma de retos Universidad-Empresa de la Universidad EAN.\n\nUsuario: {}\nIngresa en: {}/\n\nEquipo RetosEAN",
             input.username,
-            site().trim_end_matches('/')
-        ),
-    );
+            site_url(&state.config)
+        )
+    };
+    mail::send_later(email, "Bienvenido a RetosEAN".into(), body);
     if pending {
         // No session: an administrator must approve the account first.
         return Ok(Json(json!({"ok":true,"pendiente_aprobacion":true,"mensaje":"Tu cuenta de profesor fue creada y está pendiente de aprobación por un administrador."})).into_response());
@@ -272,7 +281,7 @@ pub async fn reset_request(
                 "Restablece tu contraseña de RetosEAN".into(),
                 format!(
                     "Hola {name}:\n\nRecibimos una solicitud para restablecer la contraseña de tu cuenta en RetosEAN.\n\nPara elegir una nueva contraseña, abre el siguiente enlace:\n\n{}/#restablecer/{token}\n\nSi no solicitaste este cambio, ignora este mensaje y tu contraseña seguirá siendo la misma.\n\n— Equipo RetosEAN",
-                    site().trim_end_matches('/')
+                    site_url(&state.config)
                 ),
             );
         }
@@ -296,7 +305,12 @@ pub async fn reset_confirm(
     if input.nueva != input.nueva2 {
         return Err(AppError::bad("Las contraseñas no coinciden"));
     }
-    if input.nueva.chars().count() < 12 || input.nueva.len() > 1024 || input.token.len() != 64 {
+    if input.token.len() != 64 {
+        return Err(AppError::bad(
+            "El enlace para restablecer la contraseña no es válido o ya fue usado.",
+        ));
+    }
+    if input.nueva.chars().count() < 12 || input.nueva.len() > 1024 {
         return Err(AppError::bad(
             "La contraseña debe tener al menos 12 caracteres",
         ));

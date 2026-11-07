@@ -53,7 +53,10 @@ parity!(test_cambiar_estado_invalido_no_modifica_ni_registra, |t| {
     );
 });
 parity!(test_ciclo_del_documento_queda_registrado, |t| {
-    let today = chrono::Utc::now().date_naive().to_string();
+    // Bogotá date (UTC-5, no DST), as the server validates.
+    let today = (chrono::Utc::now() - chrono::Duration::hours(5))
+        .date_naive()
+        .to_string();
     let fields = [("fecha_expedicion", today.as_str())];
     let (code, body) = multipart(
         &t.app,

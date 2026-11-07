@@ -25,6 +25,33 @@ pub fn resource(name: &str) -> Result<&'static Value> {
         .find(|m| m["table"].as_str() == Some(name))
         .ok_or_else(AppError::not_found)
 }
+/// Column heading for exports: the field's verbose_name with a capital first
+/// letter ("fecha de postulación" -> "Fecha de postulación").
+pub fn field_label(table: &str, field: &str) -> String {
+    let verbose = resource(table)
+        .ok()
+        .and_then(|m| m["fields"].as_array())
+        .and_then(|fields| fields.iter().find(|f| f["name"] == field))
+        .and_then(|f| f["verbose_name"].as_str())
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or(field);
+    let mut chars = verbose.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
+    }
+}
+/// Display text of an exported value: booleans as Sí/No and choice codes
+/// with their labels; the stored values themselves are unchanged.
+pub fn display_value(table: &str, field: &str, value: &Value) -> String {
+    match value {
+        Value::Null => String::new(),
+        Value::Bool(true) => "Sí".into(),
+        Value::Bool(false) => "No".into(),
+        Value::String(s) => crate::dashboard::etiqueta(table, field, s),
+        other => other.to_string(),
+    }
+}
 pub fn scope(table: &str, user: &User) -> Option<String> {
     if user.admin() {
         return Some(
@@ -223,8 +250,8 @@ pub async fn rows(
         filters.limit.unwrap_or(20).clamp(1, 100)
     };
     let q = filters.q.as_deref().unwrap_or("");
-    if q.len() > 200 {
-        return Err(AppError::bad("Búsqueda demasiado larga"));
+    if q.chars().count() > 200 {
+        return Err(AppError::bad("Búsqueda: máximo 200 caracteres."));
     }
     let search = format!(
         "%{}%",
@@ -233,7 +260,7 @@ pub async fn rows(
             .replace('_', "\\_")
     );
     let base = format!(
-        "WITH actor AS (SELECT $1::bigint id) SELECT {expr} data FROM \"{table}\" t WHERE ({policy}) AND ({expr})::text ILIKE $2{}",
+        "WITH actor AS (SELECT $1::bigint id) SELECT {expr} data FROM \"{table}\" t WHERE ({policy}) AND ($2 = '%%' OR EXISTS(SELECT 1 FROM jsonb_each_text({expr}) kv WHERE kv.value ILIKE $2)){}",
         match (table, filters.ecosistema) {
             ("unidades_estudio", _) if filters.activo.as_deref() != Some("0") =>
                 " AND t.activo".to_string(),
@@ -310,7 +337,7 @@ pub async fn export(
         "\u{feff}{}\r\n",
         fields
             .iter()
-            .map(|f| crate::domain::csv_cell(&json!(f)))
+            .map(|f| crate::domain::csv_cell(&json!(field_label(&name, f))))
             .collect::<Vec<_>>()
             .join(",")
     );
@@ -318,7 +345,7 @@ pub async fn export(
         csv.push_str(
             &fields
                 .iter()
-                .map(|f| crate::domain::csv_cell(&row[*f]))
+                .map(|f| crate::domain::csv_cell(&json!(display_value(&name, f, &row[*f]))))
                 .collect::<Vec<_>>()
                 .join(","),
         );

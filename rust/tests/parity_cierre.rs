@@ -193,7 +193,7 @@ parity!(
         "SELECT mensaje FROM notificaciones WHERE usuario_id={COMPANY_USER} AND evento='RETO_FINALIZADO'"
     ))
     .await;
-        assert!(company.contains("paso a estado: Finalizado"), "{company}");
+        assert!(company.contains("pasó al estado: Finalizado"), "{company}");
         let teacher_notice = t.text(&format!(
         "SELECT mensaje FROM notificaciones WHERE usuario_id={teacher} AND evento='RETO_FINALIZADO'"
     ))

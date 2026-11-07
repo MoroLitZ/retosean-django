@@ -54,6 +54,14 @@ pub fn validate_text(value: &str, max: usize, label: &str) -> Result<()> {
         Ok(())
     }
 }
+/// Optional free text: at most `max` characters (not bytes, so á/é/ñ count as one).
+pub fn max_chars(value: &str, max: usize, label: &str) -> Result<()> {
+    if value.chars().count() > max {
+        Err(AppError::bad(format!("{label}: máximo {max} caracteres.")))
+    } else {
+        Ok(())
+    }
+}
 /// One @, non-empty local and domain parts, a dot in the domain, and no
 /// whitespace or angle brackets.
 pub fn valid_email(email: &str) -> bool {

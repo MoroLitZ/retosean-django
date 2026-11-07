@@ -127,9 +127,18 @@ async fn read_form(
                 .text()
                 .await
                 .map_err(|_| AppError::bad("Campo inválido"))?;
-            if text.len() > 20000 {
-                return Err(AppError::bad("Texto demasiado largo"));
-            }
+            let label = match name.as_str() {
+                "espacio" => "Espacio",
+                "recursos" => "Recursos",
+                "invitados" => "Invitados",
+                "agenda" => "Agenda",
+                "notas" => "Notas",
+                "impacto" => "Impacto",
+                "fecha_hora" => "Fecha y hora",
+                "nombre" => "Nombre",
+                _ => "Campo",
+            };
+            crate::domain::max_chars(&text, 20000, label)?;
             fields.insert(name, text);
         }
     }
@@ -198,7 +207,7 @@ pub async fn save(
         .bind(closure).bind(get("notas")).bind(get("impacto")).bind(stored.as_ref().map(|(k, _)| k)).bind(user.id).execute(&mut *tx).await?;
     commit(tx, stored.map(|(_, p)| p)).await?;
     Ok(Json(
-        json!({"ok":true,"mensaje":"Documentacion y agenda guardadas."}),
+        json!({"ok":true,"mensaje":"Documentación y agenda guardadas."}),
     ))
 }
 
@@ -213,9 +222,10 @@ pub async fn artifact(
     let (fields, data) = read_form(multipart, "archivo").await?;
     let name = fields.get("nombre").map(|v| v.trim()).unwrap_or("");
     let invalid = "No fue posible cargar el entregable final. Verifica los datos o el archivo.";
-    if name.is_empty() || name.chars().count() > 180 {
+    if name.is_empty() {
         return Err(AppError::bad(invalid));
     }
+    crate::domain::max_chars(name, 180, "Nombre")?;
     let data = data.ok_or_else(|| AppError::bad(invalid))?;
     let mut tx = state.pool.begin().await?;
     manage(&mut tx, reto, &user, false).await?;
@@ -242,11 +252,9 @@ pub async fn recognition(
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, true).await?;
     let name = input.nombre_destinatario.trim();
-    if name.is_empty()
-        || name.chars().count() > 150
-        || input.descripcion.trim().is_empty()
-        || input.descripcion.len() > 20000
-    {
+    crate::domain::max_chars(name, 150, "Nombre del destinatario")?;
+    crate::domain::max_chars(&input.descripcion, 20000, "Descripción")?;
+    if name.is_empty() || input.descripcion.trim().is_empty() {
         return Err(AppError::bad("Revisa los datos del reconocimiento."));
     }
     let mut tx = state.pool.begin().await?;
@@ -284,6 +292,7 @@ pub async fn request(
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, true).await?;
     let detail = input.descripcion.trim();
+    crate::domain::max_chars(detail, 20000, "Detalle")?;
     if !["INICIO", "CIERRE"].contains(&input.evento.as_str())
         || ![
             "ESPACIO",
@@ -295,7 +304,6 @@ pub async fn request(
         ]
         .contains(&input.tipo.as_str())
         || detail.is_empty()
-        || detail.len() > 20000
     {
         return Err(AppError::bad("Revisa los datos de la solicitud."));
     }

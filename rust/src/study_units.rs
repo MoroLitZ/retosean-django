@@ -36,7 +36,7 @@ async fn read_form(mut multipart: Multipart) -> Result<(HashMap<String, String>,
             let bytes = field
                 .bytes()
                 .await
-                .map_err(|_| AppError::bad("Archivo demasiado grande"))?;
+                .map_err(|_| AppError::bad("Archivo demasiado grande."))?;
             if !bytes.is_empty() {
                 file = Some(bytes);
             }
@@ -199,7 +199,7 @@ pub async fn set_active(
 async fn load_csv(state: &AppState, file: Option<Bytes>) -> Result<Json<Value>> {
     let data = file.ok_or_else(|| AppError::bad("Selecciona un archivo CSV."))?;
     if data.len() > 2 * 1024 * 1024 {
-        return Err(AppError::bad("El CSV es demasiado grande"));
+        return Err(AppError::bad("El CSV es demasiado grande."));
     }
     let text = match std::str::from_utf8(&data) {
         Ok(t) => t.trim_start_matches('\u{feff}').to_string(),
@@ -222,10 +222,18 @@ async fn load_csv(state: &AppState, file: Option<Bytes>) -> Result<Json<Value>> 
             missing.join(", ")
         )));
     }
+    // csv.DictReader skips blank lines; keep the original line numbers for messages.
+    let rows: Vec<(usize, Vec<String>)> = rows
+        .enumerate()
+        .map(|(index, row)| (index + 2, row))
+        .filter(|(_, row)| !row.iter().all(|v| v.trim().is_empty()))
+        .collect();
+    if rows.len() > 5000 {
+        return Err(AppError::bad("El CSV tiene más de 5000 filas."));
+    }
     let mut tx = state.pool.begin().await?;
     let (mut created, mut problems) = (0, Vec::new());
-    for (index, row) in rows.enumerate().take(5000) {
-        let number = index + 2;
+    for (number, row) in rows {
         let get = |key: &str| {
             headers
                 .iter()
@@ -236,7 +244,7 @@ async fn load_csv(state: &AppState, file: Option<Bytes>) -> Result<Json<Value>> 
         };
         let (codigo, nombre, programa) = (get("codigo"), get("nombre"), get("programa"));
         if codigo.is_empty() || nombre.is_empty() || programa.is_empty() {
-            problems.push(format!("fila {number}: faltan codigo, nombre o programa"));
+            problems.push(format!("fila {number}: faltan código, nombre o programa"));
             continue;
         }
         let (periodo, ciclo) = (get("periodo"), get("ciclo"));
@@ -254,7 +262,7 @@ async fn load_csv(state: &AppState, file: Option<Bytes>) -> Result<Json<Value>> 
                 .fetch_one(&mut *tx)
                 .await?;
         if taken {
-            problems.push(format!("fila {number}: el codigo {codigo} ya existe"));
+            problems.push(format!("fila {number}: el código {codigo} ya existe"));
             continue;
         }
         let program: Option<i64> = sqlx::query_scalar(
@@ -293,7 +301,7 @@ async fn load_csv(state: &AppState, file: Option<Bytes>) -> Result<Json<Value>> 
         messages.push(format!("{} fila(s) omitida(s): {detail}", problems.len()));
     }
     if created == 0 && problems.is_empty() {
-        messages.push("El CSV no contenia filas de datos.".into());
+        messages.push("El CSV no contenía filas de datos.".into());
     }
     Ok(Json(
         json!({"creadas":created,"omitidas":problems.len(),"mensaje":messages.join(" ")}),

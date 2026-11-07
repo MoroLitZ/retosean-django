@@ -75,7 +75,7 @@ fn read_file(name: &str, bytes: &[u8]) -> std::result::Result<Vec<Vec<String>>, 
                 .map_err(|e| format!("No se pudo leer el archivo: {e}"))?;
         let range = book
             .worksheet_range_at(0)
-            .ok_or("El archivo esta vacio.")?
+            .ok_or("El archivo está vacío.")?
             .map_err(|e| format!("No se pudo leer el archivo: {e}"))?;
         Ok(range
             .rows()
@@ -113,7 +113,7 @@ async fn validate(
     rows: &[Vec<String>],
 ) -> Result<std::result::Result<Vec<Row>, String>> {
     let Some(first) = rows.first() else {
-        return Ok(Err("El archivo esta vacio.".into()));
+        return Ok(Err("El archivo está vacío.".into()));
     };
     let cabeceras = headers_of(first);
     let faltan: Vec<&str> = OBLIGATORIAS
@@ -131,7 +131,7 @@ async fn validate(
     let body = &rows[1..];
     if body.len() > MAX_FILAS {
         return Ok(Err(format!(
-            "El archivo tiene {} filas y el maximo permitido es {MAX_FILAS}.",
+            "El archivo tiene {} filas y el máximo permitido es {MAX_FILAS}.",
             body.len()
         )));
     }
@@ -169,14 +169,14 @@ async fn validate(
             r.errores.push("El usuario es obligatorio.".into());
         } else if users_seen.contains(&username.to_lowercase()) {
             r.errores
-                .push("El usuario esta repetido dentro del archivo.".into());
+                .push("El usuario está repetido dentro del archivo.".into());
         } else if username.chars().count() > 150
             || !username
                 .chars()
                 .all(|c| c.is_alphanumeric() || "@.+-_".contains(c))
         {
             r.errores
-                .push("El usuario solo admite letras, numeros y @ . + - _".into());
+                .push("El usuario solo admite letras, números y @ . + - _".into());
         } else if sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(SELECT 1 FROM usuarios WHERE lower(username)=lower($1))",
         )
@@ -193,10 +193,10 @@ async fn validate(
             r.errores.push("El correo es obligatorio.".into());
         } else if email.len() > 254 || !crate::domain::valid_email(&email) {
             r.errores
-                .push("El correo no tiene un formato valido.".into());
+                .push("El correo no tiene un formato válido.".into());
         } else if emails_seen.contains(&email.to_lowercase()) {
             r.errores
-                .push("El correo esta repetido dentro del archivo.".into());
+                .push("El correo está repetido dentro del archivo.".into());
         } else if sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(SELECT 1 FROM usuarios WHERE lower(email)=lower($1))",
         )
@@ -213,20 +213,20 @@ async fn validate(
             r.errores.push("El rol es obligatorio.".into());
         } else if !ROLES.contains(&rol.as_str()) {
             r.errores
-                .push(format!("Rol no valido. Usa uno de: {}.", ROLES.join(", ")));
+                .push(format!("Rol no válido. Usa uno de: {}.", ROLES.join(", ")));
         }
         let password = r.get("password");
         if !password.is_empty() && (password.chars().count() < 12 || password.len() > 1024) {
             // Rust's password policy (Django has no validators configured).
             r.errores
-                .push("Contrasena debil: debe tener al menos 12 caracteres.".into());
+                .push("Contraseña débil: debe tener al menos 12 caracteres.".into());
         }
         if r.get("first_name").chars().count() > 150
             || r.get("last_name").chars().count() > 150
             || r.get("telefono").chars().count() > 20
         {
             r.errores
-                .push("Nombre, apellido o telefono demasiado largos.".into());
+                .push("Nombre, apellido o teléfono demasiado largos.".into());
         }
         out.push(r);
     }
@@ -258,7 +258,7 @@ pub async fn import(
     while let Some(field) = multipart
         .next_field()
         .await
-        .map_err(|_| AppError::bad("Carga invalida"))?
+        .map_err(|_| AppError::bad("Carga inválida"))?
     {
         match field.name().unwrap_or("") {
             "archivo" => {
@@ -268,7 +268,7 @@ pub async fn import(
                     .await
                     .map_err(|_| AppError::bad("Archivo demasiado grande"))?;
                 if bytes.len() > 5 * 1024 * 1024 {
-                    return Err(AppError::bad("Archivo de maximo 5 MB"));
+                    return Err(AppError::bad("Archivo de máximo 5 MB"));
                 }
                 file = Some(bytes);
             }
@@ -347,7 +347,7 @@ pub async fn import(
         let names: Vec<&str> = created.iter().take(20).map(|c| c.0.as_str()).collect();
         let more = if created.len() > 20 { "..." } else { "" };
         sqlx::query("INSERT INTO log_actividad(usuario_id,identificador,accion,detalle,realizado_por_id,creado_en) VALUES(NULL,'','IMPORTACION',$1,$2,now())")
-            .bind(format!("Importacion masiva de {} usuario(s): {}{more}", created.len(), names.join(", ")))
+            .bind(format!("Importación masiva de {} usuario(s): {}{more}", created.len(), names.join(", ")))
             .bind(admin.id).execute(&mut *tx).await?;
     }
     tx.commit().await?;
@@ -365,7 +365,7 @@ pub async fn import(
         );
         if let Some(token) = link {
             text.push_str(&format!(
-                "\nTu cuenta aun no tiene contrasena. Definela aqui: {site}/#restablecer/{token}\n"
+                "\nTu cuenta aún no tiene contraseña. Defínela aquí: {site}/#restablecer/{token}\n"
             ));
         }
         text.push_str("\nEquipo RetosEAN");
@@ -386,7 +386,7 @@ pub async fn template(
         return Err(AppError::forbidden());
     }
     let body = format!(
-        "{}\r\njperez,jperez@universidadean.edu.co,Juana,Perez,ESTUDIANTE,3001234567,\r\nmgomez,mgomez@universidadean.edu.co,Mario,Gomez,PROFESOR,3009876543,\r\n",
+        "{}\r\njperez,jperez@universidadean.edu.co,Juana,Pérez,ESTUDIANTE,3001234567,\r\nmgomez,mgomez@universidadean.edu.co,Mario,Gómez,PROFESOR,3009876543,\r\n",
         COLUMNAS.join(",")
     );
     Ok((

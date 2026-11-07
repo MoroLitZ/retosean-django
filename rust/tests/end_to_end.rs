@@ -1786,8 +1786,8 @@ imp.mal;nueva@universidadean.edu.co;Mal;Import;ROLRARO;;corta
         let errors = preview["invalidas"][0]["errores"].to_string();
         assert!(
             errors.contains("Ya existe un usuario con ese correo")
-                && errors.contains("Rol no valido")
-                && errors.contains("Contrasena debil"),
+                && errors.contains("Rol no válido")
+                && errors.contains("Contraseña débil"),
             "{errors}"
         );
         let none: i64 =
@@ -1933,7 +1933,7 @@ z,ESTUDIANTE
                 .lock()
                 .unwrap()
                 .iter()
-                .filter(|(_, subject, _)| subject == "[RetosEAN] Ejecucion presupuestal")
+                .filter(|(_, subject, _)| subject == "[RetosEAN] Ejecución presupuestal")
                 .count(),
             2
         );
@@ -2010,8 +2010,8 @@ z,ESTUDIANTE
         );
         assert!(
             mails.iter().any(
-                |(_, subject, _)| subject == "[RetosEAN] Respuesta a tu postulacion"
-                    || subject.contains("Nueva postulacion")
+                |(_, subject, _)| subject == "[RetosEAN] Respuesta a tu postulación"
+                    || subject.contains("Nueva postulación")
             ),
             "{mails:?}"
         );

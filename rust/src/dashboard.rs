@@ -13,10 +13,10 @@ const COLORES: [&str; 8] = [
     "#2563eb", "#16a34a", "#f59e0b", "#dc2626", "#7c3aed", "#0891b2", "#65a30d", "#db2777",
 ];
 const PERIODOS: [(&str, &str); 5] = [
-    ("30d", "Ultimos 30 dias"),
-    ("90d", "Ultimos 90 dias"),
-    ("anio", "Ultimo anio"),
-    ("todo", "Historico completo"),
+    ("30d", "Últimos 30 días"),
+    ("90d", "Últimos 90 días"),
+    ("anio", "Último año"),
+    ("todo", "Histórico completo"),
     ("custom", "Rango personalizado"),
 ];
 // Every query shares these parameters; Django filters on the local (Bogota) date.
@@ -49,7 +49,7 @@ fn rango(f: &Filtro, hoy: NaiveDate) -> (Option<NaiveDate>, Option<NaiveDate>, S
             .and_then(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").ok())
     };
     match f.periodo.as_deref().unwrap_or("90d") {
-        "todo" => (None, None, "Historico completo".into(), "todo".into()),
+        "todo" => (None, None, "Histórico completo".into(), "todo".into()),
         "custom" => {
             let (mut desde, mut hasta) = (fecha(&f.desde), fecha(&f.hasta));
             if let (Some(a), Some(b)) = (desde, hasta)
@@ -193,7 +193,7 @@ pub async fn panel(
                 'nota_promedio', (SELECT avg(nota)::float8 FROM e))",
             vec![
                 ("entregables_por_estado", "SELECT estado, count(*)::float8 FROM e GROUP BY estado ORDER BY 2 DESC", Some(("entregables", "estado"))),
-                ("entregables_por_reto", "SELECT coalesce(rt.titulo, 'Sin titulo'), count(*)::float8 FROM e LEFT JOIN retos rt ON rt.id = e.reto_id GROUP BY 1 ORDER BY 2 DESC LIMIT 8", None),
+                ("entregables_por_reto", "SELECT coalesce(rt.titulo, 'Sin título'), count(*)::float8 FROM e LEFT JOIN retos rt ON rt.id = e.reto_id GROUP BY 1 ORDER BY 2 DESC LIMIT 8", None),
             ],
         ),
         "ESTUDIANTE" => (
@@ -213,7 +213,7 @@ pub async fn panel(
                 'nota_promedio', (SELECT avg(nota)::float8 FROM e WHERE calificacion_publicada))",
             vec![
                 ("postulaciones_por_estado", "SELECT estado, count(*)::float8 FROM po GROUP BY estado ORDER BY 2 DESC", Some(("postulaciones", "estado"))),
-                ("notas_recientes", "SELECT k, v FROM (SELECT left(titulo, 24) k, nota::float8 v, fecha_entrega FROM e WHERE nota IS NOT NULL AND calificacion_publicada ORDER BY fecha_entrega DESC LIMIT 8) x ORDER BY fecha_entrega", None),
+                ("notas_recientes", "SELECT k, v FROM (SELECT CASE WHEN char_length(titulo) > 40 THEN left(titulo, 39) || '…' ELSE titulo END k, nota::float8 v, fecha_entrega FROM e WHERE nota IS NOT NULL AND calificacion_publicada ORDER BY fecha_entrega DESC LIMIT 8) x ORDER BY fecha_entrega", None),
             ],
         ),
         // Django kpis_experto / series_experto: the expert as hackathon juror.
@@ -232,7 +232,7 @@ pub async fn panel(
                 'equipos_academicos', (SELECT count(*) FROM equipos_reto_academico_expertos_invitados e, p WHERE e.usuario_id = p.uid))",
             vec![(
                 "votos_por_hackathon",
-                "SELECT coalesce(r.titulo, 'Sin titulo'), count(*)::float8 FROM v JOIN hackathons h ON h.id = v.hackathon_id JOIN retos r ON r.id = h.reto_id GROUP BY 1 ORDER BY 2 DESC LIMIT 8",
+                "SELECT coalesce(r.titulo, 'Sin título'), count(*)::float8 FROM v JOIN hackathons h ON h.id = v.hackathon_id JOIN retos r ON r.id = h.reto_id GROUP BY 1 ORDER BY 2 DESC LIMIT 8",
                 None,
             )],
         ),
@@ -323,7 +323,7 @@ mod tests {
             (
                 Some(hoy - Duration::days(90)),
                 Some(hoy),
-                "Ultimos 90 dias",
+                "Últimos 90 días",
                 "90d"
             )
         );

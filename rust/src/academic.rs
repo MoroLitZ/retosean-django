@@ -87,13 +87,13 @@ async fn clean(
                 .fetch_one(&mut **tx)
                 .await?;
         if !known {
-            errors.push("facultad");
+            errors.push("Facultad");
         }
     }
     let level = input.nivel_formacion.trim().to_string();
     if !level.is_empty() && level != legacy("nivel_formacion") && !NIVELES.contains(&level.as_str())
     {
-        errors.push("nivel_formacion");
+        errors.push("Nivel de formación");
     }
     let ecosystem = input.ecosistema.trim().to_string();
     if !ecosystem.is_empty() && ecosystem != legacy("ecosistema") {
@@ -103,7 +103,7 @@ async fn clean(
                 .fetch_one(&mut **tx)
                 .await?;
         if !known {
-            errors.push("ecosistema");
+            errors.push("Ecosistema");
         }
     }
     if let Some(unit) = input.unidad_estudio {
@@ -114,36 +114,40 @@ async fn clean(
             .await?;
         match name {
             Some(name) => input.programa_academico = name,
-            None => errors.push("unidad_estudio"),
+            None => errors.push("Unidad de estudio"),
         }
     }
     if !errors.is_empty() {
         return Err(AppError::bad(format!(
-            "Escoja una opción válida en: {}.",
+            "Escoge una opción válida en: {}.",
             errors.join(", ")
         )));
     }
+    // The limits match the integraciones_academicas columns, so long input gets a
+    // readable 400 instead of a database error.
     for (text, max, label) in [
-        (&input.facultad, 150, "Facultad"),
-        (&input.nivel_formacion, 50, "Nivel de formacion"),
-        (&input.programa_academico, 150, "Programa academico"),
-        (&input.ecosistema, 150, "Ecosistema"),
-        (&input.entregable_esperado, 255, "Entregable esperado"),
-        (&input.espacio_fisico, 200, "Espacio fisico"),
+        (&input.facultad, 140, "Facultad"),
+        (&input.nivel_formacion, 120, "Nivel de formación"),
+        (&input.programa_academico, 160, "Programa académico"),
+        (&input.ecosistema, 140, "Ecosistema"),
+        (&input.entregable_esperado, 180, "Entregable esperado"),
+        (&input.espacio_fisico, 180, "Espacio físico"),
+        (&input.descripcion, 20000, "Descripción"),
+        (&input.alcance, 20000, "Alcance"),
+        (&input.cronograma_sesiones, 20000, "Cronograma de sesiones"),
+        (
+            &input.requerimientos_empresa,
+            20000,
+            "Requerimientos de la empresa",
+        ),
+        (
+            &input.requerimientos_internos,
+            20000,
+            "Requerimientos internos",
+        ),
     ] {
         if text.chars().count() > max {
-            return Err(AppError::bad(format!("{label}: máximo {max} caracteres")));
-        }
-    }
-    for text in [
-        &input.descripcion,
-        &input.alcance,
-        &input.cronograma_sesiones,
-        &input.requerimientos_empresa,
-        &input.requerimientos_internos,
-    ] {
-        if text.len() > 20000 {
-            return Err(AppError::bad("Texto demasiado largo"));
+            return Err(AppError::bad(format!("{label}: máximo {max} caracteres.")));
         }
     }
     Ok(())
@@ -214,7 +218,7 @@ pub async fn integrate(
         "",
         "borrador",
         user.id,
-        "Integracion creada.",
+        "Integración creada.",
     )
     .await?;
     let estado = if input.fields.accion == "enviar" {
@@ -257,7 +261,7 @@ pub async fn edit(
         || ["abierto", "en_curso"].contains(&current["reto_estado"].as_str().unwrap_or(""));
     if !editable {
         return Err(AppError::bad(
-            "Esta integracion no puede editarse desde su estado actual.",
+            "Esta integración no puede editarse desde su estado actual.",
         ));
     }
     clean(&mut tx, &mut input.fields, Some(&current)).await?;
@@ -279,7 +283,7 @@ pub async fn edit(
             "rechazada",
             "borrador",
             user.id,
-            "El profesor edito la integracion tras el rechazo.",
+            "El profesor editó la integración tras el rechazo.",
         )
         .await?;
         estado = "borrador".into();
@@ -301,9 +305,9 @@ async fn submit(tx: &mut Transaction<'_, Postgres>, id: i64, user: &User) -> Res
             .await?;
     let mut missing: Vec<&str> = [
         ("facultad", "Facultad"),
-        ("programa_academico", "Programa academico"),
-        ("nivel_formacion", "Nivel de formacion"),
-        ("descripcion", "Descripcion"),
+        ("programa_academico", "Programa académico"),
+        ("nivel_formacion", "Nivel de formación"),
+        ("descripcion", "Descripción"),
         ("alcance", "Alcance"),
         ("entregable_esperado", "Entregable esperado"),
     ]
@@ -331,7 +335,7 @@ async fn submit(tx: &mut Transaction<'_, Postgres>, id: i64, user: &User) -> Res
         from,
         "en_revision",
         user.id,
-        "Integracion enviada a revision.",
+        "Integración enviada a revisión.",
     )
     .await?;
     let (title, company): (String, i64) = sqlx::query_as("SELECT r.titulo,r.empresa_id FROM integraciones_academicas i JOIN retos r ON r.id=i.reto_id WHERE i.id=$1")
@@ -349,7 +353,7 @@ async fn submit(tx: &mut Transaction<'_, Postgres>, id: i64, user: &User) -> Res
         }
     };
     let message = format!(
-        "{name} envio una postulacion de integracion para el reto \"{title}\" y esta pendiente de revision."
+        "{name} envió una postulación de integración para el reto \"{title}\" y está pendiente de revisión."
     );
     let key = format!("integracion:{id}:en_revision:{}", sent.to_rfc3339());
     notify(
@@ -387,9 +391,7 @@ pub async fn integration_state(
     Json(input): Json<StateInput>,
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, true).await?;
-    if input.comentario.len() > 4000 {
-        return Err(AppError::bad("Comentario demasiado largo"));
-    }
+    domain::max_chars(&input.comentario, 4000, "Comentario")?;
     let mut tx = state.pool.begin().await?;
     // Lock the challenge first, matching every operation that touches both records.
     let reto: Option<i64> =
@@ -439,7 +441,7 @@ pub async fn integration_state(
             )
             .await?;
             let mut message = format!(
-                "Tu integracion academica del reto \"{title}\" fue {}.",
+                "Tu integración académica del reto \"{title}\" fue {}.",
                 input.estado
             );
             if !input.comentario.is_empty() {
@@ -475,7 +477,7 @@ pub async fn integration_state(
                 &from,
                 "publicada",
                 user.id,
-                "Integracion publicada para los estudiantes.",
+                "Integración publicada para los estudiantes.",
             )
             .await?;
             let teacher_name = {
@@ -501,7 +503,7 @@ pub async fn integration_state(
                     "aprobado",
                     "abierto",
                     user.id,
-                    "Integracion academica publicada: reto abierto a estudiantes.",
+                    "Integración académica publicada: reto abierto a estudiantes.",
                 )
                 .await?;
                 // cambiar_estado_reto tells the company.
@@ -509,7 +511,7 @@ pub async fn integration_state(
                     &mut tx,
                     company,
                     "RETO_ESTADO_CAMBIADO",
-                    &format!("Tu reto \"{title}\" paso a estado: Abierto."),
+                    &format!("Tu reto \"{title}\" pasó al estado: Abierto."),
                     &format!("reto:{reto}:aprobado->abierto"),
                 )
                 .await?;

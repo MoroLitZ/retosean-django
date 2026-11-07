@@ -141,7 +141,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     retosean::auth::init(&pool).await?;
     // Notification emails (HU15): Django's EMAIL_* settings; console backend when unset.
-    let site = std::env::var("RUST_SITE_URL").unwrap_or_else(|_| format!("http://{}", config.bind));
+    let site = retosean::registration::site_url(&config);
     let mailer = retosean::mail::install(retosean::mail::Mailer::from_env()).clone();
     retosean::mail::spawn_outbox(pool.clone(), mailer, site);
     let listener = tokio::net::TcpListener::bind(config.bind).await?;

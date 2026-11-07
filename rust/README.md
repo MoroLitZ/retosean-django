@@ -84,11 +84,11 @@ These are local demonstration credentials. Do not seed an internet-facing system
 | Area | Implemented in Rust |
 |---|---|
 | Data model | 49 typed domain records, PostgreSQL bootstrap schema with database defaults mirroring Django's Python defaults, seven state-machine definitions, one audit table for every state change |
-| Users | Bulk import from CSV or Excel with row-by-row preview, unusable passwords plus a set-password email for rows without one (HU13); public self-registration (Comunidad EAN with institutional email, or company with its catalog documents) with welcome email, password recovery by single-use 3-day email link, Django PBKDF2-SHA256 compatible login, expiring sessions, CSRF, login throttling, admin account creation, login by username or email (as Django), contact editing, password changes and revocation, activation/deactivation, audited role changes and per-module permissions such as Cargar Listas Informa (HU13) |
+| Users | Bulk import from CSV or Excel with row-by-row preview, unusable passwords plus a set-password email for rows without one (HU13); public self-registration (Comunidad EAN with institutional email, or company with its catalog documents) with welcome email, password recovery by single-use 3-day email link, Django PBKDF2-SHA256 compatible login, expiring sessions, CSRF, login throttling, admin account creation, login by username or email (as in Django), contact editing, password changes and revocation, activation/deactivation, audited role changes and per-module permissions such as Cargar Listas Informa (HU13) |
 | Companies | Configurable legal-document catalog (HU00): PDF uploads, catalog validity (e.g. 30-day Cámara de Comercio), document decisions, status derived from the documents as in Django, restrictive-list checks, agreement transitions and expiry dates, participation block with reason, the agreement-or-not choice, special documents uploaded only by permission holders, and Django's operating gate (block, lists, every required document verified and in force) before publishing retos |
 | Challenges | Company draft creation/editing, required-field review submission, admin approval/rejection, serialized numbering, audited manual state transitions |
 | Academic integration | Professor proposal with structured team (cédula, email, faculty/program) and dated schedule (HU03), the same review requirements, admin review, publication that opens the challenge and notifies assigned students |
-| Participation | Search, favorites, applications and withdrawal, acceptance/rejection, academic and operational team creation, editing (professors, students, invited experts) and deletion with the operative mirror kept in step as Django's sincronizar_equipo_academico |
+| Participation | Search, favorites, applications and withdrawal, acceptance/rejection, academic and operational team creation, editing (professors, students, invited experts) and deletion with the operational mirror team kept in sync, as Django's sincronizar_equipo_academico does |
 | Deliverables | Private PDF/image/text upload, replacement; grading by free score or rubric criteria (HU12) with re-grade confirmation; grades hidden from students until the professor publishes them, then notified |
 | Progress | Dated progress entries, 0–100% validation, company notification |
 | Closure | Closure management (HU08) for the company, integrated professors and admins: agenda and acta with the solution's impact, final artifact uploads, recognitions limited to participating students, logistics requests for the start and closing events with admin confirm/discard and history; formal close with required deliverable, artifact linking, state transition, idempotent certificates and satisfaction surveys |
@@ -123,7 +123,7 @@ coverage does not imply every original form or command has been ported.
 applied with `retosean migrate` (each once, in order, recorded in
 `rust_schema_migrations`). Never run Django migrations against a Rust database.
 
-`seed-demo` also verifies the demo company's required documents, so it can
+`seed-demo` also verifies the demo company's required documents, so the company can
 publish retos right away; the end-to-end test loads the bare demo data and
 walks the verification itself.
 

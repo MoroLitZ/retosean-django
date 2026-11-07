@@ -322,12 +322,12 @@ impl Ctx {
     }
     /// Every required catalog document verified and in force (the HU00 gate opens).
     pub async fn verify_documents(&self, company: i64) {
-        self.exec(&format!("INSERT INTO documentos_empresas(empresa_id,tipo_documento,archivo,estado,fecha_expedicion,fecha_vencimiento,fecha_carga,motivo_rechazo) SELECT {company},codigo,'documento.pdf','VERIFICADO',CURRENT_DATE,NULL,now(),'' FROM tipos_documento_legal WHERE activo AND obligatorio ON CONFLICT (empresa_id,tipo_documento) DO UPDATE SET estado='VERIFICADO',fecha_vencimiento=NULL,archivo='documento.pdf'")).await;
+        self.exec(&format!("INSERT INTO documentos_empresas(empresa_id,tipo_documento,archivo,estado,fecha_expedicion,fecha_vencimiento,fecha_carga,motivo_rechazo) SELECT {company},codigo,'documento.pdf','VERIFICADO',(now() AT TIME ZONE 'America/Bogota')::date,NULL,now(),'' FROM tipos_documento_legal WHERE activo AND obligatorio ON CONFLICT (empresa_id,tipo_documento) DO UPDATE SET estado='VERIFICADO',fecha_vencimiento=NULL,archivo='documento.pdf'")).await;
         self.exec(&format!("UPDATE documentos_empresas SET estado='VERIFICADO' WHERE empresa_id={company}; UPDATE empresas SET estado_validacion='VERIFICADA',estado_listas_restrictivas='APROBADO' WHERE id={company}")).await;
     }
     /// A reto in the given state owned by the company user; returns its id.
     pub async fn reto(&self, owner: i64, estado: &str, tipo: &str) -> i64 {
-        sqlx::query_scalar("INSERT INTO retos(empresa_id,tipo,titulo,descripcion,area,nivel_academico,facultad_id,programa_id,estado,premios,criterios_evaluacion,comentarios_revision,creado_en,actualizado_en,tiene_convenio_institucional,fecha_limite_postulacion) VALUES($1,$2,'Reto de prueba','Descripción del reto de prueba','Tecnología','Pregrado',1,1,$3,'','','',now(),now(),false,CURRENT_DATE+30) RETURNING id")
+        sqlx::query_scalar("INSERT INTO retos(empresa_id,tipo,titulo,descripcion,area,nivel_academico,facultad_id,programa_id,estado,premios,criterios_evaluacion,comentarios_revision,creado_en,actualizado_en,tiene_convenio_institucional,fecha_limite_postulacion) VALUES($1,$2,'Reto de prueba','Descripción del reto de prueba','Tecnología','Pregrado',1,1,$3,'','','',now(),now(),false,(now() AT TIME ZONE 'America/Bogota')::date+30) RETURNING id")
             .bind(owner).bind(tipo).bind(estado).fetch_one(&self.pool).await.unwrap()
     }
     /// An accepted application of the student to the reto.

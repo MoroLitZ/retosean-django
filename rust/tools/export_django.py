@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import unicodedata
 import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -21,6 +22,37 @@ from django.db import connection
 
 OUT = ROOT / "rust"
 MODELS = [m for m in apps.get_models() if m.__module__.startswith("apps.")]
+
+# Display text Django still stores without accents (or with odd casing). The
+# export rewrites any exported title/label/name that matches one of these once
+# accents and case are ignored, so a re-export never reverts the Spanish fixes.
+# Only display values change; slugs, state codes and keys stay as Django has them.
+DISPLAY_TEXT = [
+    "Avance en el trámite de tu convenio", "Documentación revisada", "Encuesta de satisfacción",
+    "Estado de participación de tu empresa", "Integración académica revisada", "Nueva postulación",
+    "Nueva postulación docente a un reto", "Nueva solicitud de logística", "Recibimos tu postulación",
+    "Recordatorio de fecha límite", "Respuesta a tu postulación", "Reto enviado a revisión",
+    "Tu certificado está disponible", "Verificación en listas restrictivas",
+    "En proceso en Jurídica", "En revisión", "En curso", "Pendiente de aprobación",
+    "la inscripción", "la integración académica", "la postulación",
+]
+DISPLAY_REWORDED = {
+    "Documento legal cargado por empresa": "Documento legal cargado por una empresa",
+    "Nueva postulacion docente a reto": "Nueva postulación docente a un reto",
+    "Presupuesto por encima del 80%": "Presupuesto por encima del 80 %",
+}
+
+def _plain(text):
+    decomposed = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold()
+
+_DISPLAY_BY_PLAIN = {_plain(t): t for t in DISPLAY_TEXT}
+
+def display(text):
+    """Return the correctly accented Spanish form of an exported display string."""
+    text = str(text)
+    text = DISPLAY_REWORDED.get(text, text)
+    return _DISPLAY_BY_PLAIN.get(_plain(text), text)
 
 def export():
     (OUT / "sql").mkdir(exist_ok=True)
@@ -61,11 +93,11 @@ def export():
         for name, value in vars(importlib.import_module(module)).items():
             if isinstance(value, MaquinaEstados) and name.startswith("MAQUINA_"):
                 machines[name] = {k: sorted(v) for k, v in value.transiciones.items()}
-                meta[name] = {"nombre": value.nombre, "etiquetas": {k: str(v) for k, v in value.etiquetas.items()}}
+                meta[name] = {"nombre": display(value.nombre), "etiquetas": {k: display(v) for k, v in value.etiquetas.items()}}
     (OUT / "states_meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     (OUT / "states.json").write_text(json.dumps(machines, ensure_ascii=False, indent=2), encoding="utf-8")
     from apps.notificaciones.eventos import EVENTOS
-    eventos = {e.slug: {"tipo": e.tipo, "titulo": e.titulo, "permite_email": e.permite_email} for e in EVENTOS.values()}
+    eventos = {e.slug: {"tipo": e.tipo, "titulo": display(e.titulo), "permite_email": e.permite_email} for e in EVENTOS.values()}
     (OUT / "events.json").write_text(json.dumps(eventos, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     export_seed()
     print(f"Exported {len(MODELS)} models and {len(machines)} state machines; no database writes.")
@@ -148,14 +180,25 @@ def export_seed():
         row("empresas.TipoDocumentoLegal", id=orden, codigo=codigo, nombre=nombre, obligatorio=obligatorio,
             aplica_sin_convenio=sin_convenio, vigencia_dias=vigencia, requiere_permiso_especial=especial,
             descripcion=descripcion, orden=orden, activo=True)
-    for i, state in enumerate(["borrador", "en_revision", "aprobado", "abierto", "en_curso", "pausado", "finalizado", "rechazado", "cancelado"], 1):
-        row("retos.Reto", id=i, empresa_id=2, titulo=f"DEMO · Transformación digital ({state})", descripcion="Diseñar una solución sostenible para mejorar la operación de una empresa.", tipo="reto", area="Tecnología", nivel_academico="Pregrado", facultad_id=1, programa_id=1, ecosistema_id=1, estado=state, consecutivo=i if state not in ("borrador", "en_revision", "rechazado", "cancelado") else None, anio_consecutivo=2026 if state not in ("borrador", "en_revision", "rechazado", "cancelado") else None)
-        row("seguimiento.HistorialEstado", id=i, content_type_id=1, object_id=i, campo="estado", estado_anterior="", estado_nuevo=state, realizado_por_id=1, comentario="Registro de demostración Rust")
+    retos = [
+        ("borrador", "Optimización de rutas de última milla", "Diseñar un modelo que reduzca en un 15 % los kilómetros recorridos por la flota de reparto en Bogotá."),
+        ("en_revision", "Tablero de indicadores de ventas", "Construir un tablero que consolide las ventas regionales y alerte sobre caídas semanales."),
+        ("aprobado", "Chatbot de atención al cliente", "Prototipar un asistente conversacional que resuelva las preguntas frecuentes de los clientes."),
+        ("abierto", "Reducción del desperdicio de empaques", "Proponer alternativas de empaque reciclable que disminuyan el uso de plástico de un solo uso."),
+        ("en_curso", "Aplicación de bienestar para colaboradores", "Desarrollar una aplicación móvil que promueva pausas activas y hábitos saludables."),
+        ("pausado", "Gemelo digital de la planta de producción", "Modelar la línea de ensamblaje para simular cuellos de botella."),
+        ("finalizado", "Análisis de rotación de inventario", "Identificar productos de baja rotación y proponer estrategias de liquidación."),
+        ("rechazado", "Plataforma de fidelización de clientes", "Diseñar un programa de puntos para clientes frecuentes."),
+        ("cancelado", "Encuesta de clima organizacional", "Diseñar y aplicar una encuesta de clima laboral con análisis de resultados."),
+    ]
+    for i, (state, titulo, descripcion) in enumerate(retos, 1):
+        row("retos.Reto", id=i, empresa_id=2, titulo=titulo, descripcion=descripcion, tipo="reto", area="Tecnología", nivel_academico="Pregrado", facultad_id=1, programa_id=1, ecosistema_id=1, estado=state, consecutivo=i if state not in ("borrador", "en_revision", "rechazado", "cancelado") else None, anio_consecutivo=2026 if state not in ("borrador", "en_revision", "rechazado", "cancelado") else None)
+        row("seguimiento.HistorialEstado", id=i, content_type_id=1, object_id=i, campo="estado", estado_anterior="", estado_nuevo=state, realizado_por_id=1, comentario="Estado inicial de los datos de demostración.")
     row("seguimiento.IntegracionAcademica", id=1, reto_id=4, profesor_id=3, estado="publicada", facultad="Ingeniería", programa_academico="Ingeniería de Sistemas", nivel_formacion="Pregrado", descripcion="Proyecto aplicado", alcance="Prototipo funcional", entregable_esperado="Informe y prototipo", cronograma_sesiones="Semanal")
-    row("participaciones.Postulacion", id=1, reto_id=5, estudiante_id=4, estado="ACEPTADA", motivacion="Aplicar mis conocimientos", semestre=6, programa="Ingeniería de Sistemas")
+    row("participaciones.Postulacion", id=1, reto_id=5, estudiante_id=4, estado="ACEPTADA", motivacion="Quiero aplicar lo aprendido en desarrollo móvil a un problema real de la empresa.", semestre=6, programa="Ingeniería de Sistemas", acepta_terminos=True)
     row("presupuesto.Presupuesto", id=1, reto_id=5, monto_total=10000000)
-    row("presupuesto.Gasto", id=1, presupuesto_id=1, categoria="MATERIALES", monto=8500000, descripcion="Materiales del prototipo", registrado_por_id=3)
-    row("notificaciones.Notificacion", id=1, usuario_id=4, tipo="EXITO", evento="POSTULACION_ACEPTADA", titulo="Postulación aceptada", mensaje="Ya puedes participar en el reto.", link="/", clave_dedupe="rust-demo:postulacion")
+    row("presupuesto.Gasto", id=1, presupuesto_id=1, categoria="MATERIALES", monto=6500000, descripcion="Compra de sensores y materiales para el prototipo", registrado_por_id=3)
+    row("notificaciones.Notificacion", id=1, usuario_id=4, tipo="INFO", evento="POSTULACION_GESTIONADA", titulo="Respuesta a tu postulación", mensaje="Fuiste aceptado en el reto \"Aplicación de bienestar para colaboradores\". Ya puedes cargar tus entregables desde la plataforma.", link="/", clave_dedupe="rust-demo:postulacion")
     row("academico.Certificado", id=1, reto_id=7, usuario_id=4, rol_participacion="ESTUDIANTE", codigo_verificacion=uuid.UUID("09df6e91-3494-4ef8-9f4a-f98922ae8322"), horas=40, emitido_por_id=1)
     for model in MODELS + [apps.get_model("contenttypes.ContentType")]:
         table = model._meta.db_table

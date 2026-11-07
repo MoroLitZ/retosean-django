@@ -47,7 +47,7 @@ pub async fn options(
     let mut tx = state.pool.begin().await?;
     let managing = manager(&mut tx, reto, &user).await.is_ok();
     let jurors: Vec<Value> = if managing {
-        sqlx::query_scalar("SELECT jsonb_build_object('value',id,'label',trim(first_name||' '||last_name)||' ('||username||')') FROM usuarios WHERE is_active AND rol IN ('EXPERTO','PROFESOR') ORDER BY first_name,last_name").fetch_all(&mut *tx).await?
+        sqlx::query_scalar("SELECT jsonb_build_object('value',id,'label',COALESCE(NULLIF(trim(first_name||' '||last_name),''),username)||' ('||username||')') FROM usuarios WHERE is_active AND rol IN ('EXPERTO','PROFESOR','EMPRESA','ADMIN') ORDER BY first_name,last_name").fetch_all(&mut *tx).await?
     } else {
         Vec::new()
     };
@@ -167,7 +167,7 @@ pub async fn team(
     Ok(Json(json!({
         "id": mirror,
         "equipo_academico": academic,
-        "mensaje": format!("Equipo academico configurado y {} estudiante(s) notificados.", input.estudiantes.len()),
+        "mensaje": format!("Equipo académico configurado y {} estudiante(s) notificado(s).", input.estudiantes.len()),
     })))
 }
 /// editar/eliminar_equipo_academico: only a professor integrated in the reto.
@@ -395,13 +395,9 @@ pub async fn create(
     Json(input): Json<RulesInput>,
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, true).await?;
-    if !user.admin() {
-        return Err(AppError::forbidden());
-    }
-    if input.reglas.len() > 20000 {
-        return Err(AppError::bad("Reglas demasiado largas"));
-    }
+    domain::max_chars(&input.reglas, 20000, "Reglas")?;
     let mut tx = state.pool.begin().await?;
+    manager(&mut tx, reto, &user).await?;
     let kind: Option<String> = sqlx::query_scalar(
         "SELECT tipo FROM retos WHERE id=$1 AND eliminado_en IS NULL FOR UPDATE",
     )
@@ -411,9 +407,19 @@ pub async fn create(
     if kind.as_deref() != Some("hackathon") {
         return Err(AppError::bad("El reto debe ser de tipo hackathon"));
     }
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM hackathons WHERE reto_id=$1)")
+            .bind(reto)
+            .fetch_one(&mut *tx)
+            .await?;
+    if exists {
+        return Err(AppError::bad(
+            "Este reto ya tiene un hackathon configurado.",
+        ));
+    }
     let id:i64=sqlx::query_scalar("INSERT INTO hackathons(reto_id,reglas,estado,resultados_publicados,creado_en,actualizado_en) VALUES($1,$2,'borrador',false,now(),now()) RETURNING id").bind(reto).bind(&input.reglas).fetch_one(&mut *tx).await?;
     // crear_etapas_por_defecto: the backlog's four stages, without dates.
-    sqlx::query("INSERT INTO etapas_hackaton(hackathon_id,tipo,titulo,orden) SELECT $1,t,initcap(t),n FROM unnest(ARRAY['inscripcion','desarrollo','presentacion','premiacion']) WITH ORDINALITY k(t,n) WHERE NOT EXISTS(SELECT 1 FROM etapas_hackaton WHERE hackathon_id=$1)")
+    sqlx::query("INSERT INTO etapas_hackaton(hackathon_id,tipo,titulo,orden) SELECT $1,t,titulo,n FROM unnest(ARRAY['inscripcion','desarrollo','presentacion','premiacion'],ARRAY['Inscripción','Desarrollo','Presentación','Premiación']) WITH ORDINALITY k(t,titulo,n) WHERE NOT EXISTS(SELECT 1 FROM etapas_hackaton WHERE hackathon_id=$1)")
         .bind(id)
         .execute(&mut *tx)
         .await?;
@@ -446,7 +452,8 @@ pub async fn state(
             | ("publicado", "en_curso" | "cancelado")
             | ("en_curso", "finalizado" | "cancelado")
     );
-    if !valid || input.comentario.len() > 4000 {
+    domain::max_chars(&input.comentario, 4000, "Comentario")?;
+    if !valid {
         return Err(AppError::bad("Transición de hackathon inválida"));
     }
     if input.estado == "finalizado" {
@@ -484,7 +491,7 @@ pub async fn state(
             .fetch_all(&mut *tx)
             .await?;
         let message = format!(
-            "El hackathon del reto '{title}' ya esta publicado. Inscribe a tu equipo desde la plataforma."
+            "El hackathon del reto '{title}' ya está publicado. Inscribe a tu equipo desde la plataforma."
         );
         for student in students {
             notify(
@@ -567,9 +574,12 @@ pub async fn juror(
     if ["finalizado", "cancelado"].contains(&status.as_str()) {
         return Err(AppError::bad("Hackathon cerrado"));
     }
-    let person:Option<(String,String)>=sqlx::query_as("SELECT left(trim(first_name||' '||last_name),150),email FROM usuarios WHERE id=$1 AND is_active AND rol IN ('EXPERTO','PROFESOR')").bind(input.usuario_id).fetch_optional(&mut *tx).await?;
-    let (name, email) =
-        person.ok_or_else(|| AppError::bad("Selecciona un experto o profesor activo"))?;
+    let person:Option<(String,String)>=sqlx::query_as("SELECT left(COALESCE(NULLIF(trim(first_name||' '||last_name),''),username),150),email FROM usuarios WHERE id=$1 AND is_active AND rol IN ('EXPERTO','PROFESOR','EMPRESA','ADMIN')").bind(input.usuario_id).fetch_optional(&mut *tx).await?;
+    let (name, email) = person.ok_or_else(|| {
+        AppError::bad(
+            "Selecciona un usuario activo con rol de experto, profesor, empresa o administrador",
+        )
+    })?;
     let already: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM jurados_hackaton WHERE hackathon_id=$1 AND usuario_id=$2)",
     )
@@ -615,7 +625,7 @@ pub async fn register(
         .await?;
     if registered {
         return Err(AppError::bad(
-            "Este equipo ya esta inscrito en el hackathon.",
+            "Este equipo ya está inscrito en el hackathon.",
         ));
     }
     let registration:i64=sqlx::query_scalar("INSERT INTO inscripciones_hackaton(hackathon_id,equipo_id,estado,inscrito_por_id,creado_en) VALUES($1,$2,'PENDIENTE',$3,now()) RETURNING id").bind(id).bind(input.equipo_id).bind(user.id).fetch_one(&mut *tx).await?;
@@ -690,8 +700,9 @@ pub async fn vote(
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, true).await?;
     let score = crate::finance::money(&input.puntaje)?;
-    if score > rust_decimal::Decimal::from(5) || input.comentario.len() > 4000 {
-        return Err(AppError::bad("Puntaje entre 0 y 5"));
+    domain::max_chars(&input.comentario, 4000, "Comentario")?;
+    if score > rust_decimal::Decimal::from(5) {
+        return Err(AppError::bad("El puntaje debe estar entre 0 y 5."));
     }
     let mut tx = state.pool.begin().await?;
     let (_, status, _) = lock(&mut tx, id).await?;
@@ -727,13 +738,29 @@ pub async fn ranking(
     let user = auth::current(&state, &headers, false).await?;
     crate::resources::visible_record(&state, &user, "hackathons", id).await?;
     crate::event::advance(&state.pool, id).await?;
-    let published: bool =
-        sqlx::query_scalar("SELECT resultados_publicados FROM hackathons WHERE id=$1")
+    let (published, reto): (bool, i64) =
+        sqlx::query_as("SELECT resultados_publicados,reto_id FROM hackathons WHERE id=$1")
             .bind(id)
             .fetch_one(&state.pool)
             .await?;
     if !published && !user.admin() {
-        return Err(AppError::forbidden());
+        // Django: managers (_puede_gestionar) and jurors (_jurado_de) see it early.
+        let juror: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM jurados_hackaton WHERE hackathon_id=$1 AND usuario_id=$2)",
+        )
+        .bind(id)
+        .bind(user.id)
+        .fetch_one(&state.pool)
+        .await?;
+        let managing = if juror {
+            false
+        } else {
+            let mut tx = state.pool.begin().await?;
+            manager(&mut tx, reto, &user).await.is_ok()
+        };
+        if !juror && !managing {
+            return Err(AppError::forbidden());
+        }
     }
     // services.ranking: by average, then more votes, then name; position from 1.
     let rows: Vec<Value> = sqlx::query_scalar("SELECT jsonb_build_object('posicion',row_number() OVER (ORDER BY avg(v.puntaje) DESC,count(v.id) DESC,e.nombre),'equipo_id',e.id,'equipo',e.nombre,'promedio',round(avg(v.puntaje),2),'total',sum(v.puntaje),'votos',count(v.id)) FROM votaciones_hackaton v JOIN equipos e ON e.id=v.equipo_id WHERE v.hackathon_id=$1 GROUP BY e.id ORDER BY avg(v.puntaje) DESC,count(v.id) DESC,e.nombre")

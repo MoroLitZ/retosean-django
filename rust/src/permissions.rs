@@ -247,7 +247,7 @@ pub async fn operating_reasons(
     if lists == "RECHAZADO" {
         reasons.push("La empresa aparece en listas restrictivas.".into());
     }
-    let documents: Vec<String> = sqlx::query_scalar("SELECT t.nombre||': '||CASE WHEN d.id IS NULL OR d.estado='PENDIENTE' THEN 'Falta cargarlo.' WHEN d.estado='RECHAZADO' THEN 'Rechazado: '||COALESCE(NULLIF(d.motivo_rechazo,''),'sin motivo')||'. Debe cargarse de nuevo.' WHEN d.estado='VENCIDO' OR d.fecha_vencimiento<(now() at time zone 'America/Bogota')::date THEN 'Vencido: debe actualizarse.' WHEN d.estado='CARGADO' THEN 'En revisión por el administrador.' ELSE 'pendiente de verificación.' END FROM tipos_documento_legal t JOIN empresas e ON e.id=$1 LEFT JOIN documentos_empresas d ON d.empresa_id=e.id AND d.tipo_documento=t.codigo WHERE t.activo AND t.obligatorio AND (t.aplica_sin_convenio OR NOT e.renuncio_a_convenio) AND NOT (d.estado IS NOT DISTINCT FROM 'VERIFICADO' AND (d.fecha_vencimiento IS NULL OR d.fecha_vencimiento>=(now() at time zone 'America/Bogota')::date)) ORDER BY t.orden,t.nombre")
+    let documents: Vec<String> = sqlx::query_scalar("SELECT t.nombre||': '||CASE WHEN d.id IS NULL OR d.estado='PENDIENTE' THEN 'Falta cargarlo.' WHEN d.estado='RECHAZADO' THEN 'Rechazado: '||COALESCE(NULLIF(d.motivo_rechazo,''),'sin motivo')||'. Debe cargarse de nuevo.' WHEN d.estado='VENCIDO' OR d.fecha_vencimiento<(now() at time zone 'America/Bogota')::date THEN 'Vencido: debe actualizarse.' WHEN d.estado='CARGADO' THEN 'En revisión por el administrador.' ELSE 'Pendiente de verificación.' END FROM tipos_documento_legal t JOIN empresas e ON e.id=$1 LEFT JOIN documentos_empresas d ON d.empresa_id=e.id AND d.tipo_documento=t.codigo WHERE t.activo AND t.obligatorio AND (t.aplica_sin_convenio OR NOT e.renuncio_a_convenio) AND NOT (d.estado IS NOT DISTINCT FROM 'VERIFICADO' AND (d.fecha_vencimiento IS NULL OR d.fecha_vencimiento>=(now() at time zone 'America/Bogota')::date)) ORDER BY t.orden,t.nombre")
         .bind(company).fetch_all(&mut **tx).await?;
     reasons.extend(documents);
     Ok(reasons)
@@ -268,9 +268,7 @@ pub async fn block(
 ) -> Result<Json<Value>> {
     let user = admin(&state, &headers).await?;
     let reason = input.motivo.trim();
-    if reason.len() > 10000 {
-        return Err(AppError::bad("Motivo demasiado largo"));
-    }
+    crate::domain::max_chars(reason, 10000, "Motivo")?;
     let mut tx = state.pool.begin().await?;
     let row: Option<(bool, Option<i64>)> = sqlx::query_as(
         "SELECT participacion_bloqueada,usuario_id FROM empresas WHERE id=$1 FOR UPDATE",

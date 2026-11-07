@@ -225,7 +225,7 @@ pub fn bodies(name: &str, title: &str, message: &str, url: &str) -> (String, Str
     if !url.is_empty() {
         text.push_str(&format!("\nVer en la plataforma: {url}\n"));
     }
-    text.push_str("\n--\nRetosEAN - Universidad EAN\nPuedes ajustar que avisos recibes desde tu perfil de notificaciones.");
+    text.push_str("\n--\nRetosEAN - Universidad EAN\nPuedes ajustar qué avisos recibes desde tu perfil de notificaciones.");
     let button = if url.is_empty() {
         String::new()
     } else {
@@ -235,7 +235,7 @@ pub fn bodies(name: &str, title: &str, message: &str, url: &str) -> (String, Str
         )
     };
     let html = format!(
-        r#"<!doctype html><html lang="es"><body style="margin:0;padding:24px;background:#f3f4f6;font-family:Segoe UI,Arial,sans-serif;color:#111827;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:10px;overflow:hidden;"><tr><td style="background:#111827;padding:18px 24px;color:#ffffff;font-size:18px;font-weight:700;">retos<span style="color:#f59e0b;">ean</span></td></tr><tr><td style="padding:24px;"><p style="margin:0 0 12px;font-size:15px;">Hola {},</p><h2 style="margin:0 0 12px;font-size:18px;color:#111827;">{}</h2><p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#4b5563;">{}</p>{button}</td></tr><tr><td style="padding:16px 24px;background:#f9fafb;font-size:12px;color:#6b7280;">RetosEAN &middot; Universidad EAN. Puedes ajustar que avisos recibes desde tu perfil de notificaciones.</td></tr></table></body></html>"#,
+        r#"<!doctype html><html lang="es"><body style="margin:0;padding:24px;background:#f3f4f6;font-family:Segoe UI,Arial,sans-serif;color:#111827;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:10px;overflow:hidden;"><tr><td style="background:#111827;padding:18px 24px;color:#ffffff;font-size:18px;font-weight:700;">retos<span style="color:#f59e0b;">ean</span></td></tr><tr><td style="padding:24px;"><p style="margin:0 0 12px;font-size:15px;">Hola {},</p><h2 style="margin:0 0 12px;font-size:18px;color:#111827;">{}</h2><p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#4b5563;">{}</p>{button}</td></tr><tr><td style="padding:16px 24px;background:#f9fafb;font-size:12px;color:#6b7280;">RetosEAN &middot; Universidad EAN. Puedes ajustar qué avisos recibes desde tu perfil de notificaciones.</td></tr></table></body></html>"#,
         escape(name),
         escape(title),
         escape(message).replace('\n', "<br>")
@@ -338,7 +338,7 @@ mod tests {
         let (tipo, titulo, email) = event("POSTULACION_GESTIONADA");
         assert_eq!(
             (tipo.as_str(), titulo.as_str(), email),
-            ("INFO", "Respuesta a tu postulacion", true)
+            ("INFO", "Respuesta a tu postulación", true)
         );
         assert_eq!(event("SEGUIMIENTO_REGISTRADO").1, "Seguimiento registrado");
         let (text, html) = bodies("Ana <x>", "Título", "línea 1\nlínea 2", "http://h/r/1");

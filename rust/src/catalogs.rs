@@ -30,9 +30,8 @@ pub async fn create(
         return Err(AppError::forbidden());
     }
     domain::validate_text(&input.nombre, 150, "Nombre")?;
-    if input.codigo.chars().count() > 20 || input.descripcion.len() > 10000 {
-        return Err(AppError::bad("Datos de catálogo demasiado largos"));
-    }
+    domain::max_chars(&input.codigo, 20, "Código")?;
+    domain::max_chars(&input.descripcion, 10000, "Descripción")?;
     let id: i64 = match name.as_str() {
         "facultades" => {
             domain::validate_text(&input.codigo, 20, "Código")?;

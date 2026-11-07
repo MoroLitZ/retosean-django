@@ -40,7 +40,7 @@ pub async fn create(
         .chars()
         .all(|c| c.is_alphanumeric() || "@.+-_".contains(c))
         || !domain::valid_email(input.email.trim())
-        || input.email.len() > 254
+        || input.email.trim().len() > 254
         || input.telefono.chars().count() > 20
         || input.password.chars().count() < 12
         || input.password.len() > 1024
@@ -73,7 +73,7 @@ pub async fn create(
     .map_err(|_| AppError::bad("No se pudo guardar la contraseña"))?;
     let mut tx = state.pool.begin().await?;
     let id:i64=sqlx::query_scalar("INSERT INTO usuarios(username,password,email,first_name,last_name,rol,telefono,is_active,activo,is_staff,is_superuser,date_joined,fecha_creacion) VALUES($1,$2,$3,$4,$5,$6,$7,true,true,false,false,now(),now()) RETURNING id")
-        .bind(&input.username).bind(hash).bind(&input.email).bind(&input.first_name).bind(&input.last_name).bind(&input.rol).bind(&input.telefono).fetch_one(&mut *tx).await?;
+        .bind(&input.username).bind(hash).bind(input.email.trim()).bind(&input.first_name).bind(&input.last_name).bind(&input.rol).bind(&input.telefono).fetch_one(&mut *tx).await?;
     match input.rol.as_str() {
         "ESTUDIANTE" => {
             sqlx::query("INSERT INTO estudiantes(usuario_id,programa_id,semestre) VALUES($1,$2,1)")
@@ -100,7 +100,7 @@ pub async fn create(
         }
         _ => {}
     }
-    sqlx::query("INSERT INTO log_actividad(usuario_id,identificador,accion,detalle,realizado_por_id,creado_en) VALUES($1,$2,'CREACION','Cuenta creada desde Rust',$3,now())").bind(id).bind(&input.username).bind(admin.id).execute(&mut *tx).await?;
+    sqlx::query("INSERT INTO log_actividad(usuario_id,identificador,accion,detalle,realizado_por_id,creado_en) VALUES($1,$2,'CREACION','Cuenta creada por un administrador',$3,now())").bind(id).bind(&input.username).bind(admin.id).execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(Json(json!({"id":id})))
 }
@@ -148,17 +148,12 @@ pub async fn profile(
     if input.first_name.chars().count() > 150 || input.last_name.chars().count() > 150 {
         return Err(AppError::bad("Nombre y apellido: máximo 150 caracteres"));
     }
-    if !domain::valid_email(input.email.trim())
-        || input.email.len() > 254
-        || input.telefono.chars().count() > 20
-    {
+    let email = input.email.trim();
+    if !domain::valid_email(email) || email.len() > 254 || input.telefono.chars().count() > 20 {
         return Err(AppError::bad("Datos de contacto inválidos"));
     }
     if ["ESTUDIANTE", "PROFESOR"].contains(&user.rol.as_str())
-        && !input
-            .email
-            .to_lowercase()
-            .ends_with("@universidadean.edu.co")
+        && !email.to_lowercase().ends_with("@universidadean.edu.co")
     {
         return Err(AppError::bad(
             "Estudiantes y profesores deben usar su correo institucional (@universidadean.edu.co).",
@@ -177,7 +172,8 @@ pub async fn profile(
     }
     let web = input.sitio_web.trim();
     if !web.is_empty()
-        && (web.len() > 200 || !(web.starts_with("https://") || web.starts_with("http://")))
+        && (web.chars().count() > 200
+            || !(web.starts_with("https://") || web.starts_with("http://")))
     {
         return Err(AppError::bad("Introduzca una URL válida."));
     }
@@ -186,7 +182,7 @@ pub async fn profile(
         .bind(user.id)
         .bind(&input.first_name)
         .bind(&input.last_name)
-        .bind(&input.email)
+        .bind(email)
         .bind(&input.telefono)
         .execute(&mut *tx)
         .await?;

@@ -61,7 +61,7 @@ pub async fn run(pool: &PgPool, days: &[i64]) -> Result<usize> {
             if let Some(owner) = owner {
                 let key = format!("documento:{id}:vencido:{due}");
                 notify(&mut savepoint, owner, "DOCUMENTO_REVISADO",
-                    &format!("Tu documento \"{name}\" esta vencido. {reason} Cargalo de nuevo para seguir participando."),
+                    &format!("Tu documento \"{name}\" está vencido. {reason} Cárgalo de nuevo para seguir participando."),
                     &key).await?;
                 sqlx::query("UPDATE notificaciones SET tipo='ADVERTENCIA' WHERE usuario_id=$1 AND clave_dedupe=$2")
                     .bind(owner)
@@ -91,7 +91,7 @@ pub async fn run(pool: &PgPool, days: &[i64]) -> Result<usize> {
         for (reto, title) in retos {
             total += emit(&mut tx,"RECORDATORIO_FECHA_LIMITE",
                 "SELECT DISTINCT u.id FROM usuarios u WHERE u.rol='ESTUDIANTE' AND u.is_active AND (EXISTS(SELECT 1 FROM retos_favoritos f WHERE f.usuario_id=u.id AND f.reto_id=$1) OR EXISTS(SELECT 1 FROM postulaciones p WHERE p.estudiante_id=u.id AND p.reto_id=$1 AND p.estado IN ('PENDIENTE','EN_REVISION')))",
-                reto, &format!("Quedan {n} dia(s) para postularte al reto '{title}'."),
+                reto, &format!("Quedan {n} día(s) para postularte al reto '{title}'."),
                 &format!("recordatorio:postulacion:{reto}:{n}")).await?;
         }
         // Challenge end: accepted students without a final deliverable, and the professors.
@@ -99,14 +99,14 @@ pub async fn run(pool: &PgPool, days: &[i64]) -> Result<usize> {
         for (reto, title) in retos {
             total += emit(&mut tx,"RECORDATORIO_FECHA_LIMITE",
                 "SELECT DISTINCT p.estudiante_id FROM postulaciones p JOIN usuarios u ON u.id=p.estudiante_id WHERE p.reto_id=$1 AND p.estado='ACEPTADA' AND u.is_active AND NOT EXISTS(SELECT 1 FROM entregables e WHERE e.reto_id=$1 AND e.es_final AND e.estudiante_id=p.estudiante_id)",
-                reto, &format!("Quedan {n} dia(s) para la entrega final del reto '{title}'."),
+                reto, &format!("Quedan {n} día(s) para la entrega final del reto '{title}'."),
                 &format!("recordatorio:entrega-final:{reto}:{n}")).await?;
             total += emit(
                 &mut tx,
                 "RECORDATORIO_FECHA_LIMITE",
                 "SELECT DISTINCT profesor_id FROM integraciones_academicas WHERE reto_id=$1",
                 reto,
-                &format!("El reto '{title}' finaliza en {n} dia(s)."),
+                &format!("El reto '{title}' finaliza en {n} día(s)."),
                 &format!("recordatorio:fin-reto:{reto}:{n}:profesor"),
             )
             .await?;
@@ -116,7 +116,7 @@ pub async fn run(pool: &PgPool, days: &[i64]) -> Result<usize> {
         for (doc, name) in docs {
             total += emit(&mut tx,"RECORDATORIO_FECHA_LIMITE",
                 "SELECT e.usuario_id FROM documentos_empresas d JOIN empresas e ON e.id=d.empresa_id WHERE d.id=$1 AND e.usuario_id IS NOT NULL",
-                doc, &format!("Tu documento '{name}' vence en {n} dia(s)."),
+                doc, &format!("Tu documento '{name}' vence en {n} día(s)."),
                 &format!("recordatorio:documento:{doc}:{n}")).await?;
         }
         // Hackathon stages starting soon.
@@ -124,7 +124,7 @@ pub async fn run(pool: &PgPool, days: &[i64]) -> Result<usize> {
         for (stage, reto, stage_title, title) in stages {
             total += emit(&mut tx,"RECORDATORIO_FECHA_LIMITE",
                 "SELECT DISTINCT p.estudiante_id FROM postulaciones p JOIN usuarios u ON u.id=p.estudiante_id WHERE p.reto_id=$1 AND p.estado='ACEPTADA' AND u.is_active",
-                reto, &format!("La etapa '{stage_title}' del hackathon '{title}' inicia en {n} dia(s)."),
+                reto, &format!("La etapa '{stage_title}' del hackathon '{title}' inicia en {n} día(s)."),
                 &format!("recordatorio:etapa:{stage}:{n}")).await?;
         }
     }
@@ -138,7 +138,7 @@ pub async fn run(pool: &PgPool, days: &[i64]) -> Result<usize> {
     for (reto, title, count) in pending {
         total += emit(&mut tx,"RECORDATORIO_FECHA_LIMITE",
             "SELECT DISTINCT profesor_id FROM integraciones_academicas WHERE reto_id=$1",
-            reto, &format!("Tienes {count} entregable(s) del reto '{title}' sin calificar desde hace mas de {wait} dias."),
+            reto, &format!("Tienes {count} entregable(s) del reto '{title}' sin calificar desde hace más de {wait} días."),
             &format!("recordatorio:sin-calificar:{reto}:{week}")).await?;
     }
 
@@ -154,7 +154,7 @@ pub async fn run(pool: &PgPool, days: &[i64]) -> Result<usize> {
             "RETO_SIN_ACTUALIZAR",
             &format!("{ADMINS} AND $1::bigint IS NOT NULL"),
             reto,
-            &format!("El reto \"{title}\" ({label}) paso su fecha de fin tentativa hace {late} dia(s) y no tiene seguimientos registrados desde entonces."),
+            &format!("El reto \"{title}\" ({label}) pasó su fecha de fin tentativa hace {late} día(s) y no tiene seguimientos registrados desde entonces."),
             &format!("reto-sin-actualizar:{reto}:{iso_week}"),
         )
         .await?;

@@ -29,8 +29,10 @@ Set these as environment variables. The binary also reads `.env` and `../.env`.
    - Demo data instead: `retosean seed-demo` (all accounts use `RetosEAN2026`).
 4. **HTTPS.** Put Caddy or Nginx in front, forwarding your domain to
    `127.0.0.1:8080`. The app does not handle TLS itself. Set
-   `RUST_SECURE_COOKIE=true` and `RUST_SITE_URL`. Uploads go up to 10 MB, so
-   allow at least that request body size in the proxy.
+   `RUST_SECURE_COOKIE=true` and `RUST_SITE_URL`. Most uploads are limited to 10 MB,
+   but progress and support-file uploads accept up to 110 MB per request
+   (50 MB per file), so set the proxy's request body limit to at least 110 MB
+   (e.g. Nginx `client_max_body_size 110m;`).
 5. **Keep it running.** A systemd service, or Docker with
    `restart: unless-stopped`, running `retosean serve`.
 6. **Scheduled jobs.**

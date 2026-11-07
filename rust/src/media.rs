@@ -93,9 +93,7 @@ pub async fn submit(
         }
     }
     domain::validate_text(&title, 180, "Título")?;
-    if comment.len() > 10000 {
-        return Err(AppError::bad("Comentario demasiado largo"));
-    }
+    domain::max_chars(&comment, 10000, "Comentario")?;
     let data = data.ok_or_else(|| AppError::bad("Adjunta un archivo"))?;
     let key = format!("{}.{}", uuid::Uuid::new_v4().simple(), extension(&data)?);
     let mut tx = state.pool.begin().await?;
@@ -126,7 +124,7 @@ pub async fn submit(
         previous.as_ref().map(|(_, s)| s.as_str()).unwrap_or(""),
         "ENVIADO",
         user.id,
-        "Archivo entregado desde Rust",
+        "Entregable enviado.",
     )
     .await?;
     let teachers:Vec<i64>=sqlx::query_scalar("SELECT DISTINCT profesor_id FROM integraciones_academicas WHERE reto_id=$1 AND estado='publicada'").bind(reto).fetch_all(&mut *tx).await?;
@@ -135,7 +133,7 @@ pub async fn submit(
             &mut tx,
             teacher,
             "ENTREGABLE_RECIBIDO",
-            &format!("{} entregó {title}", user.username),
+            &format!("{} subió el entregable \"{title}\".", user.username),
             &format!("entregable:{id}:{}", uuid::Uuid::new_v4().simple()),
         )
         .await?;
@@ -332,7 +330,7 @@ async fn store_document(
         let age = (today - issued).num_days();
         if age > days as i64 {
             return Err(AppError::bad(format!(
-                "{name} tiene {age} dias de expedida y el maximo es {days}."
+                "{name} tiene {age} días de expedida y el máximo es {days}."
             )));
         }
         expires = Some(issued + chrono::Duration::days(days as i64));
@@ -376,11 +374,11 @@ async fn store_document(
                 .fetch_one(&mut *tx)
                 .await?;
         let message = format!(
-            "La empresa {company_name} {} el documento \"{name}\" para revision.",
+            "La empresa {company_name} {} el documento \"{name}\" para revisión.",
             if from.is_empty() {
-                "cargo"
+                "cargó"
             } else {
-                "actualizo"
+                "actualizó"
             }
         );
         let admins: Vec<i64> = sqlx::query_scalar(
@@ -461,7 +459,7 @@ pub async fn save_attachments(
 ) -> Result<Vec<(String, String, i64, std::path::PathBuf)>> {
     for (name, data) in files {
         if data.len() > ATTACHMENT_LIMIT {
-            return Err(AppError::bad(format!("{name} supera el limite de 50 MB.")));
+            return Err(AppError::bad(format!("{name} supera el límite de 50 MB.")));
         }
         attachment_extension(name)?;
     }
@@ -508,7 +506,7 @@ pub async fn read_with_files(
             let bytes = field
                 .bytes()
                 .await
-                .map_err(|_| AppError::bad(format!("{original} supera el limite de 50 MB.")))?;
+                .map_err(|_| AppError::bad(format!("{original} supera el límite de 50 MB.")))?;
             if !bytes.is_empty() {
                 files.push((original, bytes));
             }

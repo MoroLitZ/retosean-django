@@ -19,7 +19,7 @@ async fn reasons(t: &Ctx, company: i64) -> Vec<String> {
     reasons
 }
 async fn document(t: &Ctx, company: i64, kind: &str, estado: &str) -> i64 {
-    t.i64(&format!("INSERT INTO documentos_empresas(empresa_id,tipo_documento,archivo,estado,fecha_expedicion,fecha_carga,motivo_rechazo) VALUES({company},'{kind}','x.pdf','{estado}',CURRENT_DATE,now(),'') ON CONFLICT (empresa_id,tipo_documento) DO UPDATE SET estado=excluded.estado RETURNING id")).await
+    t.i64(&format!("INSERT INTO documentos_empresas(empresa_id,tipo_documento,archivo,estado,fecha_expedicion,fecha_carga,motivo_rechazo) VALUES({company},'{kind}','x.pdf','{estado}',(now() AT TIME ZONE 'America/Bogota')::date,now(),'') ON CONFLICT (empresa_id,tipo_documento) DO UPDATE SET estado=excluded.estado RETURNING id")).await
 }
 async fn upload(
     t: &Ctx,
@@ -278,7 +278,7 @@ parity!(
 parity!(test_documento_vencido_deshabilita_a_la_empresa, |t| {
     let (_, company, _) = gate(&t).await;
     t.verify_documents(company).await;
-    t.exec(&format!("UPDATE documentos_empresas SET fecha_vencimiento=CURRENT_DATE-1 WHERE empresa_id={company} AND tipo_documento='CAMARA_COMERCIO'")).await;
+    t.exec(&format!("UPDATE documentos_empresas SET fecha_vencimiento=(now() AT TIME ZONE 'America/Bogota')::date-1 WHERE empresa_id={company} AND tipo_documento='CAMARA_COMERCIO'")).await;
     assert!(!can_operate(&t, company).await);
 });
 
@@ -300,7 +300,7 @@ async fn advance(t: &Ctx, admin: &Session, company: i64, body: Value) -> u16 {
     .as_u16()
 }
 async fn in_force(t: &Ctx, company: i64) -> bool {
-    t.bool(&format!("SELECT estado_convenio='FIRMADO' AND fecha_vencimiento_convenio>=CURRENT_DATE FROM empresas WHERE id={company}")).await
+    t.bool(&format!("SELECT estado_convenio='FIRMADO' AND fecha_vencimiento_convenio>=(now() AT TIME ZONE 'America/Bogota')::date FROM empresas WHERE id={company}")).await
 }
 parity!(
     test_tramite_completo_queda_firmado_con_vencimiento_e_historial,
@@ -402,7 +402,7 @@ parity!(test_convenio_vigente_registrado_directamente, |t| {
 });
 parity!(test_convenio_vencido_no_esta_vigente, |t| {
     let (_, company, _) = agreement(&t).await;
-    t.exec(&format!("UPDATE empresas SET estado_convenio='FIRMADO',fecha_vencimiento_convenio=CURRENT_DATE-1 WHERE id={company}")).await;
+    t.exec(&format!("UPDATE empresas SET estado_convenio='FIRMADO',fecha_vencimiento_convenio=(now() AT TIME ZONE 'America/Bogota')::date-1 WHERE id={company}")).await;
     assert!(!in_force(&t, company).await);
 });
 parity!(test_solo_el_admin_actualiza_el_convenio, |t| {
@@ -427,7 +427,7 @@ async fn monitored(t: &Ctx) -> (i64, i64, Session) {
     let (other, _) = t.company_user("empresa-otra", "900444200").await;
     let reto = t.reto(owner, "en_curso", "reto").await;
     let foreign = t.reto(other, "en_curso", "reto").await;
-    t.exec(&format!("INSERT INTO seguimientos_reto(reto_id,tipo_sesion,fecha_sesion,porcentaje_avance,avances,observaciones,acuerdos,creado_en) VALUES({reto},'seguimiento',CURRENT_DATE-7,20,'Kickoff','','',now()),({reto},'seguimiento',CURRENT_DATE,60,'Prototipo','','',now())")).await;
+    t.exec(&format!("INSERT INTO seguimientos_reto(reto_id,tipo_sesion,fecha_sesion,porcentaje_avance,avances,observaciones,acuerdos,creado_en) VALUES({reto},'seguimiento',(now() AT TIME ZONE 'America/Bogota')::date-7,20,'Kickoff','','',now()),({reto},'seguimiento',(now() AT TIME ZONE 'America/Bogota')::date,60,'Prototipo','','',now())")).await;
     (reto, foreign, t.login("empresa-seg").await)
 }
 parity!(test_muestra_el_porcentaje_del_ultimo_seguimiento, |t| {
@@ -717,7 +717,7 @@ async fn expiring(t: &Ctx) -> (i64, i64, i64) {
     (user, company, reto)
 }
 async fn expire(t: &Ctx, company: i64, kind: &str) {
-    t.exec(&format!("UPDATE documentos_empresas SET fecha_vencimiento=CURRENT_DATE-1 WHERE empresa_id={company} AND tipo_documento='{kind}'")).await;
+    t.exec(&format!("UPDATE documentos_empresas SET fecha_vencimiento=(now() AT TIME ZONE 'America/Bogota')::date-1 WHERE empresa_id={company} AND tipo_documento='{kind}'")).await;
 }
 async fn sweep(t: &Ctx) {
     retosean::reminders::run(&t.pool, &[1]).await.unwrap();

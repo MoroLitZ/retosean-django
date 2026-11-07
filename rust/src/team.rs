@@ -46,8 +46,19 @@ pub struct TeamInput {
     pub sesiones: Vec<SessionInput>,
 }
 
-fn filled(value: &str, max: usize) -> bool {
-    !value.trim().is_empty() && value.chars().count() <= max
+fn filled(value: &str) -> bool {
+    !value.trim().is_empty()
+}
+
+/// Row-scoped length check, counted in characters.
+fn fits(value: &str, max: usize, fila: usize, campo: &str) -> Result<()> {
+    if value.chars().count() > max {
+        Err(AppError::bad(format!(
+            "Integrante {fila}: {campo} admite máximo {max} caracteres"
+        )))
+    } else {
+        Ok(())
+    }
 }
 
 /// Same per-role requirements as ParticipanteIntegracionForm.clean.
@@ -62,18 +73,20 @@ pub fn validate(team: &TeamInput) -> Result<()> {
         if !["PROFESOR", "ESTUDIANTE", "EXPERTO"].contains(&p.rol.as_str()) {
             return Err(AppError::bad(format!("Integrante {fila}: rol inválido")));
         }
-        if !filled(&p.nombre, 150) {
+        fits(&p.nombre, 150, fila, "el nombre")?;
+        if !filled(&p.nombre) {
             return Err(AppError::bad(format!(
                 "Integrante {fila}: indica el nombre"
             )));
         }
-        if !filled(&p.documento, 30) {
+        fits(&p.documento, 30, fila, "la cédula o documento")?;
+        if !filled(&p.documento) {
             return Err(AppError::bad(format!(
                 "Integrante {fila}: indica la cédula o documento"
             )));
         }
         let email = p.email.trim();
-        if email.len() > 254 || email.split('@').filter(|s| !s.is_empty()).count() != 2 {
+        if email.chars().count() > 254 || email.split('@').filter(|s| !s.is_empty()).count() != 2 {
             return Err(AppError::bad(format!(
                 "Integrante {fila}: indica un correo válido"
             )));
@@ -83,7 +96,8 @@ pub fn validate(team: &TeamInput) -> Result<()> {
         } else {
             ("la facultad u organización", &p.facultad, 150)
         };
-        if !filled(valor, max) {
+        fits(valor, max, fila, campo)?;
+        if !filled(valor) {
             return Err(AppError::bad(format!("Integrante {fila}: indica {campo}")));
         }
     }
@@ -95,7 +109,8 @@ pub fn validate(team: &TeamInput) -> Result<()> {
         crate::domain::validate_date(Some(s.fecha_hora.date_naive()), &format!("Sesión {fila}"))?;
         let link = s.enlace_reunion.trim();
         if !link.is_empty()
-            && (link.len() > 200 || !(link.starts_with("https://") || link.starts_with("http://")))
+            && (link.chars().count() > 200
+                || !(link.starts_with("https://") || link.starts_with("http://")))
         {
             return Err(AppError::bad(format!(
                 "Sesión {fila}: el enlace debe ser una URL"
@@ -166,9 +181,9 @@ pub async fn missing(
         faltan.push("al menos un profesor en el equipo");
     }
     for (tipo, etiqueta) in [
-        ("inicio", "una sesion de inicio"),
-        ("seguimiento", "al menos una sesion de seguimiento"),
-        ("evaluacion", "una sesion de evaluacion"),
+        ("inicio", "una sesión de inicio"),
+        ("seguimiento", "al menos una sesión de seguimiento"),
+        ("evaluacion", "una sesión de evaluación"),
     ] {
         if !kinds.iter().any(|k| k == tipo) {
             faltan.push(etiqueta);

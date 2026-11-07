@@ -69,6 +69,7 @@ pub async fn expense(
     if !user.admin() {
         return Err(AppError::forbidden());
     }
+    crate::domain::max_chars(&input.descripcion, 4000, "Descripción")?;
     let amount = money(&input.monto)?;
     if amount == Decimal::ZERO
         || ![
@@ -79,7 +80,6 @@ pub async fn expense(
             "OTROS",
         ]
         .contains(&input.categoria.as_str())
-        || input.descripcion.len() > 4000
         || !["", "COMPROMETIDO", "EJECUTADO"].contains(&input.estado.as_str())
     {
         return Err(AppError::bad("Gasto inválido"));
@@ -349,7 +349,7 @@ pub async fn export(
             row += 1;
         }
         row += 1;
-        for (c, name) in ["Categoria", "Comprometido", "Ejecutado", "Total"]
+        for (c, name) in ["Categoría", "Comprometido", "Ejecutado", "Total"]
             .iter()
             .enumerate()
         {
@@ -369,9 +369,9 @@ pub async fn export(
         row += 2;
         for (c, name) in [
             "Fecha",
-            "Categoria",
+            "Categoría",
             "Estado",
-            "Descripcion",
+            "Descripción",
             "Monto",
             "Registrado por",
             "Comprobante",
@@ -399,7 +399,7 @@ pub async fn export(
             sheet.write_number(row, 4, number(*amount)).map_err(fail)?;
             sheet.write_string(row, 5, by).map_err(fail)?;
             sheet
-                .write_string(row, 6, if *receipt { "Si" } else { "No" })
+                .write_string(row, 6, if *receipt { "Sí" } else { "No" })
                 .map_err(fail)?;
         }
         for (c, w) in [16, 18, 16, 40, 14, 18, 12].iter().enumerate() {
@@ -420,7 +420,11 @@ pub async fn export(
         )
             .into_response());
     }
-    let pesos = |d: Decimal| format!("${}", d.round_dp(2));
+    let pesos = |d: Decimal| {
+        let mut d = d.round_dp(2);
+        d.rescale(2);
+        format!("${d}")
+    };
     let summary_rows = vec![
         summary
             .iter()
@@ -469,9 +473,9 @@ pub async fn export(
             empty: "",
         },
         crate::reports::Section {
-            heading: Some("Totales por categoria"),
+            heading: Some("Totales por categoría"),
             columns: &[
-                ("Categoria", 1.),
+                ("Categoría", 1.),
                 ("Comprometido", 1.),
                 ("Ejecutado", 1.),
                 ("Total", 1.),
@@ -485,7 +489,7 @@ pub async fn export(
                 ("Fecha", 22.),
                 ("Categoria", 28.),
                 ("Estado", 24.),
-                ("Descripcion", 76.),
+                ("Descripción", 76.),
                 ("Monto", 30.),
             ],
             rows: &expense_rows,

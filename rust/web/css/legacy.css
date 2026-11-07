@@ -476,6 +476,7 @@ dialog::backdrop {
   padding: 0.45rem 0.75rem;
   border-bottom: 1px solid #f3f4f6;
   overflow-wrap: anywhere;
+  white-space: pre-line;
 }
 .details dt {
   font-weight: 600;
@@ -498,8 +499,14 @@ dialog::backdrop {
 }
 #toast {
   position: fixed;
-  right: 1.5rem;
-  bottom: 1.5rem;
+  inset: auto 1.5rem 1.5rem auto;
+  margin: 0;
+  border: 0;
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
+  cursor: pointer;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
   z-index: 2000;
   background: #0a0a0a;
   color: #fff;
@@ -509,11 +516,19 @@ dialog::backdrop {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
   max-width: min(420px, calc(100vw - 32px));
 }
-td {
+#table-body td {
   max-width: 280px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+#dialog-content td {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-width: none;
+}
+#toast[hidden] {
+  display: none;
 }
 
 /* ── Login (templates/base_auth.html + usuarios/login.html) ── */

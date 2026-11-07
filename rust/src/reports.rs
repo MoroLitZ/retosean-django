@@ -33,8 +33,41 @@ fn winansi(text: &str) -> Vec<u8> {
     }
     out
 }
-/// Each page uses a fixed-width base font and bounded lines; no HTML is interpreted.
+/// Word wrap for the fixed-width (Courier) layout: at most `max` characters
+/// per line; only words longer than a whole line are split.
+pub fn wrap_mono(text: &str, max: usize) -> Vec<String> {
+    let max = max.max(1);
+    let mut out = Vec::new();
+    for paragraph in text.split('\n') {
+        let mut line = String::new();
+        for word in paragraph.split_whitespace() {
+            let chars: Vec<char> = word.chars().collect();
+            for piece in chars.chunks(max) {
+                let piece: String = piece.iter().collect();
+                if !line.is_empty() && line.chars().count() + 1 + piece.chars().count() > max {
+                    out.push(std::mem::take(&mut line));
+                }
+                if !line.is_empty() {
+                    line.push(' ');
+                }
+                line.push_str(&piece);
+            }
+        }
+        out.push(line);
+    }
+    out
+}
+/// Each page uses a fixed-width base font; long lines wrap (never cut) and no
+/// HTML is interpreted.
 pub fn pdf_lines(title: &str, lines: &[String]) -> Vec<u8> {
+    let lines: Vec<String> = lines.iter().flat_map(|l| wrap_mono(l, 95)).collect();
+    let lines = lines.as_slice();
+    // The repeated page header is one line; the full title is in the body.
+    let header: String = if title.chars().count() > 85 {
+        title.chars().take(84).collect::<String>() + "…"
+    } else {
+        title.to_string()
+    };
     let mut pdf = Pdf::new();
     let pages = Ref::new(2);
     let font = Ref::new(3);
@@ -82,14 +115,14 @@ pub fn pdf_lines(title: &str, lines: &[String]) -> Vec<u8> {
             .begin_text()
             .set_font(Name(b"F1"), 10.)
             .next_line(40., 750.)
-            .show(Str(&winansi(&title.chars().take(85).collect::<String>())))
+            .show(Str(&winansi(&header)))
             .end_text();
         for (n, line) in chunk.iter().enumerate() {
             content
                 .begin_text()
                 .set_font(Name(b"F1"), 9.)
                 .next_line(40., 720. - n as f32 * 13.)
-                .show(Str(&winansi(&line.chars().take(95).collect::<String>())))
+                .show(Str(&winansi(line)))
                 .end_text();
         }
         content
@@ -240,7 +273,7 @@ impl Writer {
             GRIS,
             "RetosEAN - Universidad EAN",
         );
-        let label = format!("Pagina {number}");
+        let label = format!("Página {number}");
         self.text(
             right - width(&label, 7.5),
             10. * MM,
@@ -288,7 +321,20 @@ pub fn pdf_document(
     };
     w.new_page();
     w.y -= 16.;
-    w.text(left, w.y, b"F2", 16., NEGRO, title);
+    // Helvetica-Bold is wider than the Helvetica metrics table (as in cells()).
+    for (i, part) in wrap(title, (right - left) / 1.06, 16.)
+        .into_iter()
+        .enumerate()
+    {
+        if i > 0 {
+            w.y -= 19.;
+            if w.y < bottom {
+                w.new_page();
+                w.y -= 16.;
+            }
+        }
+        w.text(left, w.y, b"F2", 16., NEGRO, &part);
+    }
     w.y -= 8.;
     for line in meta {
         for part in wrap(line, right - left, 8.5) {
@@ -373,27 +419,38 @@ pub fn pdf_document(
             let (head, head_h, head_lead) = cells(columns.iter().map(|c| c.0).collect(), 8.);
             draw(&mut w, &head, head_h, head_lead, true, false);
             for (i, row) in rows.iter().enumerate() {
-                let (mut lines, mut height, leading) =
-                    cells(row.iter().map(String::as_str).collect(), 7.5);
+                let (mut lines, _, leading) = cells(row.iter().map(String::as_str).collect(), 7.5);
                 let room = PAGE_H - 22. * MM - head_h - bottom;
-                if height > room {
-                    // A single row taller than a page is clipped, never lost silently.
-                    let keep = ((room - 6.) / leading).floor().max(1.) as usize;
-                    for cell in &mut lines {
-                        if cell.len() > keep {
-                            cell.truncate(keep);
-                            if let Some(last) = cell.last_mut() {
-                                last.push_str(" ...");
-                            }
-                        }
+                let keep = ((room - 6.) / leading).floor().max(1.) as usize;
+                // A row taller than the space left continues on the next page
+                // (header repeated); no text is dropped.
+                let mut fresh = false;
+                loop {
+                    let tallest = lines.iter().map(Vec::len).max().unwrap_or(1).max(1);
+                    let height = tallest as f32 * leading + 6.;
+                    if w.y - height >= bottom {
+                        draw(&mut w, &lines, height, leading, false, i % 2 == 1);
+                        break;
                     }
-                    height = keep as f32 * leading + 6.;
-                }
-                if w.y - height < bottom {
+                    let fit = ((w.y - bottom - 6.) / leading).floor().max(0.) as usize;
+                    if !fresh && (tallest <= keep || fit < 3) {
+                        w.new_page();
+                        draw(&mut w, &head, head_h, head_lead, true, false);
+                        fresh = true;
+                        continue;
+                    }
+                    let fit = fit.max(1);
+                    let part: Vec<Vec<String>> = lines
+                        .iter_mut()
+                        .map(|cell| cell.drain(..cell.len().min(fit)).collect())
+                        .collect();
+                    let part_h =
+                        part.iter().map(Vec::len).max().unwrap_or(1).max(1) as f32 * leading + 6.;
+                    draw(&mut w, &part, part_h, leading, false, i % 2 == 1);
                     w.new_page();
                     draw(&mut w, &head, head_h, head_lead, true, false);
+                    fresh = true;
                 }
-                draw(&mut w, &lines, height, leading, false, i % 2 == 1);
             }
         }
         w.y -= 10.;
@@ -457,6 +514,10 @@ pub async fn export(
         .filter(|f| !["password", "is_staff", "is_superuser"].contains(f))
         .map(str::to_owned)
         .collect();
+    let labels: Vec<String> = fields
+        .iter()
+        .map(|f| resources::field_label(&name, f))
+        .collect();
     let title = format!(
         "{} | {} de {} registros",
         data["resource"].as_str().unwrap_or("Reporte"),
@@ -466,12 +527,11 @@ pub async fn export(
     let (content_type, disposition, bytes) = if format == "pdf" {
         let mut lines = vec![title.clone(), String::new()];
         for row in rows {
-            for field in &fields {
-                let line = format!("{field}: {}", text(&row[field]));
-                let chars: Vec<_> = line.chars().collect();
-                for chunk in chars.chunks(95) {
-                    lines.push(chunk.iter().collect());
-                }
+            for (field, label) in fields.iter().zip(&labels) {
+                lines.push(format!(
+                    "{label}: {}",
+                    resources::display_value(&name, field, &row[field])
+                ));
             }
             lines.push("—".repeat(60));
         }
@@ -494,25 +554,24 @@ pub async fn export(
             .set_bold()
             .set_font_color("FFFFFF")
             .set_background_color("3BAC52");
-        for (col, field) in fields.iter().enumerate() {
+        for (col, label) in labels.iter().enumerate() {
             sheet
-                .write_string_with_format(0, col as u16, field, &heading)
+                .write_string_with_format(0, col as u16, label, &heading)
                 .map_err(error)?;
             sheet.set_column_width(col as u16, 24).map_err(error)?;
         }
         for (r, row) in rows.iter().enumerate() {
             for (c, field) in fields.iter().enumerate() {
                 let value = &row[field];
-                if let Some(boolean) = value.as_bool() {
-                    sheet
-                        .write_boolean(r as u32 + 1, c as u16, boolean)
-                        .map_err(error)?;
-                } else {
-                    // Strings preserve identifiers, decimal precision and formula safety.
-                    sheet
-                        .write_string(r as u32 + 1, c as u16, text(value))
-                        .map_err(error)?;
-                }
+                // Strings preserve identifiers, decimal precision and formula
+                // safety; booleans read Sí/No and choices show their labels.
+                sheet
+                    .write_string(
+                        r as u32 + 1,
+                        c as u16,
+                        resources::display_value(&name, field, value),
+                    )
+                    .map_err(error)?;
             }
         }
         sheet.set_freeze_panes(1, 0).map_err(error)?;
@@ -548,43 +607,45 @@ pub async fn certificate(
         .bind(text(&certificate["rol_participacion"]))
         .fetch_one(&state.pool)
         .await?;
-    let reto: i64 = certificate["reto_id"]
-        .as_i64()
-        .ok_or_else(AppError::not_found)?;
-    let title: String = sqlx::query_scalar("SELECT titulo FROM retos WHERE id=$1")
-        .bind(reto)
+    let (title, company, issued): (String, String, String) = sqlx::query_as("SELECT r.titulo,COALESCE(NULLIF(trim(e.first_name||' '||e.last_name),''),e.username),to_char(c.emitido_en AT TIME ZONE 'America/Bogota','DD/MM/YYYY') FROM certificados c JOIN retos r ON r.id=c.reto_id JOIN usuarios e ON e.id=r.empresa_id WHERE c.id=$1")
+        .bind(id)
         .fetch_one(&state.pool)
         .await?;
+    let role = crate::dashboard::etiqueta(
+        "certificados",
+        "rol_participacion",
+        &text(&certificate["rol_participacion"]),
+    )
+    .to_lowercase();
+    let hours = text(&certificate["horas"]);
+    let dedication = match hours.parse::<f64>() {
+        Ok(h) if h > 0. => format!(", con una dedicación de {hours} horas"),
+        _ => String::new(),
+    };
+    let code = text(&certificate["codigo_verificacion"]);
     let mut lines = vec![
         String::new(),
         "CERTIFICADO DE PARTICIPACIÓN".into(),
         String::new(),
         "Se certifica que".into(),
         String::new(),
+    ];
+    // pdf_lines wraps long names and titles by words; nothing is cut.
+    lines.extend([
         name,
         String::new(),
-        format!(
-            "participó en calidad de {}",
-            text(&certificate["rol_participacion"])
-        ),
+        format!("participó en calidad de {role} en el reto empresarial"),
         String::new(),
-    ];
-    let chars: Vec<_> = title.chars().collect();
-    for chunk in chars.chunks(90) {
-        lines.push(chunk.iter().collect());
-    }
-    lines.extend([
+        format!("\u{201c}{title}\u{201d}"),
         String::new(),
-        format!("Horas: {}", text(&certificate["horas"])),
-        format!("Fecha de emisión: {}", text(&certificate["emitido_en"])),
+        format!("propuesto por {company}{dedication}."),
+        String::new(),
+        format!("Emitido el {issued}"),
         String::new(),
         "Código de verificación:".into(),
-        text(&certificate["codigo_verificacion"]),
+        code.clone(),
         String::new(),
-        format!(
-            "Verificar: /api/verificar/{}",
-            text(&certificate["codigo_verificacion"])
-        ),
+        format!("Verificar: /api/verificar/{code}"),
     ]);
     Ok((
         [
@@ -645,10 +706,10 @@ pub async fn portfolio(State(state): State<AppState>, headers: HeaderMap) -> Res
                 ("Empresa", 24.),
                 ("Rol", 14.),
                 ("Emitido", 14.),
-                ("Codigo", 18.),
+                ("Código", 18.),
             ],
             rows: &certificate_rows,
-            empty: "Todavia no hay certificados emitidos.",
+            empty: "Todavía no hay certificados emitidos.",
         },
         Section {
             heading: Some("Entregables evaluados"),
@@ -660,24 +721,47 @@ pub async fn portfolio(State(state): State<AppState>, headers: HeaderMap) -> Res
                 ("Fecha", 14.),
             ],
             rows: &deliverable_rows,
-            empty: "Todavia no hay entregables registrados.",
+            empty: "Todavía no hay entregables registrados.",
         },
     ];
     let meta = [
         user.email.clone(),
         format!("Portafolio generado el {today}"),
     ];
+    // ASCII fallback with Spanish letters folded (José Muñoz -> jose-munoz),
+    // plus the exact name as an RFC 5987 UTF-8 filename.
     let filename: String = name
         .to_lowercase()
         .chars()
+        .map(|c| match c {
+            'á' | 'à' | 'ä' | 'â' => 'a',
+            'é' | 'è' | 'ë' | 'ê' => 'e',
+            'í' | 'ì' | 'ï' | 'î' => 'i',
+            'ó' | 'ò' | 'ö' | 'ô' => 'o',
+            'ú' | 'ù' | 'ü' | 'û' => 'u',
+            'ñ' => 'n',
+            c => c,
+        })
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let encoded: String = format!("portafolio-{name}.pdf")
+        .bytes()
+        .map(|b| {
+            if b.is_ascii_alphanumeric() || b"-._~".contains(&b) {
+                (b as char).to_string()
+            } else {
+                format!("%{b:02X}")
+            }
+        })
         .collect();
     Ok((
         [
             (header::CONTENT_TYPE, "application/pdf".to_string()),
             (
                 header::CONTENT_DISPOSITION,
-                format!("attachment; filename=portafolio-{filename}.pdf"),
+                format!(
+                    "attachment; filename=\"portafolio-{filename}.pdf\"; filename*=UTF-8''{encoded}"
+                ),
             ),
         ],
         pdf_document(&name, &meta, &sections, ""),
@@ -714,6 +798,34 @@ mod tests {
             "120 wrapped rows span pages"
         );
         assert!(text.contains("842"), "landscape A4");
+    }
+    #[test]
+    fn mono_wrap_keeps_every_word() {
+        let text = format!(
+            "Informe final del hackathon: {}",
+            "Innovación año ".repeat(20)
+        );
+        let lines = wrap_mono(&text, 95);
+        assert!(lines.len() > 1 && lines.iter().all(|l| l.chars().count() <= 95));
+        assert_eq!(
+            lines.join(" ").split_whitespace().collect::<Vec<_>>(),
+            text.split_whitespace().collect::<Vec<_>>()
+        );
+    }
+    #[test]
+    fn tall_rows_continue_on_next_page() {
+        let long = "Descripción extensa con ñ y acentos. ".repeat(600);
+        let rows = vec![vec!["Reto".to_string(), long]];
+        let pdf = pdf_table(
+            "Reporte",
+            &[],
+            &[("Reto", 20.), ("Detalle", 20.)],
+            &rows,
+            "",
+        );
+        let text = String::from_utf8_lossy(&pdf);
+        assert!(text.matches("/MediaBox").count() >= 3);
+        assert!(!text.contains(" ..."));
     }
     #[test]
     fn pdf_has_pages_and_cross_reference() {

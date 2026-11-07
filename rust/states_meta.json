@@ -10,7 +10,7 @@
   },
   "MAQUINA_DOCUMENTO": {
     "etiquetas": {
-      "CARGADO": "En Revision",
+      "CARGADO": "En revisión",
       "PENDIENTE": "Pendiente",
       "RECHAZADO": "Rechazado",
       "VENCIDO": "Vencido",
@@ -22,7 +22,7 @@
     "etiquetas": {
       "CALIFICADO": "Calificado",
       "ENVIADO": "Enviado",
-      "EN_REVISION": "En Revision"
+      "EN_REVISION": "En revisión"
     },
     "nombre": "el entregable"
   },
@@ -32,27 +32,27 @@
       "PENDIENTE": "Pendiente",
       "RECHAZADA": "Rechazada"
     },
-    "nombre": "la inscripcion"
+    "nombre": "la inscripción"
   },
   "MAQUINA_INTEGRACION": {
     "etiquetas": {
       "aprobada": "Aprobada",
       "borrador": "Borrador",
-      "en_revision": "En revision",
+      "en_revision": "En revisión",
       "publicada": "Publicada",
       "rechazada": "Rechazada"
     },
-    "nombre": "la integracion academica"
+    "nombre": "la integración académica"
   },
   "MAQUINA_POSTULACION": {
     "etiquetas": {
       "ACEPTADA": "Aceptada",
-      "EN_REVISION": "En revision",
-      "PENDIENTE": "Pendiente de Aprobacion",
+      "EN_REVISION": "En revisión",
+      "PENDIENTE": "Pendiente de aprobación",
       "RECHAZADA": "Rechazada",
       "RETIRADA": "Retirada"
     },
-    "nombre": "la postulacion"
+    "nombre": "la postulación"
   },
   "MAQUINA_RETO": {
     "etiquetas": {
@@ -60,8 +60,8 @@
       "aprobado": "Aprobado",
       "borrador": "Borrador",
       "cancelado": "Cancelado",
-      "en_curso": "En Curso",
-      "en_revision": "En Revision",
+      "en_curso": "En curso",
+      "en_revision": "En revisión",
       "finalizado": "Finalizado",
       "pausado": "Pausado",
       "rechazado": "Rechazado"

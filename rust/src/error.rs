@@ -41,6 +41,11 @@ impl From<sqlx::Error> for AppError {
                     "Datos inválidos: un valor está fuera de rango o tiene caracteres no permitidos",
                 );
             }
+            if db.code().as_deref() == Some("22001") {
+                return Self::bad(
+                    "Uno de los textos supera la longitud máxima permitida. Acórtalo e inténtalo de nuevo.",
+                );
+            }
         }
         tracing::error!(%error, "database operation failed");
         Self(

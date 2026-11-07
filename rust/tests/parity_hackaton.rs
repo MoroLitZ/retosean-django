@@ -608,7 +608,7 @@ parity!(test_evento_virtual_exige_enlace_de_transmision, |t| {
         body["error"]
             .as_str()
             .unwrap()
-            .contains("enlace de transmision")
+            .contains("enlace de transmisión")
     );
 });
 parity!(test_estudiante_no_gestiona_la_logistica, |t| {

@@ -2,7 +2,7 @@
   "CERTIFICADO_DISPONIBLE": {
     "permite_email": true,
     "tipo": "EXITO",
-    "titulo": "Tu certificado esta disponible"
+    "titulo": "Tu certificado está disponible"
   },
   "COMENTARIO_EMPRESA": {
     "permite_email": true,
@@ -12,32 +12,32 @@
   "CONVENIO_ACTUALIZADO": {
     "permite_email": true,
     "tipo": "INFO",
-    "titulo": "Avance en el tramite de tu convenio"
+    "titulo": "Avance en el trámite de tu convenio"
   },
   "DOCUMENTO_CARGADO_ADMIN": {
     "permite_email": true,
     "tipo": "INFO",
-    "titulo": "Documento legal cargado por empresa"
+    "titulo": "Documento legal cargado por una empresa"
   },
   "DOCUMENTO_REVISADO": {
     "permite_email": true,
     "tipo": "INFO",
-    "titulo": "Documentacion revisada"
+    "titulo": "Documentación revisada"
   },
   "EMPRESA_LISTAS_RESTRICTIVAS": {
     "permite_email": true,
     "tipo": "ERROR",
-    "titulo": "Verificacion en listas restrictivas"
+    "titulo": "Verificación en listas restrictivas"
   },
   "EMPRESA_PARTICIPACION": {
     "permite_email": true,
     "tipo": "INFO",
-    "titulo": "Estado de participacion de tu empresa"
+    "titulo": "Estado de participación de tu empresa"
   },
   "ENCUESTA_PENDIENTE": {
     "permite_email": true,
     "tipo": "INFO",
-    "titulo": "Encuesta de satisfaccion"
+    "titulo": "Encuesta de satisfacción"
   },
   "ENTREGABLE_CALIFICADO": {
     "permite_email": true,
@@ -67,47 +67,47 @@
   "INTEGRACION_ENVIADA_REVISION": {
     "permite_email": true,
     "tipo": "INFO",
-    "titulo": "Nueva postulacion docente a reto"
+    "titulo": "Nueva postulación docente a un reto"
   },
   "INTEGRACION_REVISADA": {
     "permite_email": true,
     "tipo": "INFO",
-    "titulo": "Integracion academica revisada"
+    "titulo": "Integración académica revisada"
   },
   "LOGISTICA_SOLICITADA": {
     "permite_email": true,
     "tipo": "INFO",
-    "titulo": "Nueva solicitud de logistica"
+    "titulo": "Nueva solicitud de logística"
   },
   "POSTULACION_GESTIONADA": {
     "permite_email": true,
     "tipo": "INFO",
-    "titulo": "Respuesta a tu postulacion"
+    "titulo": "Respuesta a tu postulación"
   },
   "POSTULACION_NUEVA": {
     "permite_email": true,
     "tipo": "INFO",
-    "titulo": "Nueva postulacion"
+    "titulo": "Nueva postulación"
   },
   "POSTULACION_RECIBIDA": {
     "permite_email": true,
     "tipo": "EXITO",
-    "titulo": "Recibimos tu postulacion"
+    "titulo": "Recibimos tu postulación"
   },
   "PRESUPUESTO_80": {
     "permite_email": true,
     "tipo": "ADVERTENCIA",
-    "titulo": "Presupuesto por encima del 80%"
+    "titulo": "Presupuesto por encima del 80 %"
   },
   "RECORDATORIO_FECHA_LIMITE": {
     "permite_email": true,
     "tipo": "ADVERTENCIA",
-    "titulo": "Recordatorio de fecha limite"
+    "titulo": "Recordatorio de fecha límite"
   },
   "RETO_ENVIADO_REVISION": {
     "permite_email": true,
     "tipo": "INFO",
-    "titulo": "Reto enviado a revision"
+    "titulo": "Reto enviado a revisión"
   },
   "RETO_ESTADO_CAMBIADO": {
     "permite_email": true,

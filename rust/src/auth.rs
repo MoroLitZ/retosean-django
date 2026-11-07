@@ -161,16 +161,35 @@ pub async fn login(
     headers: HeaderMap,
     Json(input): Json<Credentials>,
 ) -> Result<Response> {
-    if input.username.len() > 150 || input.password.len() > 1024 || input.username.is_empty() {
+    // 254 characters covers the longest valid email; usernames are capped at 150
+    // characters (not bytes) when they are created.
+    if input.username.chars().count() > 254
+        || input.password.len() > 1024
+        || input.username.is_empty()
+    {
         return Err(AppError::bad("Credenciales inválidas"));
     }
     // Resolve the account first: username and email then share one counter.
-    let record: Option<(i64, String, String)> = sqlx::query_as(
-        "SELECT id,username,password FROM usuarios WHERE is_active AND activo AND (username=$1 OR (strpos($1,'@')>0 AND lower(email)=lower($1) AND (SELECT count(*) FROM usuarios WHERE lower(email)=lower($1))=1)) ORDER BY username=$1 DESC LIMIT 1",
-    )
-    .bind(&input.username)
-    .fetch_optional(&state.pool)
-    .await?;
+    // Inactive accounts are resolved too, so a correct password on one gets an
+    // explicit message instead of "wrong password" (_mensaje_cuenta_inactiva).
+    let record: Option<(i64, String, String, Option<&'static str>)> =
+        sqlx::query_as::<_, (i64, String, String, Option<String>)>(
+            "SELECT u.id,u.username,u.password,CASE WHEN u.is_active AND u.activo THEN NULL \
+             WHEN u.rol='EMPRESA' AND EXISTS(SELECT 1 FROM empresas e WHERE e.usuario_id=u.id AND e.estado_listas_restrictivas='RECHAZADO') THEN 'LISTAS' \
+             WHEN u.rol='PROFESOR' AND u.last_login IS NULL THEN 'PENDIENTE' ELSE 'INHABILITADA' END \
+             FROM usuarios u WHERE u.username=$1 OR (strpos($1,'@')>0 AND lower(u.email)=lower($1) AND (SELECT count(*) FROM usuarios WHERE lower(email)=lower($1))=1) ORDER BY u.username=$1 DESC LIMIT 1",
+        )
+        .bind(&input.username)
+        .fetch_optional(&state.pool)
+        .await?
+        .map(|(id, account, hash, inactive)| {
+            let inactive = inactive.map(|reason| match reason.as_str() {
+                "LISTAS" => "Tu cuenta se encuentra inhabilitada debido a que la empresa aparece en listas restrictivas (Clinton/OFAC).",
+                "PENDIENTE" => "Tu cuenta está pendiente de aprobación por un administrador.",
+                _ => "Tu cuenta se encuentra inhabilitada. Contacta con el administrador de la plataforma.",
+            });
+            (id, account, hash, inactive)
+        });
     let subject = match &record {
         Some((id, ..)) => digest(&format!("cuenta:{id}")),
         None => digest(&input.username.to_lowercase()),
@@ -204,10 +223,11 @@ pub async fn login(
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
-    let (id, account, hash) = record.unwrap_or((
+    let (id, account, hash, inactive) = record.unwrap_or((
         0,
         String::new(),
         "pbkdf2_sha256$1000000$dummy$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=".into(),
+        None,
     ));
     let username = input.username.clone();
     let valid = tokio::task::spawn_blocking(move || {
@@ -222,6 +242,11 @@ pub async fn login(
             StatusCode::UNAUTHORIZED,
             "Usuario o contraseña incorrectos".into(),
         ));
+    }
+    if let Some(message) = inactive {
+        // Right password, but the account cannot sign in: no session is opened.
+        log_access(&state, Some(id), &account, "LOGIN_FALLIDO", &headers).await?;
+        return Err(AppError(StatusCode::UNAUTHORIZED, message.into()));
     }
     sqlx::query("DELETE FROM rust_login_attempts WHERE subject=$1")
         .bind(&subject)

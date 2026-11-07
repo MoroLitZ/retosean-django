@@ -28,18 +28,26 @@ pub async fn review(
     if !user.admin() {
         return Err(AppError::forbidden());
     }
+    domain::max_chars(&input.observaciones, 10000, "Observaciones")?;
     if !["PENDIENTE", "EN_REVISION", "VERIFICADA", "RECHAZADA"]
         .contains(&input.estado_validacion.as_str())
         || !["PENDIENTE", "APROBADO", "RECHAZADO"]
             .contains(&input.estado_listas_restrictivas.as_str())
-        || input.observaciones.len() > 10000
     {
         return Err(AppError::bad("Revisión inválida"));
     }
+    // REGLA DE NEGOCIO (procesar_listas_restrictivas): appearing on the lists
+    // rejects the company globally, whatever validation state was submitted.
+    let listed = input.estado_listas_restrictivas == "RECHAZADO";
+    let validation = if listed {
+        "RECHAZADA"
+    } else {
+        input.estado_validacion.as_str()
+    };
     let mut tx = state.pool.begin().await?;
-    let row:Option<(Option<i64>,String,String,bool)>=sqlx::query_as("SELECT usuario_id,estado_validacion,estado_listas_restrictivas,renuncio_a_convenio FROM empresas WHERE id=$1 FOR UPDATE").bind(id).fetch_optional(&mut *tx).await?;
-    let (owner, from, lists, _waived) = row.ok_or_else(AppError::not_found)?;
-    if input.estado_validacion == "VERIFICADA" {
+    let row:Option<(Option<i64>,String,String,String)>=sqlx::query_as("SELECT usuario_id,estado_validacion,estado_listas_restrictivas,razon_social FROM empresas WHERE id=$1 FOR UPDATE").bind(id).fetch_optional(&mut *tx).await?;
+    let (owner, from, lists, company_name) = row.ok_or_else(AppError::not_found)?;
+    if validation == "VERIFICADA" {
         if input.estado_listas_restrictivas != "APROBADO" {
             return Err(AppError::bad("Verifica primero las listas restrictivas"));
         }
@@ -54,7 +62,7 @@ pub async fn review(
             )));
         }
     }
-    if input.estado_listas_restrictivas == "RECHAZADO" {
+    if listed {
         let documents:Vec<(i64,String)>=sqlx::query_as("SELECT id,estado FROM documentos_empresas WHERE empresa_id=$1 AND estado NOT IN ('VERIFICADO','RECHAZADO') FOR UPDATE").bind(id).fetch_all(&mut *tx).await?;
         for (doc, previous) in documents {
             domain::transition("MAQUINA_DOCUMENTO", &previous, "RECHAZADO")?;
@@ -71,13 +79,13 @@ pub async fn review(
             .await?;
         }
     }
-    sqlx::query("UPDATE empresas SET estado_validacion=$2,estado_listas_restrictivas=$3,observaciones_admin=$4,fecha_ultima_actualizacion=now() WHERE id=$1").bind(id).bind(&input.estado_validacion).bind(&input.estado_listas_restrictivas).bind(&input.observaciones).execute(&mut *tx).await?;
+    sqlx::query("UPDATE empresas SET estado_validacion=$2,estado_listas_restrictivas=$3,observaciones_admin=$4,fecha_ultima_actualizacion=now() WHERE id=$1").bind(id).bind(validation).bind(&input.estado_listas_restrictivas).bind(&input.observaciones).execute(&mut *tx).await?;
     let audit = history(
         &mut tx,
         ("empresas", "empresa"),
         id,
         &from,
-        &input.estado_validacion,
+        validation,
         user.id,
         &input.observaciones,
     )
@@ -103,19 +111,66 @@ pub async fn review(
             .execute(&mut *tx)
             .await?;
     }
-    if let Some(owner) = owner {
+    if listed {
+        // The account is disabled so it cannot sign in again (cambiar_estado_cuenta).
+        if let Some(owner) = owner {
+            crate::workflows::set_account_active(
+                &mut tx,
+                owner,
+                false,
+                user.id,
+                "Cuenta inhabilitada: la empresa aparece en listas restrictivas.",
+            )
+            .await?;
+            notify(
+                &mut tx,
+                owner,
+                "EMPRESA_LISTAS_RESTRICTIVAS",
+                "Tu organización aparece en listas restrictivas (Clinton/OFAC). La cuenta quedó inhabilitada y la documentación fue rechazada. Comunícate con la Universidad EAN para revisar el caso.",
+                &format!("empresa:{id}:listas:RECHAZADO"),
+            )
+            .await?;
+        }
+        // notificar_admins, excluding the reviewer.
+        let admins: Vec<i64> = sqlx::query_scalar(
+            "SELECT id FROM usuarios WHERE is_active AND (is_superuser OR rol='ADMIN') AND id<>$1",
+        )
+        .bind(user.id)
+        .fetch_all(&mut *tx)
+        .await?;
+        let message = format!("La empresa {company_name} fue rechazada por listas restrictivas.");
+        for admin in admins {
+            notify(
+                &mut tx,
+                admin,
+                "EMPRESA_LISTAS_RESTRICTIVAS",
+                &message,
+                &format!("empresa:{id}:listas:RECHAZADO:admin"),
+            )
+            .await?;
+        }
+    } else if let Some(owner) = owner {
+        // Lifting a restrictive-lists rejection reactivates the account it disabled.
+        if lists == "RECHAZADO" && input.estado_listas_restrictivas == "APROBADO" {
+            crate::workflows::set_account_active(
+                &mut tx,
+                owner,
+                true,
+                user.id,
+                "Cuenta reactivada: verificación en listas restrictivas aprobada.",
+            )
+            .await?;
+        }
+        let label = crate::dashboard::etiqueta("empresas", "estado_validacion", validation);
+        let mut message = format!("El estado de validación de tu empresa ahora es: {label}.");
+        if !input.observaciones.trim().is_empty() {
+            message.push_str(&format!("\nObservaciones: {}", input.observaciones.trim()));
+        }
         notify(
             &mut tx,
             owner,
-            if input.estado_listas_restrictivas == "RECHAZADO" {
-                "EMPRESA_LISTAS_RESTRICTIVAS"
-            } else {
-                "EMPRESA_PARTICIPACION"
-            },
-            &format!(
-                "Empresa: {}. {}",
-                input.estado_validacion, input.observaciones
-            ),
+            "EMPRESA_PARTICIPACION",
+            &message,
             &format!("empresa:{id}:{}", uuid::Uuid::new_v4().simple()),
         )
         .await?;
@@ -140,9 +195,8 @@ pub async fn agreement(
     if !user.admin() {
         return Err(AppError::forbidden());
     }
-    if input.comentario.len() > 10000
-        || (input.estado == "FIRMADO" && input.fecha_vencimiento.is_none())
-    {
+    domain::max_chars(&input.comentario, 10000, "Comentario")?;
+    if input.estado == "FIRMADO" && input.fecha_vencimiento.is_none() {
         return Err(AppError::bad("Para firmar, indica la fecha de vencimiento"));
     }
     domain::validate_date(input.fecha_vencimiento, "Fecha de vencimiento")?;
@@ -171,7 +225,7 @@ pub async fn agreement(
         .await?;
     if let Some(owner) = owner {
         let label = crate::dashboard::etiqueta("empresas", "estado_convenio", &input.estado);
-        let mut message = format!("El tramite de tu convenio quedo en estado: {label}.");
+        let mut message = format!("El trámite de tu convenio quedó en estado: {label}.");
         let due = if input.estado == "FIRMADO" {
             input.fecha_vencimiento
         } else {
@@ -183,11 +237,8 @@ pub async fn agreement(
         if !input.comentario.is_empty() {
             message.push_str(&format!("\nComentario: {}", input.comentario));
         }
-        let key = format!(
-            "convenio:{id}:{}:{}",
-            input.estado,
-            due.map(|d| d.to_string()).unwrap_or_default()
-        );
+        // The audit id makes each cycle a new notification.
+        let key = format!("convenio:{id}:{}:{audit}", input.estado);
         notify(&mut tx, owner, "CONVENIO_ACTUALIZADO", &message, &key).await?;
         sqlx::query("UPDATE notificaciones SET tipo=$3 WHERE usuario_id=$1 AND clave_dedupe=$2")
             .bind(owner)
@@ -213,8 +264,8 @@ pub async fn document(
     if !user.admin() {
         return Err(AppError::forbidden());
     }
+    domain::max_chars(&input.comentario, 4000, "Comentario")?;
     if !["VERIFICADO", "RECHAZADO"].contains(&input.estado.as_str())
-        || input.comentario.len() > 4000
         || (input.estado == "RECHAZADO" && input.comentario.trim().is_empty())
     {
         return Err(AppError::bad("Indica una decisión y el motivo del rechazo"));
@@ -238,7 +289,7 @@ pub async fn document(
         })
         .execute(&mut *tx)
         .await?;
-    history(
+    let audit = history(
         &mut tx,
         ("empresas", "documentoempresa"),
         id,
@@ -265,10 +316,11 @@ pub async fn document(
             if !input.comentario.is_empty() {
                 message.push_str(&format!("\nMotivo: {}", input.comentario));
             }
-            message.push_str("\nPuedes volver a cargarlo desde tu panel de documentacion.");
+            message.push_str("\nPuedes volver a cargarlo desde tu panel de documentación.");
             (message, "ERROR")
         };
-        let key = format!("documento:{id}:{}:{id}", input.estado);
+        // The document row is reused on re-upload: the audit id keeps each review distinct.
+        let key = format!("documento:{id}:{}:{audit}", input.estado);
         notify(&mut tx, owner, "DOCUMENTO_REVISADO", &message, &key).await?;
         sqlx::query("UPDATE notificaciones SET tipo=$3 WHERE usuario_id=$1 AND clave_dedupe=$2")
             .bind(owner)
@@ -333,10 +385,8 @@ pub async fn document_type(
         return Err(AppError::forbidden());
     }
     domain::validate_text(&input.nombre, 150, "Nombre")?;
-    if input.descripcion.len() > 4000
-        || input.vigencia_dias.is_some_and(|d| d < 0)
-        || input.orden < 0
-    {
+    domain::max_chars(&input.descripcion, 4000, "Descripción")?;
+    if input.vigencia_dias.is_some_and(|d| d < 0) || input.orden < 0 {
         return Err(AppError::bad("Revisa los datos del tipo de documento"));
     }
     let id = match id {

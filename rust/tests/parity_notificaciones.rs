@@ -50,7 +50,7 @@ parity!(test_notificar_crea_registro_y_envia_correo, |t| {
         .collect();
     assert_eq!(mine.len(), 1);
     assert!(
-        mine[0].1.contains("Respuesta a tu postulacion"),
+        mine[0].1.contains("Respuesta a tu postulación"),
         "{}",
         mine[0].1
     );
