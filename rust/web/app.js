@@ -1871,6 +1871,12 @@ async function authRoute() {
   const register = async (data) => {
     for (const k of ["programa_id", "facultad_id", "semestre"]) data[k] = data[k] ? Number(data[k]) : null;
     const session = await api("/api/registro", data);
+    if (session.pendiente_aprobacion) {
+      // A self-registered professor waits for admin approval: no session yet.
+      $("auth-alt").replaceChildren(el("h2", "", "Cuenta pendiente de aprobación"),
+        el("p", "auth-subtitle", session.mensaje), backToLogin(""));
+      return;
+    }
     csrf = session.csrf;
     location.hash = "dashboard";
     await start();
