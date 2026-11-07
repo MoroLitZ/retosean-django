@@ -79,6 +79,9 @@ async fn urls(t: &Ctx, route: &str) -> Vec<String> {
         }
         return out;
     }
+    if route.contains("{file}") {
+        return vec![route.replace("{file}", "core.js"), route.replace("{file}", "tokens.css")];
+    }
     if route.contains("{code}") {
         return t
             .texts("SELECT codigo_verificacion::text FROM certificados LIMIT 2")
@@ -187,8 +190,8 @@ parity!(test_rutas_publicas_sin_sesion, |t| {
         .await;
     for url in [
         "/",
-        "/app.js",
-        "/style.css",
+        "/assets/core.js",
+        "/assets/tokens.css",
         "/health",
         "/api/registro/opciones",
         &format!("/api/verificar/{code}"),
