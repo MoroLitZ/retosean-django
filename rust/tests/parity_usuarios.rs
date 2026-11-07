@@ -127,6 +127,57 @@ parity!(test_confirmar_crea_los_usuarios, |t| {
             .await
     );
 });
+parity!(test_confirmar_crea_perfil_por_rol, |t| {
+    import(
+        &t,
+        &t.admin,
+        &[
+            "perfilest,perfilest@ean.edu.co,A,B,ESTUDIANTE,,",
+            "perfilpro,perfilpro@ean.edu.co,C,D,PROFESOR,,",
+        ],
+        HEADER,
+        true,
+    )
+    .await;
+    let est = t
+        .i64("SELECT id FROM usuarios WHERE username='perfilest'")
+        .await;
+    let pro = t
+        .i64("SELECT id FROM usuarios WHERE username='perfilpro'")
+        .await;
+    assert!(
+        t.bool(&format!(
+            "SELECT EXISTS(SELECT 1 FROM estudiantes WHERE usuario_id={est})"
+        ))
+        .await
+    );
+    assert!(
+        t.bool(&format!(
+            "SELECT EXISTS(SELECT 1 FROM profesores WHERE usuario_id={pro})"
+        ))
+        .await
+    );
+});
+parity!(
+    test_importar_omite_username_que_aparecio_despues_de_la_preview,
+    |t| {
+        // Two overlapping confirms: the loser hits ON CONFLICT and is omitted
+        // instead of raising a unique violation (USR-06).
+        let row = "racaed,racaed@ean.edu.co,A,B,ESTUDIANTE,,";
+        let rows = [row];
+        let (a, b) = tokio::join!(
+            import(&t, &t.admin, &rows, HEADER, true),
+            import(&t, &t.admin, &rows, HEADER, true),
+        );
+        assert_eq!(a.0, 200);
+        assert_eq!(b.0, 200);
+        assert_eq!(
+            t.i64("SELECT count(*) FROM usuarios WHERE username='racaed'")
+                .await,
+            1
+        );
+    }
+);
 parity!(test_detecta_rol_invalido, |t| {
     let (_, body) = import(
         &t,

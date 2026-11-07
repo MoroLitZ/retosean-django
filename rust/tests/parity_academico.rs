@@ -57,6 +57,22 @@ parity!(test_no_emite_a_postulaciones_rechazadas, |t| {
         0
     );
 });
+// CIE-01: rechazado o retirado no se certifica aunque haya subido un entregable.
+parity!(
+    test_no_emite_a_estudiante_rechazado_con_entregable,
+    |t| {
+        let (reto, _, _, _, rejected) = setup(&t).await;
+        t.deliverable(reto, rejected).await;
+        issue(&t, reto).await;
+        assert_eq!(
+            t.i64(&format!(
+                "SELECT count(*) FROM certificados WHERE usuario_id={rejected}"
+            ))
+            .await,
+            0
+        );
+    }
+);
 parity!(test_no_emite_si_el_reto_no_esta_finalizado, |t| {
     let (reto, ..) = setup(&t).await;
     t.exec(&format!(
@@ -190,7 +206,12 @@ parity!(
         let (company, _) = t.company_user("empresa-cierre-2", "900100500").await;
         let student = t.user("est-entregable", "ESTUDIANTE").await;
         let reto = t.reto(company, "en_curso", "reto").await;
-        t.deliverable(reto, student).await;
+        let entregable = t.deliverable(reto, student).await;
+        // CIE-02: finalizar bloquea entregables sin evaluar; como en Django, ya está CALIFICADO.
+        t.exec(&format!(
+            "UPDATE entregables SET estado='CALIFICADO' WHERE id={entregable}"
+        ))
+        .await;
         t.ok(
             &t.admin,
             "POST",

@@ -174,6 +174,104 @@ parity!(test_estudiante_no_pide_logistica, |t| {
     );
 });
 
+// Regresiones del informe de QA (apps/cierre/tests.py): CIE-02, CIE-05 y CIE-06.
+parity!(test_finalizar_bloquea_evaluaciones_pendientes, |t| {
+    let (reto, student) = setup(&t).await;
+    t.deliverable(reto, student).await; // un avance ENVIADO sin evaluar
+    let (code, body) = t
+        .req(
+            &t.admin,
+            "POST",
+            &format!("/api/retos/{reto}/cerrar"),
+            Some(json!({})),
+        )
+        .await;
+    assert_eq!(code, 400, "{body}");
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap()
+            .contains("pendientes de evaluación"),
+        "{body}"
+    );
+    assert_eq!(estado(&t, reto).await, "en_curso");
+    assert_eq!(
+        t.i64(&format!(
+            "SELECT count(*) FROM certificados WHERE reto_id={reto}"
+        ))
+        .await,
+        0
+    );
+    assert_eq!(surveys(&t, reto).await, 0);
+});
+parity!(test_get_gestionar_no_emite_certificados, |t| {
+    let (reto, _) = setup(&t).await;
+    t.exec(&format!(
+        "UPDATE retos SET estado='finalizado' WHERE id={reto}"
+    ))
+    .await;
+    t.ok(
+        &t.admin,
+        "GET",
+        &format!("/api/retos/{reto}/cierre"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        t.i64(&format!(
+            "SELECT count(*) FROM certificados WHERE reto_id={reto}"
+        ))
+        .await,
+        0
+    );
+});
+parity!(
+    test_reto_finalizado_no_recibe_entregables_ni_reconocimientos,
+    |t| {
+        let (reto, student) = setup(&t).await;
+        t.exec(&format!(
+            "UPDATE retos SET estado='finalizado' WHERE id={reto}"
+        ))
+        .await;
+        let (code, body) = multipart(
+            &t.app,
+            &t.admin,
+            &format!("/api/retos/{reto}/cierre/entregables"),
+            &[("nombre", "Nuevo final")],
+            &[("archivo", "final2.pdf", b"%PDF-1.4 final")],
+        )
+        .await;
+        assert_eq!(code, 400, "{body}");
+        assert!(
+            body["error"].as_str().unwrap().contains("ya fue finalizado"),
+            "{body}"
+        );
+        assert_eq!(
+            t.i64("SELECT count(*) FROM cierre_entregablefinal WHERE nombre='Nuevo final'")
+                .await,
+            0
+        );
+        let (code, body) = t
+            .req(
+                &t.admin,
+                "POST",
+                &format!("/api/retos/{reto}/cierre/reconocimientos"),
+                Some(json!({"usuario_id":student,"nombre_destinatario":"Alguien","descripcion":"x"})),
+            )
+            .await;
+        assert_eq!(code, 400, "{body}");
+        assert!(
+            body["error"].as_str().unwrap().contains("ya fue finalizado"),
+            "{body}"
+        );
+        assert_eq!(
+            t.i64("SELECT count(*) FROM reconocimientos WHERE nombre_destinatario='Alguien'")
+                .await,
+            0
+        );
+    }
+);
+
 // NotificacionRetoFinalizadoTests (F8): RETO_FINALIZADO for the company and the
 // integrated professors, with Django's fixed history comment.
 parity!(

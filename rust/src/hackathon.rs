@@ -36,6 +36,22 @@ async fn integrated(tx: &mut Transaction<'_, Postgres>, reto: i64, user: &User) 
         Err(AppError::forbidden())
     }
 }
+/// `IntegracionAcademica.puede_editar_profesor`: the professor owns an integration
+/// on the reto whose configuration is still editable (borrador/rechazada, or the
+/// reto open/running). Returns the integration that owns the new academic team.
+async fn own_integration(tx: &mut Transaction<'_, Postgres>, reto: i64, user: &User) -> Result<i64> {
+    if user.rol != "PROFESOR" {
+        return Err(AppError::forbidden());
+    }
+    let id: Option<i64> = sqlx::query_scalar(
+        "SELECT i.id FROM integraciones_academicas i JOIN retos r ON r.id=i.reto_id WHERE i.reto_id=$1 AND i.profesor_id=$2 AND r.eliminado_en IS NULL AND (i.estado IN ('borrador','rechazada') OR r.estado IN ('abierto','en_curso')) ORDER BY i.id LIMIT 1",
+    )
+    .bind(reto)
+    .bind(user.id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    id.ok_or_else(AppError::forbidden)
+}
 pub async fn options(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -99,7 +115,13 @@ async fn lock(tx: &mut Transaction<'_, Postgres>, id: i64) -> Result<(i64, Strin
     .ok_or_else(AppError::not_found)
 }
 async fn window(tx: &mut Transaction<'_, Postgres>, id: i64, kind: &str) -> Result<()> {
-    let allowed:bool=sqlx::query_scalar("SELECT NOT EXISTS(SELECT 1 FROM etapas_hackaton WHERE hackathon_id=$1 AND tipo=$2 AND ((inicia_en IS NOT NULL AND inicia_en>now()) OR (termina_en IS NOT NULL AND termina_en<now())))").bind(id).bind(kind).fetch_one(&mut **tx).await?;
+    let allowed: bool = match kind {
+        // HCK-05: the vote fails closed — a dated, currently-vigent presentation
+        // stage is required, otherwise the window that yields a winner never opens.
+        "presentacion" => sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM etapas_hackaton WHERE hackathon_id=$1 AND tipo=$2 AND (inicia_en IS NOT NULL OR termina_en IS NOT NULL) AND (inicia_en IS NULL OR inicia_en<=now()) AND (termina_en IS NULL OR termina_en>=now()))").bind(id).bind(kind).fetch_one(&mut **tx).await?,
+        // inscripcion fails open: without a stage the published hackathon stays open.
+        _ => sqlx::query_scalar("SELECT NOT EXISTS(SELECT 1 FROM etapas_hackaton WHERE hackathon_id=$1 AND tipo=$2 AND ((inicia_en IS NOT NULL AND inicia_en>now()) OR (termina_en IS NOT NULL AND termina_en<now())))").bind(id).bind(kind).fetch_one(&mut **tx).await?,
+    };
     if allowed {
         Ok(())
     } else {
@@ -116,13 +138,14 @@ pub async fn team(
     let user = auth::current(&state, &headers, true).await?;
     validate_team(&state, &mut input).await?;
     let mut tx = state.pool.begin().await?;
-    integrated(&mut tx, reto, &user).await?;
+    let integration = own_integration(&mut tx, reto, &user).await?;
     let name = input.nombre_equipo.trim();
     let academic: i64 = sqlx::query_scalar(
-        "INSERT INTO equipos_reto_academico(reto_id,nombre_equipo) VALUES($1,$2) RETURNING id",
+        "INSERT INTO equipos_reto_academico(reto_id,nombre_equipo,integracion_id) VALUES($1,$2,$3) RETURNING id",
     )
     .bind(reto)
     .bind(name)
+    .bind(integration)
     .fetch_one(&mut *tx)
     .await?;
     for (table, list) in [
@@ -170,15 +193,35 @@ pub async fn team(
         "mensaje": format!("Equipo académico configurado y {} estudiante(s) notificado(s).", input.estudiantes.len()),
     })))
 }
-/// editar/eliminar_equipo_academico: only a professor integrated in the reto.
+/// editar/eliminar_equipo_academico: only the owning professor (or an admin)
+/// whose integration is still editable — Django's `_puede_gestionar_equipo`.
 async fn academic_team(
     tx: &mut Transaction<'_, Postgres>,
     id: i64,
     user: &User,
 ) -> Result<(i64, Option<i64>)> {
-    let row: Option<(i64, Option<i64>)> = sqlx::query_as("SELECT q.reto_id,q.equipo_espejo_id FROM equipos_reto_academico q WHERE q.id=$1 AND $3='PROFESOR' AND EXISTS(SELECT 1 FROM integraciones_academicas i WHERE i.reto_id=q.reto_id AND i.profesor_id=$2 AND i.estado IN ('aprobada','publicada')) FOR UPDATE")
-        .bind(id).bind(user.id).bind(&user.rol).fetch_optional(&mut **tx).await?;
-    row.ok_or_else(AppError::not_found)
+    let row: Option<(i64, Option<i64>)> = sqlx::query_as(
+        "SELECT reto_id,equipo_espejo_id FROM equipos_reto_academico WHERE id=$1 FOR UPDATE",
+    )
+    .bind(id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let team = row.ok_or_else(AppError::not_found)?;
+    if user.admin() {
+        return Ok(team);
+    }
+    let owner: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM equipos_reto_academico q JOIN integraciones_academicas i ON i.id=q.integracion_id JOIN retos r ON r.id=q.reto_id WHERE q.id=$1 AND q.integracion_id IS NOT NULL AND i.profesor_id=$2 AND (i.estado IN ('borrador','rechazada') OR r.estado IN ('abierto','en_curso')))",
+    )
+    .bind(id)
+    .bind(user.id)
+    .fetch_one(&mut **tx)
+    .await?;
+    if owner {
+        Ok(team)
+    } else {
+        Err(AppError::not_found())
+    }
 }
 /// EquipoRetoAcademicoForm: each list only takes users of its roles.
 async fn validate_team(state: &AppState, input: &mut AcademicTeamInput) -> Result<()> {
@@ -628,6 +671,19 @@ pub async fn register(
             "Este equipo ya está inscrito en el hackathon.",
         ));
     }
+    // HCK-08: one team per student per hackathon; another registered team closes it.
+    let member_of_registered: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM inscripciones_hackaton i JOIN miembros_equipo m ON m.equipo_id=i.equipo_id WHERE i.hackathon_id=$1 AND m.estudiante_id=$2)",
+    )
+    .bind(id)
+    .bind(user.id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if member_of_registered {
+        return Err(AppError::bad(
+            "Ya estás inscrito con otro equipo en este hackathon.",
+        ));
+    }
     let registration:i64=sqlx::query_scalar("INSERT INTO inscripciones_hackaton(hackathon_id,equipo_id,estado,inscrito_por_id,creado_en) VALUES($1,$2,'PENDIENTE',$3,now()) RETURNING id").bind(id).bind(input.equipo_id).bind(user.id).fetch_one(&mut *tx).await?;
     history(
         &mut tx,
@@ -709,9 +765,11 @@ pub async fn vote(
     if !["publicado", "en_curso"].contains(&status.as_str()) {
         return Err(AppError::bad("Votaciones cerradas"));
     }
-    window(&mut tx, id, "presentacion").await?;
+    // As in Django, a non-juror is rejected before the presentation window,
+    // so a missing stage does not mask the "not a juror" response.
     let juror:Option<i64>=sqlx::query_scalar("SELECT id FROM jurados_hackaton WHERE hackathon_id=$1 AND usuario_id=$2 ORDER BY id LIMIT 1").bind(id).bind(user.id).fetch_optional(&mut *tx).await?;
     let juror = juror.ok_or_else(AppError::forbidden)?;
+    window(&mut tx, id, "presentacion").await?;
     let accepted:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM inscripciones_hackaton WHERE hackathon_id=$1 AND equipo_id=$2 AND estado='ACEPTADA')").bind(id).bind(input.equipo_id).fetch_one(&mut *tx).await?;
     if !accepted {
         return Err(AppError::bad("El equipo no tiene inscripción aceptada"));
@@ -762,8 +820,9 @@ pub async fn ranking(
             return Err(AppError::forbidden());
         }
     }
-    // services.ranking: by average, then more votes, then name; position from 1.
-    let rows: Vec<Value> = sqlx::query_scalar("SELECT jsonb_build_object('posicion',row_number() OVER (ORDER BY avg(v.puntaje) DESC,count(v.id) DESC,e.nombre),'equipo_id',e.id,'equipo',e.nombre,'promedio',round(avg(v.puntaje),2),'total',sum(v.puntaje),'votos',count(v.id)) FROM votaciones_hackaton v JOIN equipos e ON e.id=v.equipo_id WHERE v.hackathon_id=$1 GROUP BY e.id ORDER BY avg(v.puntaje) DESC,count(v.id) DESC,e.nombre")
+    // services.ranking: only accepted teams score; accepted teams without votes
+    // close the table at zero (HCK-02/HCK-10). By average, then votes, then name.
+    let rows: Vec<Value> = sqlx::query_scalar("SELECT jsonb_build_object('posicion',row_number() OVER (ORDER BY coalesce(avg(v.puntaje),0) DESC,count(v.id) DESC,e.nombre),'equipo_id',e.id,'equipo',e.nombre,'promedio',coalesce(round(avg(v.puntaje),2),0),'total',coalesce(sum(v.puntaje),0),'votos',count(v.id)) FROM inscripciones_hackaton i JOIN equipos e ON e.id=i.equipo_id LEFT JOIN votaciones_hackaton v ON v.hackathon_id=i.hackathon_id AND v.equipo_id=i.equipo_id WHERE i.hackathon_id=$1 AND i.estado='ACEPTADA' GROUP BY e.id,e.nombre ORDER BY coalesce(avg(v.puntaje),0) DESC,count(v.id) DESC,e.nombre")
         .bind(id).fetch_all(&state.pool).await?;
     Ok(Json(json!({"ranking":rows})))
 }

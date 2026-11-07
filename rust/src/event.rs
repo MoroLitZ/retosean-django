@@ -16,6 +16,10 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
+/// Co-winners by exact (promedio, votos) among accepted teams that have votes.
+/// `totals` is referenced twice, so ties keep every name instead of one.
+const WINNERS_SQL: &str = "WITH totals AS (SELECT e.nombre,avg(v.puntaje) AS prom,count(v.id) AS votos FROM votaciones_hackaton v JOIN equipos e ON e.id=v.equipo_id JOIN inscripciones_hackaton i ON i.equipo_id=e.id AND i.hackathon_id=v.hackathon_id AND i.estado='ACEPTADA' WHERE v.hackathon_id=$1 GROUP BY e.id,e.nombre) SELECT nombre FROM totals WHERE votos>0 AND (prom,votos)=(SELECT prom,votos FROM totals ORDER BY prom DESC,votos DESC,nombre LIMIT 1) ORDER BY nombre";
+
 /// Same rules as services.avanzar_por_calendario. Idempotent; returns what changed.
 pub async fn advance(pool: &PgPool, id: i64) -> Result<Vec<&'static str>> {
     let mut tx = pool.begin().await?;
@@ -98,13 +102,20 @@ pub async fn publish_results(
     .bind(id)
     .fetch_one(&mut **tx)
     .await?;
-    let winner: Option<String> = sqlx::query_scalar("SELECT e.nombre FROM votaciones_hackaton v JOIN equipos e ON e.id=v.equipo_id WHERE v.hackathon_id=$1 GROUP BY e.id ORDER BY avg(v.puntaje) DESC,count(v.id) DESC,e.nombre LIMIT 1")
+    // HCK-06: co-winners (same promedio and votos) are all reported, never just
+    // one crowned alphabetically; HCK-02/HCK-10: only accepted teams count.
+    let winners: Vec<String> = sqlx::query_scalar(WINNERS_SQL)
         .bind(id)
-        .fetch_optional(&mut **tx)
+        .fetch_all(&mut **tx)
         .await?;
     let mut message = format!("Ya están publicados los resultados del hackathon '{title}'.");
-    if let Some(w) = winner {
-        message.push_str(&format!(" Equipo ganador: {w}."));
+    match winners.len() {
+        0 => {}
+        1 => message.push_str(&format!(" Equipo ganador: {}.", winners[0])),
+        _ => {
+            let names = winners.join(" y ");
+            message.push_str(&format!(" Equipos ganadores en empate: {names}."));
+        }
     }
     let members: Vec<i64> = sqlx::query_scalar("SELECT DISTINCT m.estudiante_id FROM miembros_equipo m JOIN inscripciones_hackaton i ON i.equipo_id=m.equipo_id JOIN usuarios u ON u.id=m.estudiante_id WHERE i.hackathon_id=$1 AND u.is_active")
         .bind(id)
@@ -269,7 +280,7 @@ async fn sections(
     let guests = q("SELECT coalesce(jsonb_agg(jsonb_build_array(nombre,tipo,coalesce(nullif(organizacion,''),'-'),CASE WHEN confirmado THEN 'Sí' ELSE 'No' END) ORDER BY tipo,nombre),'[]') FROM invitados_hackaton WHERE hackathon_id=$1").fetch_one(&state.pool).await?;
     let jurors = q("SELECT coalesce(jsonb_agg(jsonb_build_array(nombre,coalesce(nullif(email,''),'-'),coalesce(nullif(especialidad,''),'-')) ORDER BY nombre),'[]') FROM jurados_hackaton WHERE hackathon_id=$1").fetch_one(&state.pool).await?;
     let teams = q("SELECT coalesce(jsonb_agg(jsonb_build_array(e.nombre,i.estado,coalesce((SELECT string_agg(coalesce(nullif(trim(u.first_name||' '||u.last_name),''),u.username),', ') FROM miembros_equipo m JOIN usuarios u ON u.id=m.estudiante_id WHERE m.equipo_id=e.id),'-'),to_char(i.creado_en AT TIME ZONE 'America/Bogota','DD/MM/YYYY HH24:MI')) ORDER BY i.creado_en),'[]') FROM inscripciones_hackaton i JOIN equipos e ON e.id=i.equipo_id WHERE i.hackathon_id=$1").fetch_one(&state.pool).await?;
-    let ranking = q("SELECT coalesce(jsonb_agg(jsonb_build_array(puesto,nombre,round(prom,2)::text,round(total,2)::text,votos) ORDER BY puesto),'[]') FROM (SELECT row_number() OVER (ORDER BY avg(v.puntaje) DESC,count(v.id) DESC,e.nombre) puesto,e.nombre,avg(v.puntaje) prom,sum(v.puntaje) total,count(v.id) votos FROM votaciones_hackaton v JOIN equipos e ON e.id=v.equipo_id WHERE v.hackathon_id=$1 GROUP BY e.id) x").fetch_one(&state.pool).await?;
+    let ranking = q("SELECT coalesce(jsonb_agg(jsonb_build_array(puesto,nombre,round(prom,2)::text,round(total,2)::text,votos) ORDER BY puesto),'[]') FROM (SELECT row_number() OVER (ORDER BY prom DESC,votos DESC,nombre) AS puesto,nombre,prom,total,votos FROM (SELECT e.nombre,coalesce(avg(v.puntaje),0) AS prom,coalesce(sum(v.puntaje),0) AS total,count(v.id) AS votos FROM inscripciones_hackaton i JOIN equipos e ON e.id=i.equipo_id LEFT JOIN votaciones_hackaton v ON v.hackathon_id=i.hackathon_id AND v.equipo_id=i.equipo_id WHERE i.hackathon_id=$1 AND i.estado='ACEPTADA' GROUP BY e.id,e.nombre) y) x").fetch_one(&state.pool).await?;
     let rows = |v: &Value| -> Vec<Vec<String>> {
         v.as_array()
             .into_iter()
@@ -298,9 +309,16 @@ async fn sections(
         rows
     };
     let ranking = rows(&ranking);
-    let winner = match ranking.first() {
-        Some(first) if call.8 => first.get(1).cloned().unwrap_or_else(|| "-".into()),
-        _ => "-".into(),
+    let winners: Vec<String> =
+        sqlx::query_scalar::<_, String>(WINNERS_SQL).bind(id).fetch_all(&state.pool).await?;
+    let winner = if call.8 {
+        match winners.len() {
+            0 => "-".into(),
+            1 => winners[0].clone(),
+            _ => winners.join(" y "),
+        }
+    } else {
+        "-".into()
     };
     let pair = |k: &str, v: String| vec![k.to_string(), v];
     let convocatoria = vec![

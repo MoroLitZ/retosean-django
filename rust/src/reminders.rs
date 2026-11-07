@@ -4,6 +4,9 @@ use crate::{error::Result, workflows::notify};
 use sqlx::{PgPool, Postgres, Transaction};
 
 const ADMINS: &str = "SELECT id FROM usuarios WHERE is_active AND (rol='ADMIN' OR is_superuser)";
+/// NOT-05: how stale an ungraded deliverable may be before professors are poked
+/// again; a fixed threshold independent of the `days` CLI argument.
+const DIAS_PENDIENTE_CALIFICAR: i64 = 7;
 
 /// Sends `event` to every user returned by `recipients` ($1 = reto/document id)
 /// who keeps reminders on; returns how many notices were created.
@@ -40,6 +43,13 @@ async fn emit(
 pub async fn run(pool: &PgPool, days: &[i64]) -> Result<usize> {
     let mut tx = pool.begin().await?;
     let today = "(now() AT TIME ZONE 'America/Bogota')::date";
+    // NOT-02: the concrete Bogota date, so dedupe keys change when a deadline is
+    // rescheduled (the `today` SQL expression above is fine for filters, but a
+    // key must carry the actual target date).
+    let hoy: chrono::NaiveDate =
+        sqlx::query_scalar("SELECT (now() AT TIME ZONE 'America/Bogota')::date")
+            .fetch_one(&mut *tx)
+            .await?;
     let mut total = 0;
 
     // Documents past their expiry become VENCIDO and the company is told (marcar_documento_vencido).
@@ -86,13 +96,15 @@ pub async fn run(pool: &PgPool, days: &[i64]) -> Result<usize> {
 
     for &n in days {
         let target = format!("({today} + {n})");
+        // The concrete target date, mirrors Django's `objetivo` in the dedupe key.
+        let objetivo = (hoy + chrono::Duration::days(n)).to_string();
         // Application deadline: students who favorited or applied (pending/in review).
         let retos: Vec<(i64, String)> = sqlx::query_as(&format!("SELECT id,titulo FROM retos WHERE eliminado_en IS NULL AND estado='abierto' AND fecha_limite_postulacion={target}")).fetch_all(&mut *tx).await?;
         for (reto, title) in retos {
             total += emit(&mut tx,"RECORDATORIO_FECHA_LIMITE",
                 "SELECT DISTINCT u.id FROM usuarios u WHERE u.rol='ESTUDIANTE' AND u.is_active AND (EXISTS(SELECT 1 FROM retos_favoritos f WHERE f.usuario_id=u.id AND f.reto_id=$1) OR EXISTS(SELECT 1 FROM postulaciones p WHERE p.estudiante_id=u.id AND p.reto_id=$1 AND p.estado IN ('PENDIENTE','EN_REVISION')))",
                 reto, &format!("Quedan {n} día(s) para postularte al reto '{title}'."),
-                &format!("recordatorio:postulacion:{reto}:{n}")).await?;
+                &format!("recordatorio:postulacion:{reto}:{objetivo}:{n}")).await?;
         }
         // Challenge end: accepted students without a final deliverable, and the professors.
         let retos: Vec<(i64, String)> = sqlx::query_as(&format!("SELECT id,titulo FROM retos WHERE eliminado_en IS NULL AND estado IN ('aprobado','abierto','en_curso','pausado') AND fecha_fin_tentativa={target}")).fetch_all(&mut *tx).await?;
@@ -100,14 +112,14 @@ pub async fn run(pool: &PgPool, days: &[i64]) -> Result<usize> {
             total += emit(&mut tx,"RECORDATORIO_FECHA_LIMITE",
                 "SELECT DISTINCT p.estudiante_id FROM postulaciones p JOIN usuarios u ON u.id=p.estudiante_id WHERE p.reto_id=$1 AND p.estado='ACEPTADA' AND u.is_active AND NOT EXISTS(SELECT 1 FROM entregables e WHERE e.reto_id=$1 AND e.es_final AND e.estudiante_id=p.estudiante_id)",
                 reto, &format!("Quedan {n} día(s) para la entrega final del reto '{title}'."),
-                &format!("recordatorio:entrega-final:{reto}:{n}")).await?;
+                &format!("recordatorio:entrega-final:{reto}:{objetivo}:{n}")).await?;
             total += emit(
                 &mut tx,
                 "RECORDATORIO_FECHA_LIMITE",
-                "SELECT DISTINCT profesor_id FROM integraciones_academicas WHERE reto_id=$1",
+                "SELECT DISTINCT i.profesor_id FROM integraciones_academicas i JOIN usuarios u ON u.id=i.profesor_id AND u.is_active WHERE i.reto_id=$1",
                 reto,
                 &format!("El reto '{title}' finaliza en {n} día(s)."),
-                &format!("recordatorio:fin-reto:{reto}:{n}:profesor"),
+                &format!("recordatorio:fin-reto:{reto}:{objetivo}:{n}:profesor"),
             )
             .await?;
         }
@@ -115,9 +127,9 @@ pub async fn run(pool: &PgPool, days: &[i64]) -> Result<usize> {
         let docs: Vec<(i64, String)> = sqlx::query_as(&format!("SELECT d.id,coalesce(t.nombre,d.tipo_documento) FROM documentos_empresas d LEFT JOIN tipos_documento_legal t ON t.codigo=d.tipo_documento WHERE d.estado='VERIFICADO' AND d.fecha_vencimiento={target}")).fetch_all(&mut *tx).await?;
         for (doc, name) in docs {
             total += emit(&mut tx,"RECORDATORIO_FECHA_LIMITE",
-                "SELECT e.usuario_id FROM documentos_empresas d JOIN empresas e ON e.id=d.empresa_id WHERE d.id=$1 AND e.usuario_id IS NOT NULL",
+                "SELECT e.usuario_id FROM documentos_empresas d JOIN empresas e ON e.id=d.empresa_id JOIN usuarios u ON u.id=e.usuario_id AND u.is_active WHERE d.id=$1",
                 doc, &format!("Tu documento '{name}' vence en {n} día(s)."),
-                &format!("recordatorio:documento:{doc}:{n}")).await?;
+                &format!("recordatorio:documento:{doc}:{objetivo}:{n}")).await?;
         }
         // Hackathon stages starting soon.
         let stages: Vec<(i64, i64, String, String)> = sqlx::query_as(&format!("SELECT s.id,h.reto_id,s.titulo,r.titulo FROM etapas_hackaton s JOIN hackathons h ON h.id=s.hackathon_id JOIN retos r ON r.id=h.reto_id WHERE (s.inicia_en AT TIME ZONE 'America/Bogota')::date={target} AND h.estado IN ('publicado','en_curso')")).fetch_all(&mut *tx).await?;
@@ -125,19 +137,19 @@ pub async fn run(pool: &PgPool, days: &[i64]) -> Result<usize> {
             total += emit(&mut tx,"RECORDATORIO_FECHA_LIMITE",
                 "SELECT DISTINCT p.estudiante_id FROM postulaciones p JOIN usuarios u ON u.id=p.estudiante_id WHERE p.reto_id=$1 AND p.estado='ACEPTADA' AND u.is_active",
                 reto, &format!("La etapa '{stage_title}' del hackathon '{title}' inicia en {n} día(s)."),
-                &format!("recordatorio:etapa:{stage}:{n}")).await?;
+                &format!("recordatorio:etapa:{stage}:{objetivo}:{n}")).await?;
         }
     }
 
     // Deliverables waiting for a grade longer than the longest notice period.
-    let wait = days.iter().copied().max().unwrap_or(7);
-    let week: String = sqlx::query_scalar(&format!("SELECT to_char({today},'YYYY-WW')"))
+    let wait = DIAS_PENDIENTE_CALIFICAR;
+    let week: String = sqlx::query_scalar(&format!("SELECT to_char({today},'IYYY-IW')"))
         .fetch_one(&mut *tx)
         .await?;
     let pending: Vec<(i64, String, i64)> = sqlx::query_as(&format!("SELECT r.id,r.titulo,count(*) FROM entregables e JOIN retos r ON r.id=e.reto_id WHERE e.estado IN ('ENVIADO','EN_REVISION') AND e.fecha_entrega<now()-interval '{wait} days' GROUP BY r.id,r.titulo")).fetch_all(&mut *tx).await?;
     for (reto, title, count) in pending {
         total += emit(&mut tx,"RECORDATORIO_FECHA_LIMITE",
-            "SELECT DISTINCT profesor_id FROM integraciones_academicas WHERE reto_id=$1",
+            "SELECT DISTINCT i.profesor_id FROM integraciones_academicas i JOIN usuarios u ON u.id=i.profesor_id AND u.is_active WHERE i.reto_id=$1",
             reto, &format!("Tienes {count} entregable(s) del reto '{title}' sin calificar desde hace más de {wait} días."),
             &format!("recordatorio:sin-calificar:{reto}:{week}")).await?;
     }

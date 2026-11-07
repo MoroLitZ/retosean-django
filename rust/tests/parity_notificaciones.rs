@@ -302,6 +302,97 @@ parity!(test_un_seguimiento_posterior_silencia_la_alerta, |t| {
     assert_eq!(remind(&t, admin).await.len(), 0);
 });
 
+// RecordatoriosCommandTests
+/// A reto whose fin is `fin_days` from today, with the given state.
+async fn rec_reto(t: &Ctx, estado: &str, fin_days: i64) -> i64 {
+    let (company, _) = t.company_user("empresa-rec", "900400300").await;
+    let reto = t.reto(company, estado, "reto").await;
+    t.exec(&format!(
+        "UPDATE retos SET fecha_fin_tentativa=(now() AT TIME ZONE 'America/Bogota')::date + {fin_days} WHERE id={reto}"
+    ))
+    .await;
+    reto
+}
+parity!(test_profesor_inactivo_no_recibe_recordatorio, |t| {
+    let reto = rec_reto(&t, "en_curso", 7).await;
+    let active = t.user("prof-activo", "PROFESOR").await;
+    let inactive = t.user("prof-inactivo", "PROFESOR").await;
+    t.exec(&format!(
+        "UPDATE usuarios SET is_active=false WHERE id={inactive}"
+    ))
+    .await;
+    t.integrate(reto, active).await;
+    t.integrate(reto, inactive).await;
+    retosean::reminders::run(&t.pool, &[7]).await.unwrap();
+    assert_eq!(t.notices(active, "RECORDATORIO_FECHA_LIMITE").await, 1);
+    assert_eq!(t.notices(inactive, "RECORDATORIO_FECHA_LIMITE").await, 0);
+});
+parity!(
+    test_fecha_limite_reprogramada_genera_nuevo_recordatorio,
+    |t| {
+        let (company, _) = t.company_user("empresa-rec", "900400400").await;
+        let reto = t.reto(company, "abierto", "reto").await;
+        t.exec(&format!(
+        "UPDATE retos SET fecha_limite_postulacion=(now() AT TIME ZONE 'America/Bogota')::date + 7 WHERE id={reto}"
+    ))
+    .await;
+        let student = t.user("est-rec", "ESTUDIANTE").await;
+        sqlx::query("INSERT INTO postulaciones(reto_id,estudiante_id,estado,motivacion,semestre,programa,fecha_postulacion,habilidades,acepta_terminos) VALUES($1,$2,'PENDIENTE','',5,'',now(),'',true)")
+        .bind(reto)
+        .bind(student)
+        .execute(&t.pool)
+        .await
+        .unwrap();
+        retosean::reminders::run(&t.pool, &[7]).await.unwrap();
+        assert_eq!(t.notices(student, "RECORDATORIO_FECHA_LIMITE").await, 1);
+        // Reschedule the deadline: a new concrete target must produce a new reminder.
+        t.exec(&format!(
+        "UPDATE retos SET fecha_limite_postulacion=(now() AT TIME ZONE 'America/Bogota')::date + 3 WHERE id={reto}"
+    ))
+    .await;
+        retosean::reminders::run(&t.pool, &[3]).await.unwrap();
+        assert_eq!(t.notices(student, "RECORDATORIO_FECHA_LIMITE").await, 2);
+    }
+);
+parity!(test_umbral_entregables_sin_calificar_es_fijo, |t| {
+    let reto = rec_reto(&t, "en_curso", 30).await;
+    let teacher = t.user("prof-rec", "PROFESOR").await;
+    t.integrate(reto, teacher).await;
+    let student = t.user("est-rec", "ESTUDIANTE").await;
+    let deliverable = t.deliverable(reto, student).await;
+    // 3 days old: below the fixed 7-day threshold, so --dias 1 must not fire.
+    t.exec(&format!(
+        "UPDATE entregables SET fecha_entrega=now()-interval '3 days' WHERE id={deliverable}"
+    ))
+    .await;
+    retosean::reminders::run(&t.pool, &[1]).await.unwrap();
+    assert_eq!(t.notices(teacher, "RECORDATORIO_FECHA_LIMITE").await, 0);
+    // 10 days old: beyond the fixed threshold, fires even with --dias 1.
+    t.exec(&format!(
+        "UPDATE entregables SET fecha_entrega=now()-interval '10 days' WHERE id={deliverable}"
+    ))
+    .await;
+    retosean::reminders::run(&t.pool, &[1]).await.unwrap();
+    assert_eq!(t.notices(teacher, "RECORDATORIO_FECHA_LIMITE").await, 1);
+});
+parity!(
+    test_recordatorio_sin_calificar_no_se_duplica_misma_semana,
+    |t| {
+        let reto = rec_reto(&t, "en_curso", 30).await;
+        let teacher = t.user("prof-rec", "PROFESOR").await;
+        t.integrate(reto, teacher).await;
+        let student = t.user("est-rec", "ESTUDIANTE").await;
+        let deliverable = t.deliverable(reto, student).await;
+        t.exec(&format!(
+            "UPDATE entregables SET fecha_entrega=now()-interval '10 days' WHERE id={deliverable}"
+        ))
+        .await;
+        retosean::reminders::run(&t.pool, &[7]).await.unwrap();
+        retosean::reminders::run(&t.pool, &[7]).await.unwrap();
+        assert_eq!(t.notices(teacher, "RECORDATORIO_FECHA_LIMITE").await, 1);
+    }
+);
+
 // RegistroEnviosAdminTests
 async fn log(t: &Ctx) {
     let user = t.user("destino-reg", "ESTUDIANTE").await;

@@ -93,6 +93,15 @@ pub async fn expense(
     if exists.is_none() {
         return Err(AppError::not_found());
     }
+    // PRE-01: a gasto must not leave the disponible negative. The row is locked
+    // FOR UPDATE above so two concurrent gastos cannot both fit in the same balance.
+    let (total, comprometido, ejecutado) = amounts(&mut tx, id).await?;
+    let disponible = total - comprometido - ejecutado;
+    if amount > disponible {
+        return Err(AppError::bad(format!(
+            "El monto (${amount}) excede el disponible del presupuesto (${disponible}). Reduce el gasto o amplía el presupuesto."
+        )));
+    }
     let estado = if input.estado.is_empty() {
         "EJECUTADO"
     } else {

@@ -356,7 +356,16 @@ pub async fn agreement_choice(
     let company =
         company.ok_or_else(|| AppError::bad("No tienes un perfil de empresa asociado."))?;
     match input.opcion.as_str() {
-        "si_convenio" => Ok(Json(json!({"siguiente":"documentos"}))),
+        "si_convenio" => {
+            // EMP-07: si antes renunció al convenio, al elegirlo se revierte la
+            // renuncia para que vuelvan a exigirse la minuta y el convenio.
+            sqlx::query("UPDATE empresas SET renuncio_a_convenio=false WHERE id=$1")
+                .bind(company)
+                .execute(&mut *tx)
+                .await?;
+            tx.commit().await?;
+            Ok(Json(json!({"siguiente":"documentos"})))
+        }
         "no_convenio" => {
             sqlx::query("UPDATE empresas SET renuncio_a_convenio=true WHERE id=$1")
                 .bind(company)

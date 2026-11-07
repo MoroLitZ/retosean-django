@@ -9,19 +9,51 @@ use axum::{
     Json,
     body::Bytes,
     extract::{Multipart, Path, State},
-    http::HeaderMap,
+    http::{HeaderMap, StatusCode},
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
+use sqlx::PgPool;
 use std::collections::HashMap;
 
-/// _puede_gestionar.
+/// _facultad_profesor: la facultad del perfil de profesor, si existe.
+async fn faculty(pool: &PgPool, user: i64) -> Result<Option<i64>> {
+    let row: Option<Option<i64>> =
+        sqlx::query_scalar("SELECT facultad_id FROM profesores WHERE usuario_id=$1")
+            .bind(user)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.flatten())
+}
+/// _puede_gestionar: admin siempre; profesor solo si tiene facultad asignada.
 async fn manager(state: &AppState, headers: &HeaderMap) -> Result<User> {
     let user = auth::current(state, headers, true).await?;
-    if !user.admin() && user.rol != "PROFESOR" {
-        return Err(AppError::forbidden());
+    // CIE-03: un profesor sin facultad no gestiona unidades de estudio.
+    if user.admin() || (user.rol == "PROFESOR" && faculty(&state.pool, user.id).await?.is_some()) {
+        return Ok(user);
     }
-    Ok(user)
+    Err(AppError::forbidden())
+}
+/// _puede_administrar_unidad: un profesor solo administra unidades cuyo programa
+/// pertenece a su facultad (CIE-03); se usa al editar y al activar/desactivar.
+async fn ensure_scope(pool: &PgPool, user: &User, unit: i64, action: &str) -> Result<()> {
+    if user.admin() {
+        return Ok(());
+    }
+    let belongs: Option<i64> = sqlx::query_scalar(
+        "SELECT p.facultad_id FROM unidades_estudio u JOIN programas p ON p.id=u.programa_id WHERE u.id=$1",
+    )
+    .bind(unit)
+    .fetch_optional(pool)
+    .await?;
+    let belongs = belongs.ok_or_else(AppError::not_found)?;
+    if faculty(pool, user.id).await? != Some(belongs) {
+        return Err(AppError(
+            StatusCode::FORBIDDEN,
+            format!("No tienes permiso para {action} esta unidad de estudio."),
+        ));
+    }
+    Ok(())
 }
 async fn read_form(mut multipart: Multipart) -> Result<(HashMap<String, String>, Option<Bytes>)> {
     let mut fields = HashMap::new();
@@ -60,6 +92,7 @@ struct Unit {
 /// The view's checks, in its order; the first error is reported.
 async fn validate(
     state: &AppState,
+    user: &User,
     fields: &HashMap<String, String>,
     current: Option<i64>,
 ) -> Result<Unit> {
@@ -79,17 +112,26 @@ async fn validate(
     {
         return Err(AppError::bad("Datos demasiado largos"));
     }
-    let programa: Option<i64> = match get("programa").parse::<i64>() {
+    let programa: Option<(i64, i64)> = match get("programa").parse::<i64>() {
         Ok(id) => {
-            sqlx::query_scalar("SELECT id FROM programas WHERE id=$1")
+            sqlx::query_as("SELECT id,facultad_id FROM programas WHERE id=$1")
                 .bind(id)
                 .fetch_optional(&state.pool)
                 .await?
         }
         Err(_) => None,
     };
-    let programa =
-        programa.ok_or_else(|| AppError::bad("El programa académico es obligatorio."))?;
+    let Some((programa, facultad)) = programa else {
+        return Err(AppError::bad("El programa académico es obligatorio."));
+    };
+    // CIE-03: _pertenece_a_facultad; un profesor solo asigna programas de su facultad.
+    if !user.admin() && faculty(&state.pool, user.id).await? != Some(facultad) {
+        return Err(AppError::bad(if current.is_some() {
+            "No tienes permiso para asignar esta unidad a ese programa."
+        } else {
+            "No tienes permiso para crear unidades en ese programa."
+        }));
+    }
     let taken: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM unidades_estudio WHERE codigo=$1 AND id IS DISTINCT FROM $2)",
     )
@@ -130,12 +172,12 @@ pub async fn create(
     headers: HeaderMap,
     multipart: Multipart,
 ) -> Result<Json<Value>> {
-    manager(&state, &headers).await?;
+    let user = manager(&state, &headers).await?;
     let (fields, file) = read_form(multipart).await?;
     if fields.get("accion").map(String::as_str) == Some("cargar_csv") {
         return load_csv(&state, file).await;
     }
-    let unit = validate(&state, &fields, None).await?;
+    let unit = validate(&state, &user, &fields, None).await?;
     let key = store(&state, file).await?;
     let id: i64 = sqlx::query_scalar("INSERT INTO unidades_estudio(codigo,nombre,programa_id,periodo,ciclo,archivo,activo,creado_en,actualizado_en) VALUES($1,$2,$3,$4,$5,$6,true,now(),now()) RETURNING id")
         .bind(&unit.codigo).bind(&unit.nombre).bind(unit.programa).bind(&unit.periodo).bind(&unit.ciclo).bind(key).fetch_one(&state.pool).await?;
@@ -150,7 +192,7 @@ pub async fn edit(
     Path(id): Path<i64>,
     multipart: Multipart,
 ) -> Result<Json<Value>> {
-    manager(&state, &headers).await?;
+    let user = manager(&state, &headers).await?;
     let exists: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM unidades_estudio WHERE id=$1)")
             .bind(id)
@@ -159,8 +201,9 @@ pub async fn edit(
     if !exists {
         return Err(AppError::not_found());
     }
+    ensure_scope(&state.pool, &user, id, "editar").await?;
     let (fields, file) = read_form(multipart).await?;
-    let unit = validate(&state, &fields, Some(id)).await?;
+    let unit = validate(&state, &user, &fields, Some(id)).await?;
     let key = store(&state, file).await?;
     sqlx::query("UPDATE unidades_estudio SET codigo=$2,nombre=$3,programa_id=$4,periodo=$5,ciclo=$6,archivo=COALESCE($7,archivo),actualizado_en=now() WHERE id=$1")
         .bind(id).bind(&unit.codigo).bind(&unit.nombre).bind(unit.programa).bind(&unit.periodo).bind(&unit.ciclo).bind(key).execute(&state.pool).await?;
@@ -180,7 +223,9 @@ pub async fn set_active(
     Path(id): Path<i64>,
     Json(input): Json<ActiveInput>,
 ) -> Result<Json<Value>> {
-    manager(&state, &headers).await?;
+    let user = manager(&state, &headers).await?;
+    let action = if input.activo { "activar" } else { "desactivar" };
+    ensure_scope(&state.pool, &user, id, action).await?;
     let code: Option<String> = sqlx::query_scalar(
         "UPDATE unidades_estudio SET activo=$2,actualizado_en=now() WHERE id=$1 RETURNING codigo",
     )
@@ -265,17 +310,37 @@ async fn load_csv(state: &AppState, file: Option<Bytes>) -> Result<Json<Value>> 
             problems.push(format!("fila {number}: el código {codigo} ya existe"));
             continue;
         }
-        let program: Option<i64> = sqlx::query_scalar(
-            "SELECT id FROM programas WHERE lower(nombre)=lower($1) ORDER BY id LIMIT 1",
+        // CIE-09: _resolver_programa_csv; un nombre repetido en varias facultades se
+        // resuelve con la columna opcional `facultad` y sin ella se rechaza la fila.
+        let facultad = get("facultad");
+        let facultad = (!facultad.is_empty()).then_some(facultad.as_str());
+        let matches: Vec<i64> = sqlx::query_scalar(
+            "SELECT p.id FROM programas p JOIN facultades f ON f.id=p.facultad_id WHERE lower(p.nombre)=lower($1) AND ($2::text IS NULL OR lower(f.nombre)=lower($2::text))",
         )
         .bind(&programa)
-        .fetch_optional(&mut *tx)
+        .bind(facultad)
+        .fetch_all(&mut *tx)
         .await?;
-        let Some(program) = program else {
-            problems.push(format!(
-                "fila {number}: el programa '{programa}' no existe en el catálogo"
-            ));
-            continue;
+        let program = match *matches.as_slice() {
+            [only] => only,
+            [] => {
+                problems.push(format!(
+                    "fila {number}: el programa '{programa}' no existe en el catálogo"
+                ));
+                continue;
+            }
+            _ => {
+                let detail = match facultad {
+                    Some(name) => {
+                        format!("el programa '{programa}' no existe en la facultad '{name}'")
+                    }
+                    None => format!(
+                        "el programa '{programa}' existe en varias facultades; indica la facultad en el CSV"
+                    ),
+                };
+                problems.push(format!("fila {number}: {detail}"));
+                continue;
+            }
         };
         sqlx::query("INSERT INTO unidades_estudio(codigo,nombre,programa_id,periodo,ciclo,activo,creado_en,actualizado_en) VALUES($1,$2,$3,$4,$5,true,now(),now())")
             .bind(&codigo).bind(&nombre).bind(program).bind(&periodo).bind(&ciclo).execute(&mut *tx).await?;

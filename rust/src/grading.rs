@@ -133,8 +133,27 @@ pub async fn grade(
     .bind(id)
     .fetch_optional(&mut *tx)
     .await?;
-    let (reto, from, max, title, previous) = record.ok_or_else(AppError::not_found)?;
+    let (reto, mut from, max, title, previous) = record.ok_or_else(AppError::not_found)?;
     owns(&state, &user, reto).await?;
+    // PAR-07: EN_REVISION se alcanza solo al calificar, no en lectura.
+    if from == "ENVIADO" {
+        domain::transition("MAQUINA_ENTREGABLE", "ENVIADO", "EN_REVISION")?;
+        sqlx::query("UPDATE entregables SET estado='EN_REVISION',actualizado_en=now() WHERE id=$1")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        history(
+            &mut tx,
+            ("evaluacion", "entregable"),
+            id,
+            "ENVIADO",
+            "EN_REVISION",
+            user.id,
+            "Entregable abierto para revisión.",
+        )
+        .await?;
+        from = "EN_REVISION".to_string();
+    }
     // HU12: re-grading requires explicit confirmation.
     if from == "CALIFICADO" && !input.confirmar_recalificacion {
         return Err(AppError::bad(format!(
@@ -166,6 +185,10 @@ pub async fn grade(
             scores.push((criterion, value));
         }
         let sum: Decimal = scores.iter().map(|s| s.1).sum();
+        // PAR-01/PAR-08: la suma de la rúbrica no puede superar la escala del entregable.
+        if sum > max {
+            return Err(invalid());
+        }
         let nota = (sum / rubric_max * max).round_dp(2);
         (nota, scores)
     } else {

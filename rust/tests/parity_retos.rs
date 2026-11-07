@@ -36,8 +36,8 @@ parity!(test_reto_form_accepts_multiple_files, |t| {
         &format!("/api/retos/{reto}/archivos"),
         &[],
         &[
-            ("archivos", "soporte-1.pdf", b"uno"),
-            ("archivos", "soporte-2.pdf", b"dos"),
+            ("archivos", "soporte-1.pdf", b"%PDF-1.4 uno"),
+            ("archivos", "soporte-2.pdf", b"%PDF-1.4 dos"),
         ],
     )
     .await;
@@ -66,7 +66,7 @@ parity!(test_reto_form_rejects_a_file_larger_than_50_mb, |t| {
         body["error"]
             .as_str()
             .unwrap()
-            .contains("supera el limite de 50 MB"),
+            .contains("supera el límite de 50 MB"),
         "{body}"
     );
     assert_eq!(t.i64("SELECT count(*) FROM retos_retoarchivo").await, 0);
@@ -93,7 +93,7 @@ parity!(test_progress_form_has_optional_multiple_file_upload, |t| {
         &format!("/api/retos/{reto}/seguimiento"),
         &fields,
         &[
-            ("archivos", "a.pdf", b"%PDF"),
+            ("archivos", "a.pdf", b"%PDF-1.4"),
             ("archivos", "b.txt", b"notas"),
         ],
     )
@@ -837,11 +837,11 @@ parity!(
             "{error}"
         );
         assert!(
-            error.contains("al menos una sesion de seguimiento"),
+            error.contains("al menos una sesión de seguimiento"),
             "{error}"
         );
-        assert!(error.contains("una sesion de evaluacion"), "{error}");
-        assert!(!error.contains("una sesion de inicio"), "{error}");
+        assert!(error.contains("una sesión de evaluación"), "{error}");
+        assert!(!error.contains("una sesión de inicio"), "{error}");
     }
 );
 parity!(test_con_equipo_y_cronograma_completos_se_envia, |t| {
@@ -1129,3 +1129,35 @@ parity!(test_fechas_fuera_de_rango_y_nul_en_el_titulo_son_400, |t| {
     );
     let _ = company;
 });
+
+// RET-05: no se publica una integración aprobada sobre un reto finalizado/cancelado.
+parity!(
+    test_no_se_publica_integracion_sobre_reto_finalizado_o_cancelado,
+    |t| {
+        for state in ["finalizado", "cancelado"] {
+            let reto = t.reto(COMPANY_USER, state, "reto").await;
+            let teacher = t.user(&format!("profe-ret05-{state}"), "PROFESOR").await;
+            let integration = t.i64(&format!(
+                "INSERT INTO integraciones_academicas(reto_id,profesor_id,estado,facultad,programa_academico,nivel_formacion,descripcion,alcance,entregable_esperado,cronograma_sesiones) VALUES({reto},{teacher},'aprobada','Ingeniería','Ingeniería de Sistemas','Pregrado','Proyecto','Prototipo','Informe','Semanal') RETURNING id"
+            )).await;
+            let session = t.login(&format!("profe-ret05-{state}")).await;
+            assert_eq!(
+                t.status(
+                    &session,
+                    "POST",
+                    &format!("/api/integraciones/{integration}/estado"),
+                    Some(json!({"estado":"publicada"})),
+                )
+                .await,
+                400
+            );
+            assert_eq!(
+                t.text(&format!(
+                    "SELECT estado FROM integraciones_academicas WHERE id={integration}"
+                ))
+                .await,
+                "aprobada"
+            );
+        }
+    }
+);

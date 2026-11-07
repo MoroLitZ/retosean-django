@@ -106,8 +106,16 @@ pub async fn submit(
     if !accepted {
         return Err(AppError::forbidden());
     }
-    let previous:Option<(i64,String)>=sqlx::query_as("SELECT id,estado FROM entregables WHERE reto_id=$1 AND estudiante_id=$2 AND titulo=$3 FOR UPDATE").bind(reto).bind(user.id).bind(&title).fetch_optional(&mut *tx).await?;
-    let id:i64=sqlx::query_scalar("INSERT INTO entregables(reto_id,estudiante_id,titulo,es_final,puntaje_maximo,archivo,comentario_estudiante,fecha_entrega,actualizado_en,estado) VALUES($1,$2,$3,$4,5.00,$5,$6,now(),now(),'ENVIADO') ON CONFLICT(reto_id,estudiante_id,titulo) DO UPDATE SET archivo=excluded.archivo,comentario_estudiante=excluded.comentario_estudiante,es_final=excluded.es_final,estado='ENVIADO',nota=NULL,comentario_profesor=NULL,actualizado_en=now() RETURNING id")
+    let previous:Option<(i64,String,bool,bool)>=sqlx::query_as("SELECT id,estado,es_final,calificacion_publicada FROM entregables WHERE reto_id=$1 AND estudiante_id=$2 AND titulo=$3 FOR UPDATE").bind(reto).bind(user.id).bind(&title).fetch_optional(&mut *tx).await?;
+    // PAR-03: un entregable final o con calificación publicada no se reemplaza.
+    if let Some((_, _, es_final, publicada)) = &previous {
+        if *es_final || *publicada {
+            return Err(AppError::bad(
+                "No puedes reemplazar un entregable final o con calificación publicada.",
+            ));
+        }
+    }
+    let id:i64=sqlx::query_scalar("INSERT INTO entregables(reto_id,estudiante_id,titulo,es_final,puntaje_maximo,archivo,comentario_estudiante,fecha_entrega,actualizado_en,estado) VALUES($1,$2,$3,$4,5.00,$5,$6,now(),now(),'ENVIADO') ON CONFLICT(reto_id,estudiante_id,titulo) DO UPDATE SET archivo=excluded.archivo,comentario_estudiante=excluded.comentario_estudiante,es_final=excluded.es_final,estado='ENVIADO',nota=NULL,comentario_profesor=NULL,calificacion_publicada=false,calificacion_publicada_en=NULL,actualizado_en=now() RETURNING id")
         .bind(reto).bind(user.id).bind(&title).bind(final_file).bind(&key).bind(&comment).fetch_one(&mut *tx).await?;
     // A replacement invalidates old scores; history remains in the audit trail.
     if previous.is_some() {
@@ -121,7 +129,10 @@ pub async fn submit(
         &mut tx,
         ("evaluacion", "entregable"),
         id,
-        previous.as_ref().map(|(_, s)| s.as_str()).unwrap_or(""),
+        previous
+            .as_ref()
+            .map(|(_, s, _, _)| s.as_str())
+            .unwrap_or(""),
         "ENVIADO",
         user.id,
         "Entregable enviado.",
@@ -350,8 +361,24 @@ async fn store_document(
             (id, from, "Documento recargado.")
         }
         None => {
-            let id: i64 = sqlx::query_scalar("INSERT INTO documentos_empresas(empresa_id,tipo_documento,archivo,estado,fecha_expedicion,fecha_vencimiento,fecha_carga,motivo_rechazo) VALUES($1,$2,$3,'CARGADO',$4,$5,now(),'') RETURNING id").bind(company).bind(kind).bind(&key).bind(issued).bind(expires).fetch_one(&mut *tx).await?;
-            (id, String::new(), "Documento cargado.")
+            // EMP-06: dos primeras cargas concurrentes de un tipo aun no creado
+            // pueden chocar en el unique_together; la perdedora recarga y usa la
+            // fila ganadora en lugar de reventar con una violacion de unicidad.
+            let created: Option<i64> = sqlx::query_scalar("INSERT INTO documentos_empresas(empresa_id,tipo_documento,archivo,estado,fecha_expedicion,fecha_vencimiento,fecha_carga,motivo_rechazo) VALUES($1,$2,$3,'CARGADO',$4,$5,now(),'') ON CONFLICT (empresa_id,tipo_documento) DO NOTHING RETURNING id").bind(company).bind(kind).bind(&key).bind(issued).bind(expires).fetch_optional(&mut *tx).await?;
+            if let Some(id) = created {
+                (id, String::new(), "Documento cargado.")
+            } else {
+                let (id, from): (i64, String) = sqlx::query_as(
+                    "SELECT id,estado FROM documentos_empresas WHERE empresa_id=$1 AND tipo_documento=$2 FOR UPDATE",
+                )
+                .bind(company)
+                .bind(kind)
+                .fetch_one(&mut *tx)
+                .await?;
+                domain::transition("MAQUINA_DOCUMENTO", &from, "CARGADO")?;
+                sqlx::query("UPDATE documentos_empresas SET archivo=$2,estado='CARGADO',fecha_expedicion=$3,fecha_vencimiento=$4,motivo_rechazo='',fecha_carga=now() WHERE id=$1").bind(id).bind(&key).bind(issued).bind(expires).execute(&mut *tx).await?;
+                (id, from, "Documento recargado.")
+            }
         }
     };
     history(
@@ -452,6 +479,24 @@ pub fn attachment_extension(name: &str) -> Result<&'static str> {
         }
     })
 }
+/// Magic-byte class of a support file: the image/PDF signatures are exact,
+/// the office and archive formats share the ZIP container, and plain text
+/// covers txt and csv. Anything else is treated as binary/executable.
+fn content_class(data: &[u8]) -> Option<&'static str> {
+    if data.starts_with(b"%PDF-") {
+        Some("pdf")
+    } else if data.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some("png")
+    } else if data.starts_with(b"\xff\xd8\xff") {
+        Some("jpg")
+    } else if data.starts_with(b"PK\x03\x04") {
+        Some("zip")
+    } else if std::str::from_utf8(data).is_ok() && !data.contains(&0) {
+        Some("text")
+    } else {
+        None
+    }
+}
 /// Writes validated attachments; returns (key, original name, size, path).
 pub async fn save_attachments(
     state: &AppState,
@@ -461,7 +506,22 @@ pub async fn save_attachments(
         if data.len() > ATTACHMENT_LIMIT {
             return Err(AppError::bad(format!("{name} supera el límite de 50 MB.")));
         }
-        attachment_extension(name)?;
+        let declared = attachment_extension(name)?;
+        // RET-08: se valida el contenido, no solo la extensión, para que un
+        // HTML o un ejecutable renombrado (.pdf) no pase como archivo soporte.
+        let coherent = matches!(
+            (declared, content_class(data).unwrap_or("binario")),
+            ("pdf", "pdf")
+                | ("png", "png")
+                | ("jpg", "jpg")
+                | ("txt" | "csv", "text")
+                | ("xlsx" | "zip" | "docx" | "pptx", "zip")
+        );
+        if !coherent {
+            return Err(AppError::bad(format!(
+                "{name}: archivo no permitido (el contenido no coincide con su extensión)."
+            )));
+        }
     }
     tokio::fs::create_dir_all(&state.config.media_root)
         .await

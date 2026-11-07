@@ -56,6 +56,11 @@ macro_rules! day {
     };
 }
 
+// PRE-05: openpyxl (and rust_xlsxwriter) keep every cell in memory, so an Excel
+// export without a cap could exhaust it. Far above the PDF limit and far below
+// Excel's ~1M row limit, as Django's MAX_FILAS_EXCEL.
+const MAX_FILAS_EXCEL: i64 = 10_000;
+
 const REPORTS: [Report; 5] = [
     Report {
         key: "retos",
@@ -95,7 +100,7 @@ const REPORTS: [Report; 5] = [
             ("insumos_cierre", "Insumos al cierre", 36, None),
             (
                 "impacto",
-                "La empresa aplicó la solución",
+                "La empresa aplico la solucion",
                 24,
                 Some(("cierres_reto", "impacto")),
             ),
@@ -157,7 +162,7 @@ const REPORTS: [Report; 5] = [
             ("motivacion", "Motivación", 44, None),
             ("habilidades", "Habilidades", 36, None),
             ("hoja_de_vida", "Adjunto hoja de vida", 18, None),
-            ("acepta_terminos", "Aceptó los términos", 18, None),
+            ("acepta_terminos", "Acepto los terminos", 18, None),
             ("fecha", "Fecha de postulación", 20, None),
         ],
         sql: concat!(
@@ -166,7 +171,7 @@ const REPORTS: [Report; 5] = [
             "'reto',coalesce(r.titulo,''),'empresa',eu.username||' ('||eu.rol||')','area_reto',coalesce(r.area,''),'estado',p.estado,",
             "'motivacion',coalesce(p.motivacion,''),'habilidades',coalesce(p.habilidades,''),",
             "'hoja_de_vida',CASE WHEN coalesce(p.hoja_de_vida,'')<>'' THEN 'Sí' ELSE 'No' END,",
-            "'acepta_terminos',CASE WHEN p.acepta_terminos THEN 'Sí' ELSE 'No' END,'fecha',",
+            "'acepta_terminos',CASE WHEN p.acepta_terminos THEN 'Si' ELSE 'No' END,'fecha',",
             d!("p.fecha_postulacion"),
             ") fila FROM postulaciones p JOIN usuarios u ON u.id=p.estudiante_id JOIN retos r ON r.id=p.reto_id JOIN usuarios eu ON eu.id=r.empresa_id WHERE TRUE {where}"
         ),
@@ -206,7 +211,7 @@ const REPORTS: [Report; 5] = [
             ("historial_comentarios", "N.º de comentarios", 16, None),
             (
                 "calificacion_publicada",
-                "Calificación publicada al estudiante",
+                "Calificacion publicada al estudiante",
                 22,
                 None,
             ),
@@ -222,7 +227,7 @@ const REPORTS: [Report; 5] = [
             "'rubrica',coalesce((SELECT rb.nombre||' - '||coalesce(nullif(rr.titulo,''),'Reto #'||rr.id) FROM evaluaciones v JOIN evaluacion_rubrica rb ON rb.id=v.rubrica_id JOIN retos rr ON rr.id=rb.reto_id WHERE v.id=(SELECT min(id) FROM evaluaciones WHERE entregable_id=e.id)),''),",
             "'evaluador',coalesce((SELECT pu.username||' ('||pu.rol||')' FROM evaluaciones v JOIN usuarios pu ON pu.id=v.profesor_id WHERE v.id=(SELECT min(id) FROM evaluaciones WHERE entregable_id=e.id)),''),",
             "'historial_comentarios',(SELECT count(*) FROM evaluacion_comentarioentregable WHERE entregable_id=e.id),",
-            "'calificacion_publicada',CASE WHEN e.calificacion_publicada THEN 'Sí' ELSE 'No' END,'fecha_publicacion',",
+            "'calificacion_publicada',CASE WHEN e.calificacion_publicada THEN 'Si' ELSE 'No' END,'fecha_publicacion',",
             d!("e.calificacion_publicada_en"),
             ",",
             "'fecha',",
@@ -314,7 +319,7 @@ const REPORTS: [Report; 5] = [
                 20,
                 Some(("empresas", "tipo_convocatoria")),
             ),
-            ("area_responsable", "Área responsable", 26, None),
+            ("area_responsable", "Area responsable", 26, None),
             ("sitio_web", "Sitio web", 30, None),
             (
                 "estado_convenio",
@@ -330,7 +335,7 @@ const REPORTS: [Report; 5] = [
                 60,
                 None,
             ),
-            ("bloqueada", "Participación bloqueada", 20, None),
+            ("bloqueada", "Participacion bloqueada", 20, None),
             ("motivo_bloqueo", "Motivo del bloqueo", 36, None),
             ("observaciones", "Observaciones del admin", 40, None),
             ("fecha_creacion", "Registrada el", 18, None),
@@ -348,7 +353,7 @@ const REPORTS: [Report; 5] = [
             day!("e.fecha_vencimiento_convenio"),
             ",",
             "'puede_participar',CASE WHEN cardinality(m.motivos)>0 THEN 'No' ELSE 'Sí' END,'pendientes_documentales',array_to_string(m.motivos,'; '),",
-            "'bloqueada',CASE WHEN e.participacion_bloqueada THEN 'Sí' ELSE 'No' END,'motivo_bloqueo',coalesce(e.motivo_bloqueo,''),",
+            "'bloqueada',CASE WHEN e.participacion_bloqueada THEN 'Si' ELSE 'No' END,'motivo_bloqueo',coalesce(e.motivo_bloqueo,''),",
             "'observaciones',coalesce(e.observaciones_admin,''),'fecha_creacion',",
             day!("e.fecha_creacion"),
             ",",
@@ -369,8 +374,22 @@ const REPORTS: [Report; 5] = [
             "AND NOT (dc.estado='VERIFICADO' AND (dc.fecha_vencimiento IS NULL OR dc.fecha_vencimiento>=(now() AT TIME ZONE 'America/Bogota')::date)) IS TRUE),'{}') motivos) m WHERE TRUE {where}"
         ),
         order: "e.razon_social, e.id",
-        filters: &[("estado_empresa", "e.estado_validacion=$1")],
-        date_column: None,
+        // PRE-07: the period is applied to the registration date and the
+        // facultad/programa/empresa filters that the UI offers are resolved
+        // through the company's own retos instead of being silently ignored.
+        filters: &[
+            ("estado_empresa", "e.estado_validacion=$1"),
+            ("empresa", "e.usuario_id=$1::bigint"),
+            (
+                "facultad",
+                "EXISTS(SELECT 1 FROM retos r WHERE r.empresa_id=e.usuario_id AND r.facultad_id=$1::bigint)",
+            ),
+            (
+                "programa",
+                "EXISTS(SELECT 1 FROM retos r WHERE r.empresa_id=e.usuario_id AND r.programa_id=$1::bigint)",
+            ),
+        ],
+        date_column: Some("e.fecha_creacion"),
     },
 ];
 fn report(key: &str) -> Option<&'static Report> {
@@ -740,12 +759,17 @@ fn render(built: &Built, format: &str) -> Result<(Vec<u8>, &'static str, &'stati
             }
         }
         sheet.set_freeze_panes(6, 0).map_err(fail)?;
-        sheet
-            .write_string(
-                built.rows.len() as u32 + 7,
-                0,
-                format!("Total de registros: {}", built.rows.len()),
+        let total_note = if built.total > built.rows.len() {
+            format!(
+                "Total de registros: {} (truncado a {}; ajusta los filtros para el listado completo)",
+                built.rows.len(),
+                MAX_FILAS_EXCEL
             )
+        } else {
+            format!("Total de registros: {}", built.rows.len())
+        };
+        sheet
+            .write_string(built.rows.len() as u32 + 7, 0, total_note)
             .map_err(fail)?;
         Ok((
             book.save_to_buffer().map_err(fail)?,
@@ -792,7 +816,14 @@ async fn generate(
     } else {
         "PDF"
     };
-    let built = build(state, user, input, None).await?;
+    // PRE-05: Excel is capped in the query itself, so the row limit is not just
+    // cosmetic (the PDF cut is applied at render time, lower down).
+    let limit = if format == "EXCEL" {
+        Some(MAX_FILAS_EXCEL)
+    } else {
+        None
+    };
+    let built = build(state, user, input, limit).await?;
     let (bytes, extension, mime) = render(&built, format)?;
     let filename = format!(
         "{}-{}.{extension}",

@@ -286,3 +286,45 @@ parity!(test_suma_de_rubrica_que_desborda_la_nota_se_rechaza, |t| {
         .await
     );
 });
+
+// PAR-07: el panel (listado) no muta entregables; la revisión empieza al calificar.
+parity!(
+    test_el_listado_de_entregables_no_muta_estado_a_en_revision,
+    |t| {
+        let (_reto, deliverable, _teacher) = setup(&t, "aprobada").await;
+        let session = t.login("profe-eval").await;
+        // Reading the professor's deliverables must not change any state.
+        t.ok(&session, "GET", "/api/records/entregables", None)
+            .await;
+        assert_eq!(
+            t.text(&format!(
+                "SELECT estado FROM entregables WHERE id={deliverable}"
+            ))
+            .await,
+            "ENVIADO"
+        );
+        // Grading moves it through EN_REVISION to CALIFICADO.
+        t.ok(
+            &session,
+            "POST",
+            &format!("/api/entregables/{deliverable}/calificar"),
+            Some(json!({"nota":"4","comentario":"Bien"})),
+        )
+        .await;
+        assert_eq!(
+            t.text(&format!(
+                "SELECT estado FROM entregables WHERE id={deliverable}"
+            ))
+            .await,
+            "CALIFICADO"
+        );
+        let history = t
+            .history("evaluacion", "entregable", deliverable, "estado")
+            .await;
+        assert!(
+            history
+                .iter()
+                .any(|(from, to, _)| from == "ENVIADO" && to == "EN_REVISION")
+        );
+    }
+);

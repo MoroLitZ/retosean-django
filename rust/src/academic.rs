@@ -87,13 +87,13 @@ async fn clean(
                 .fetch_one(&mut **tx)
                 .await?;
         if !known {
-            errors.push("Facultad");
+            errors.push("facultad");
         }
     }
     let level = input.nivel_formacion.trim().to_string();
     if !level.is_empty() && level != legacy("nivel_formacion") && !NIVELES.contains(&level.as_str())
     {
-        errors.push("Nivel de formación");
+        errors.push("nivel_formacion");
     }
     let ecosystem = input.ecosistema.trim().to_string();
     if !ecosystem.is_empty() && ecosystem != legacy("ecosistema") {
@@ -103,7 +103,7 @@ async fn clean(
                 .fetch_one(&mut **tx)
                 .await?;
         if !known {
-            errors.push("Ecosistema");
+            errors.push("ecosistema");
         }
     }
     if let Some(unit) = input.unidad_estudio {
@@ -463,6 +463,12 @@ pub async fn integration_state(
             if from != "aprobada" {
                 return Err(AppError::bad(
                     "Solo puedes publicar integraciones aprobadas.",
+                ));
+            }
+            // RET-05: no se publica sobre estados finales del reto.
+            if challenge_state == "finalizado" || challenge_state == "cancelado" {
+                return Err(AppError::bad(
+                    "No se puede publicar una integración sobre un reto en estado final.",
                 ));
             }
             domain::transition("MAQUINA_INTEGRACION", &from, "publicada")?;

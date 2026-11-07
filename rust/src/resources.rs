@@ -294,9 +294,6 @@ pub async fn list(
     Query(filters): Query<Filters>,
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, false).await?;
-    if name == "entregables" {
-        crate::grading::mark_in_review(&state, &user).await?;
-    }
     if name == "postulaciones" {
         crate::workflows::mark_applications_in_review(&state, &user).await?;
     }

@@ -752,7 +752,7 @@ pub async fn my_notifications(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Value>> {
-    let user = auth::current(&state, &headers, true).await?;
+    let user = auth::current(&state, &headers, false).await?;
     let unread: i64 =
         sqlx::query_scalar("SELECT count(*) FROM notificaciones WHERE usuario_id=$1 AND NOT leida")
             .bind(user.id)

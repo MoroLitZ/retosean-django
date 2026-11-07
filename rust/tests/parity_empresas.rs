@@ -106,6 +106,23 @@ parity!(test_cargar_documento_notifica_al_admin, |t| {
         "{message}"
     );
 });
+parity!(test_carga_concurrente_no_duplica_ni_revienta, |t| {
+    let (_, company, session) = acme(&t).await;
+    let issued = today();
+    let (a, b) = tokio::join!(
+        upload(&t, &session, "RUT", issued, ("rut.pdf", PDF)),
+        upload(&t, &session, "RUT", issued, ("rut.pdf", PDF)),
+    );
+    assert_eq!(a.0, 200);
+    assert_eq!(b.0, 200);
+    assert_eq!(
+        t.i64(&format!(
+            "SELECT count(*) FROM documentos_empresas WHERE empresa_id={company} AND tipo_documento='RUT'"
+        ))
+        .await,
+        1
+    );
+});
 parity!(test_el_estado_de_validacion_avanza_a_verificada, |t| {
     let (_, company, _) = acme(&t).await;
     t.verify_documents(company).await;
@@ -232,6 +249,28 @@ parity!(
         );
     }
 );
+parity!(test_elegir_si_convenio_revierte_la_renuncia, |t| {
+    let (_, company, session) = gate(&t).await;
+    t.exec(&format!(
+        "UPDATE empresas SET renuncio_a_convenio=true WHERE id={company}"
+    ))
+    .await;
+    let body = t
+        .ok(
+            &session,
+            "POST",
+            "/api/empresa/modo-convenio",
+            Some(json!({"opcion":"si_convenio"})),
+        )
+        .await;
+    assert_eq!(body["siguiente"], "documentos");
+    assert!(
+        !t.bool(&format!(
+            "SELECT renuncio_a_convenio FROM empresas WHERE id={company}"
+        ))
+        .await
+    );
+});
 parity!(test_sin_convenio_no_se_salta_la_documentacion, |t| {
     let (_, company, _) = gate(&t).await;
     t.exec(&format!(
@@ -819,5 +858,81 @@ parity!(
         t.exec(&format!("CREATE FUNCTION falla() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.id={rut} AND NEW.estado='VENCIDO' THEN RAISE EXCEPTION 'fallo simulado'; END IF; RETURN NEW; END $$; CREATE TRIGGER falla BEFORE UPDATE ON documentos_empresas FOR EACH ROW EXECUTE FUNCTION falla();")).await;
         sweep(&t).await;
         assert_eq!(t.i64(&format!("SELECT count(*) FROM documentos_empresas WHERE empresa_id={company} AND estado='VENCIDO'")).await, 1);
+    }
+);
+
+// Paridad de media.rs: archivos de soporte (RET-08) y entegables (PAR-03).
+parity!(
+    test_archivo_soporte_con_contenido_disfrazado_se_rechaza,
+    |t| {
+        let (user, _, session) = gate(&t).await;
+        let reto = t.reto(user, "borrador", "reto").await;
+        let (code, body) = multipart(
+            &t.app,
+            &session,
+            &format!("/api/retos/{reto}/archivos"),
+            &[],
+            &[(
+                "archivos",
+                "exploit.pdf",
+                b"<html><script>alert(1)</script></html>",
+            )],
+        )
+        .await;
+        assert_eq!(code, 400, "{body}");
+        assert!(
+            body["error"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("no coincide"),
+            "{body}"
+        );
+        assert_eq!(
+            t.i64(&format!(
+                "SELECT count(*) FROM retos_retoarchivo WHERE reto_id={reto}"
+            ))
+            .await,
+            0
+        );
+    }
+);
+parity!(
+    test_estudiante_no_reemplaza_entregable_final_o_publicado,
+    |t| {
+        let reto = t.reto(COMPANY_USER, "en_curso", "reto").await;
+        let student = t.user("est-par03", "ESTUDIANTE").await;
+        t.accept(reto, student).await;
+        let session = t.login("est-par03").await;
+        let url = format!("/api/retos/{reto}/entregar");
+        let (code, _) = multipart(
+            &t.app,
+            &session,
+            &url,
+            &[("titulo", "Avance")],
+            &[("archivo", "avance.pdf", b"%PDF-1.4 avance inicial")],
+        )
+        .await;
+        assert_eq!(code, 200);
+        let deliverable = t.i64("SELECT id FROM entregables").await;
+        let original = t.text("SELECT archivo FROM entregables").await;
+        t.exec(&format!(
+            "UPDATE entregables SET es_final=true,calificacion_publicada=true,nota=5.00,estado='CALIFICADO' WHERE id={deliverable}"
+        ))
+        .await;
+        let (code, body) = multipart(
+            &t.app,
+            &session,
+            &url,
+            &[("titulo", "Avance")],
+            &[("archivo", "avance.pdf", b"%PDF-1.4 avance nuevo")],
+        )
+        .await;
+        assert_eq!(code, 400, "{body}");
+        assert_eq!(t.text("SELECT archivo FROM entregables").await, original);
+        assert_eq!(t.text("SELECT estado FROM entregables").await, "CALIFICADO");
+        assert!(
+            t.bool("SELECT calificacion_publicada AND es_final FROM entregables")
+                .await
+        );
     }
 );

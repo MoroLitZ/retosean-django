@@ -177,6 +177,14 @@ pub async fn close(
     if from != "finalizado" {
         domain::transition("MAQUINA_RETO", &from, "finalizado")?;
     }
+    // CIE-02: no finalizar mientras existan entregables sin evaluar; de lo contrario
+    // se congela el expediente y se emiten certificados con evaluaciones pendientes.
+    let pending:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM entregables WHERE reto_id=$1 AND estado IN ('ENVIADO','EN_REVISION'))").bind(reto).fetch_one(&mut *tx).await?;
+    if pending {
+        return Err(AppError::bad(
+            "No se puede finalizar: hay entregables pendientes de evaluación.",
+        ));
+    }
     let submitted:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM entregables WHERE reto_id=$1 AND archivo<>'') OR EXISTS(SELECT 1 FROM cierre_entregablefinal e JOIN cierres_reto c ON c.id=e.cierre_id WHERE c.reto_id=$1)").bind(reto).fetch_one(&mut *tx).await?;
     if !submitted {
         return Err(AppError::bad(
@@ -215,7 +223,7 @@ pub async fn close(
             &mut tx,
             company,
             "RETO_FINALIZADO",
-            &format!("Tu reto \"{title}\" pasó a estado: Finalizado."),
+            &format!("Tu reto \"{title}\" pasó al estado: Finalizado."),
             &format!("reto:{reto}:{from}->finalizado"),
         )
         .await?;
@@ -289,7 +297,9 @@ pub async fn issue_certificates(
     for id in accepted {
         eligible.insert(id, "ESTUDIANTE");
     }
-    let students: Vec<i64> = sqlx::query_scalar("SELECT m.usuario_id FROM equipos_reto_academico_estudiantes m JOIN equipos_reto_academico e ON e.id=m.equiporetoacademico_id WHERE e.reto_id=$1 UNION SELECT estudiante_id FROM entregables WHERE reto_id=$1 AND estudiante_id IS NOT NULL")
+    // CIE-01: un estudiante cuyo cupo fue rechazado o que se retiró no debe
+    // certificarse aunque haya subido algún entregable.
+    let students: Vec<i64> = sqlx::query_scalar("SELECT m.usuario_id FROM equipos_reto_academico_estudiantes m JOIN equipos_reto_academico e ON e.id=m.equiporetoacademico_id WHERE e.reto_id=$1 UNION SELECT estudiante_id FROM entregables WHERE reto_id=$1 AND estudiante_id IS NOT NULL AND estudiante_id NOT IN (SELECT estudiante_id FROM postulaciones WHERE reto_id=$1 AND estado IN ('RECHAZADA','RETIRADA'))")
         .bind(reto).fetch_all(&mut **tx).await?;
     for id in students {
         eligible.entry(id).or_insert("ESTUDIANTE");

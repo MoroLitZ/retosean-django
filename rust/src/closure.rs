@@ -58,6 +58,23 @@ async fn teacher(tx: &mut Transaction<'_, Postgres>, reto: i64, user: &User) -> 
         .fetch_one(&mut **tx)
         .await?)
 }
+/// CIE-06: un reto finalizado no admite contenido nuevo en el cierre.
+async fn finished(
+    tx: &mut Transaction<'_, Postgres>,
+    reto: i64,
+    action: &str,
+) -> Result<()> {
+    let estado: String = sqlx::query_scalar("SELECT estado FROM retos WHERE id=$1")
+        .bind(reto)
+        .fetch_one(&mut **tx)
+        .await?;
+    if estado == "finalizado" {
+        return Err(AppError::bad(format!(
+            "El reto ya fue finalizado; no se pueden {action}."
+        )));
+    }
+    Ok(())
+}
 /// CierreReto.objects.get_or_create(reto, defaults={"cerrado_por": user}).
 async fn closure_id(tx: &mut Transaction<'_, Postgres>, reto: i64, user: i64) -> Result<i64> {
     sqlx::query("INSERT INTO cierres_reto(reto_id,notas,impacto,encuesta_enviada,cerrado_por_id,actualizado_en) VALUES($1,'','',false,$2,now()) ON CONFLICT(reto_id) DO NOTHING")
@@ -78,11 +95,7 @@ pub async fn show(
     let user = auth::current(&state, &headers, false).await?;
     let mut tx = state.pool.begin().await?;
     manage(&mut tx, reto, &user, true).await?;
-    // gestionar: opening a finished reto's closure catches up missing certificates.
-    if crate::lifecycle::issue_certificates(&mut tx, reto, user.id, None).await? > 0 {
-        tx.commit().await?;
-        tx = state.pool.begin().await?;
-    }
+    // CIE-05: la emisión de certificados ocurre solo al finalizar (POST), no en este GET.
     let q = |sql: &'static str| sqlx::query_scalar::<_, Value>(sql).bind(reto);
     let agenda = q("SELECT COALESCE((SELECT jsonb_build_object('fecha_hora',to_char(fecha_hora AT TIME ZONE 'America/Bogota','YYYY-MM-DD\"T\"HH24:MI'),'espacio',espacio,'recursos',recursos,'invitados',invitados,'agenda',agenda) FROM cierre_agendacierre WHERE reto_id=$1),'{}')").fetch_one(&mut *tx).await?;
     let closure = q("SELECT COALESCE((SELECT jsonb_build_object('id',id,'notas',notas,'impacto',impacto,'acta',COALESCE(acta_url,'')<>'','cerrado_en',cerrado_en) FROM cierres_reto WHERE reto_id=$1),'{}')").fetch_one(&mut *tx).await?;
@@ -229,6 +242,8 @@ pub async fn artifact(
     let data = data.ok_or_else(|| AppError::bad(invalid))?;
     let mut tx = state.pool.begin().await?;
     manage(&mut tx, reto, &user, false).await?;
+    // CIE-06: un reto finalizado no admite nuevos entregables finales.
+    finished(&mut tx, reto, "cargar nuevos entregables finales").await?;
     let closure = closure_id(&mut tx, reto, user.id).await?;
     let (key, path) = store(&state, &data).await?;
     let id: i64 = sqlx::query_scalar("INSERT INTO cierre_entregablefinal(cierre_id,nombre,archivo,cargado_por_id,creado_en) VALUES($1,$2,$3,$4,now()) RETURNING id")
@@ -259,6 +274,8 @@ pub async fn recognition(
     }
     let mut tx = state.pool.begin().await?;
     manage(&mut tx, reto, &user, false).await?;
+    // CIE-06: un reto finalizado no admite nuevos reconocimientos.
+    finished(&mut tx, reto, "registrar nuevos reconocimientos").await?;
     if let Some(student) = input.usuario_id {
         let participant: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM usuarios WHERE id=$2 AND rol='ESTUDIANTE') AND $2 IN (SELECT empresa_id FROM retos WHERE id=$1 UNION SELECT profesor_id FROM integraciones_academicas WHERE reto_id=$1 UNION SELECT estudiante_id FROM postulaciones WHERE reto_id=$1 AND estado='ACEPTADA' UNION SELECT m.estudiante_id FROM miembros_equipo m JOIN equipos e ON e.id=m.equipo_id WHERE e.reto_id=$1)")
             .bind(reto).bind(student).fetch_one(&mut *tx).await?;

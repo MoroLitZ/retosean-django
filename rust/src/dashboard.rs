@@ -180,8 +180,9 @@ pub async fn panel(
         ),
         "PROFESOR" => (
             format!(
-                "{PARAMS}, i AS (SELECT t.* FROM integraciones_academicas t, p WHERE t.profesor_id = p.uid AND {}), e AS (SELECT * FROM entregables WHERE reto_id IN (SELECT reto_id FROM i))",
-                EN_RANGO.replace("{c}", "creado_en")
+                "{PARAMS}, i AS (SELECT t.* FROM integraciones_academicas t, p WHERE t.profesor_id = p.uid AND {}), e AS (SELECT t.* FROM entregables t WHERE t.reto_id IN (SELECT reto_id FROM i) AND {})",
+                EN_RANGO.replace("{c}", "creado_en"),
+                EN_RANGO.replace("{c}", "fecha_entrega")
             ),
             "SELECT jsonb_build_object(
                 'cursos_activos', (SELECT count(*) FROM i WHERE estado IN ('aprobada','publicada')),
@@ -198,8 +199,9 @@ pub async fn panel(
         ),
         "ESTUDIANTE" => (
             format!(
-                "{PARAMS}, po AS (SELECT t.* FROM postulaciones t, p WHERE t.estudiante_id = p.uid AND {}), e AS (SELECT t.* FROM entregables t, p WHERE t.estudiante_id = p.uid)",
-                EN_RANGO.replace("{c}", "fecha_postulacion")
+                "{PARAMS}, po AS (SELECT t.* FROM postulaciones t, p WHERE t.estudiante_id = p.uid AND {}), e AS (SELECT t.* FROM entregables t, p WHERE t.estudiante_id = p.uid AND {})",
+                EN_RANGO.replace("{c}", "fecha_postulacion"),
+                EN_RANGO.replace("{c}", "fecha_entrega")
             ),
             "SELECT jsonb_build_object(
                 'retos_disponibles', (SELECT count(*) FROM retos WHERE estado = 'abierto' AND eliminado_en IS NULL),

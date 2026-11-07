@@ -50,7 +50,8 @@ pub fn email_events() -> Vec<String> {
 
 #[derive(Clone)]
 pub enum Mailer {
-    /// Django's console backend: emails are logged, not sent (development default).
+    /// Django's console backend: emails are logged (redacted, CFG-10), not
+    /// sent (development default).
     Console,
     Smtp {
         transport: AsyncSmtpTransport<Tokio1Executor>,
@@ -111,7 +112,9 @@ impl Mailer {
     ) -> std::result::Result<(), String> {
         match self {
             Mailer::Console => {
-                tracing::info!(to, subject, "email (console backend)\n{text}");
+                // CFG-10: the body is logged redacted, so recovery tokens and
+                // key=value secrets never reach the logs.
+                tracing::info!(to, subject, "email (console backend)\n{}", redact(text));
                 Ok(())
             }
             Mailer::Memory(sent) => {
@@ -156,12 +159,14 @@ impl Mailer {
     ) -> std::result::Result<(), String> {
         match self {
             Mailer::Console => {
+                // CFG-10: same redaction as send().
                 tracing::info!(
                     ?to,
                     subject,
                     filename,
                     "email with attachment (console backend)
-{text}"
+{}",
+                    redact(text)
                 );
                 Ok(())
             }
@@ -217,6 +222,80 @@ fn escape(text: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
+}
+
+fn starts_with_ci(chars: &[char], at: usize, needle: &str) -> bool {
+    needle.chars().enumerate().all(|(i, c)| {
+        chars
+            .get(at + i)
+            .is_some_and(|x| x.to_lowercase().eq(c.to_lowercase()))
+    })
+}
+
+/// CFG-10: redaction for whatever reaches the logs, like Django's
+/// FormateadorSeguro (config/registro.py): `clave=valor` and `clave: valor`
+/// pairs of sensitive keys become `clave=***`, and the token of a password
+/// recovery link is replaced so the console backend never leaks it.
+pub fn redact(text: &str) -> String {
+    const KEYS: [&str; 7] = [
+        "password",
+        "passwd",
+        "contrasena",
+        "contraseña",
+        "token",
+        "secret",
+        "authorization",
+    ];
+    const LINK: &str = "#restablecer/";
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+    while i < chars.len() {
+        // Recovery link: the token (64 hex characters) is replaced by ***.
+        if starts_with_ci(&chars, i, LINK) {
+            out.extend(&chars[i..i + LINK.chars().count()]);
+            i += LINK.chars().count();
+            let start = i;
+            while i < chars.len() && chars[i].is_alphanumeric() {
+                i += 1;
+            }
+            if i - start >= 20 {
+                out.push_str("***");
+            } else {
+                out.extend(&chars[start..i]);
+            }
+            continue;
+        }
+        // Django's pattern: key, optional quote, spaces, ':' or '=' and a value.
+        if let Some(key) = KEYS.iter().find(|key| starts_with_ci(&chars, i, key)) {
+            let mut j = i + key.chars().count();
+            if matches!(chars.get(j), Some('\'') | Some('"')) {
+                j += 1;
+            }
+            while matches!(chars.get(j), Some(c) if c.is_whitespace()) {
+                j += 1;
+            }
+            if matches!(chars.get(j), Some(':') | Some('=')) {
+                j += 1;
+                while matches!(chars.get(j), Some(c) if c.is_whitespace()) {
+                    j += 1;
+                }
+                let value = j;
+                while matches!(chars.get(j), Some(c) if !c.is_whitespace()) {
+                    j += 1;
+                }
+                if j > value {
+                    out.extend(&chars[i..value]);
+                    out.push_str("***");
+                    i = j;
+                    continue;
+                }
+            }
+        }
+        out.push(chars[i]);
+        i += 1;
+    }
+    out
 }
 
 /// Bodies of templates/notificaciones/email/notificacion.{txt,html}.
@@ -344,5 +423,31 @@ mod tests {
         let (text, html) = bodies("Ana <x>", "Título", "línea 1\nlínea 2", "http://h/r/1");
         assert!(text.contains("Ver en la plataforma: http://h/r/1"));
         assert!(html.contains("Ana &lt;x&gt;") && html.contains("línea 1<br>línea 2"));
+    }
+
+    #[test]
+    fn test_el_formateador_seguro_redacta_datos_sensibles() {
+        // Same case as Django's RegistroSeguroTests (CFG-10 / MAN-CFG-08).
+        let salida = redact("POST login password=hunter2 csrfmiddlewaretoken=abc123token");
+        assert!(!salida.contains("hunter2"));
+        assert!(!salida.contains("abc123token"));
+        assert!(salida.contains("password=***"));
+        assert!(salida.contains("token=***"));
+        let salida = redact("contraseña: mi-clave-larga\ntoken = \"secreto\"");
+        assert!(!salida.contains("mi-clave-larga"));
+        assert!(!salida.contains("secreto"));
+        // Ordinary prose that merely mentions the words is left untouched.
+        let body = "Para elegir una nueva contraseña, abre el siguiente enlace: /";
+        assert_eq!(redact(body), body);
+    }
+
+    #[test]
+    fn test_consola_no_registra_el_token_de_restablecimiento() {
+        let token = "a".repeat(64);
+        let body = format!("Hola Ana:\n\nAbre:\n\nhttp://sitio/#restablecer/{token}\n\nGracias");
+        let salida = redact(&body);
+        assert!(!salida.contains(&token), "the token would leak into logs");
+        assert!(salida.contains("#restablecer/***"));
+        assert!(salida.contains("Hola Ana:"), "the body stays readable");
     }
 }

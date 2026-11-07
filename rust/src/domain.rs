@@ -62,6 +62,70 @@ pub fn max_chars(value: &str, max: usize, label: &str) -> Result<()> {
         Ok(())
     }
 }
+/// CFG-02: equivalent to Django's CommonPasswordValidator with a short local
+/// list (normalized to lowercase and compared case-insensitively).
+const COMMON_PASSWORDS: [&str; 18] = [
+    "123456789012",
+    "1234567890123",
+    "12345678901234",
+    "1q2w3e4r5t6y",
+    "aaaaaaaaaaaa",
+    "abcdefghijkl",
+    "changeme123456",
+    "clave123456789",
+    "contrasena1234",
+    "contrasena123456",
+    "letmein12345",
+    "password1234",
+    "password12345",
+    "password123456",
+    "qwerty123456",
+    "qwertyqwerty",
+    "qwertyuiopas",
+    "welcome123456",
+];
+
+/// CFG-02: shared password policy for every place a password is set (registro,
+/// alta por admin, cambio y restablecimiento), like Django's
+/// AUTH_PASSWORD_VALIDATORS: minimum length, not entirely numeric, not common
+/// and not too similar to the account's username or email
+/// (UserAttributeSimilarityValidator: equal or contained, in either direction).
+pub fn validate_password(
+    password: &str,
+    username: Option<&str>,
+    email: Option<&str>,
+) -> Result<()> {
+    if password.chars().count() < 12 || password.len() > 1024 {
+        return Err(AppError::bad(
+            "La contraseña debe tener al menos 12 caracteres",
+        ));
+    }
+    if password.chars().all(char::is_numeric) {
+        return Err(AppError::bad("Esta contraseña es completamente numérica."));
+    }
+    let lower = password.to_lowercase();
+    if COMMON_PASSWORDS.contains(&lower.as_str()) {
+        return Err(AppError::bad("Esta contraseña es demasiado común."));
+    }
+    // Attributes shorter than 4 characters cannot dominate a 12+ character
+    // password, so they are ignored (as Django's 0.7 cutoff does in practice).
+    let similar = |attribute: &str| {
+        let attribute = attribute.to_lowercase();
+        attribute.chars().count() >= 4 && (lower.contains(&attribute) || attribute.contains(&lower))
+    };
+    if username.is_some_and(|u| similar(u)) {
+        return Err(AppError::bad(
+            "La contraseña es demasiado parecida al nombre de usuario.",
+        ));
+    }
+    if email.is_some_and(|e| similar(e) || similar(e.split('@').next().unwrap_or(e))) {
+        return Err(AppError::bad(
+            "La contraseña es demasiado parecida a la dirección de correo electrónico.",
+        ));
+    }
+    Ok(())
+}
+
 /// One @, non-empty local and domain parts, a dot in the domain, and no
 /// whitespace or angle brackets.
 pub fn valid_email(email: &str) -> bool {
@@ -177,5 +241,66 @@ mod tests {
         assert!(validate_date(None, "x").is_ok());
         assert!(validate_date(day(1899), "x").is_err());
         assert!(validate_date(day(2101), "x").is_err());
+    }
+    #[test]
+    fn test_longitud_minima_de_doce_caracteres() {
+        // The pre-existing rule is kept: 11 characters still fail.
+        let error = validate_password("OnceCaracte", None, None).unwrap_err();
+        assert_eq!(error.1, "La contraseña debe tener al menos 12 caracteres");
+        assert!(validate_password("OnceCaracter", None, None).is_ok());
+    }
+    #[test]
+    fn test_rechaza_contrasena_puramente_numerica() {
+        // Django NumericPasswordValidator: entirely numeric passwords.
+        let error = validate_password("202620262026", None, None).unwrap_err();
+        assert_eq!(error.1, "Esta contraseña es completamente numérica.");
+        assert!(validate_password("202620262026a", None, None).is_ok());
+    }
+    #[test]
+    fn test_rechaza_contrasena_comun() {
+        // Django CommonPasswordValidator, with the local shortlist.
+        let error = validate_password("password123456", None, None).unwrap_err();
+        assert_eq!(error.1, "Esta contraseña es demasiado común.");
+        assert!(
+            validate_password("PASSWORD123456", None, None).is_err(),
+            "case-insensitive, like Django's list"
+        );
+    }
+    #[test]
+    fn test_rechaza_contrasena_parecida_al_usuario_o_al_correo() {
+        // Django UserAttributeSimilarityValidator: username, email and local part.
+        let error = validate_password("nueva.prueba2026!", Some("nueva.prueba"), None).unwrap_err();
+        assert_eq!(
+            error.1,
+            "La contraseña es demasiado parecida al nombre de usuario."
+        );
+        let error = validate_password(
+            "MiClave-prueba-2026",
+            Some("usuario.prueba"),
+            Some("prueba@example.test"),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.1,
+            "La contraseña es demasiado parecida a la dirección de correo electrónico."
+        );
+        // The passwords used by the demo and parity suites stay valid.
+        for good in [
+            "Clave-Segura-2026",
+            "ClaveSegura2026!",
+            "UnaClaveSegura2026",
+            "OtraClaveSegura2026",
+            "ExpertoClaveNueva2026",
+        ] {
+            assert!(
+                validate_password(
+                    good,
+                    Some("experto.demo"),
+                    Some("experto.demo@example.test")
+                )
+                .is_ok(),
+                "{good}"
+            );
+        }
     }
 }

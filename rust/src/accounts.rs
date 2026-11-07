@@ -42,14 +42,17 @@ pub async fn create(
         || !domain::valid_email(input.email.trim())
         || input.email.trim().len() > 254
         || input.telefono.chars().count() > 20
-        || input.password.chars().count() < 12
-        || input.password.len() > 1024
         || !["EMPRESA", "PROFESOR", "ESTUDIANTE", "EXPERTO"].contains(&input.rol.as_str())
     {
-        return Err(AppError::bad(
-            "Revisa el usuario, correo y rol; la contraseña debe tener al menos 12 caracteres",
-        ));
+        return Err(AppError::bad("Revisa el usuario, correo y rol"));
     }
+    // CFG-02: shared validator (length, numeric, common, similar to the user),
+    // the same as registration, password change and recovery.
+    domain::validate_password(
+        &input.password,
+        Some(&input.username),
+        Some(input.email.trim()),
+    )?;
     // Usernames are unique case-insensitively (the DB unique index is case-sensitive).
     let taken: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM usuarios WHERE lower(username)=lower($1))")
@@ -217,11 +220,11 @@ pub async fn password(
     Json(input): Json<PasswordChange>,
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, true).await?;
-    if input.nueva.chars().count() < 12 || input.nueva.len() > 1024 || input.actual.len() > 1024 {
-        return Err(AppError::bad(
-            "La contraseña nueva debe tener al menos 12 caracteres",
-        ));
+    if input.actual.len() > 1024 {
+        return Err(AppError::bad("Credenciales inválidas"));
     }
+    // CFG-02: shared validator, with the account's username and email.
+    domain::validate_password(&input.nueva, Some(&user.username), Some(&user.email))?;
     let old: String = sqlx::query_scalar("SELECT password FROM usuarios WHERE id=$1")
         .bind(user.id)
         .fetch_one(&state.pool)

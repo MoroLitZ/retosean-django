@@ -213,7 +213,7 @@ async fn validate(
             r.errores.push("El rol es obligatorio.".into());
         } else if !ROLES.contains(&rol.as_str()) {
             r.errores
-                .push(format!("Rol no válido. Usa uno de: {}.", ROLES.join(", ")));
+                .push(format!("Rol no valido. Usa uno de: {}.", ROLES.join(", ")));
         }
         let password = r.get("password");
         if !password.is_empty() && (password.chars().count() < 12 || password.len() > 1024) {
@@ -317,12 +317,35 @@ pub async fn import(
     }
     let mut tx = state.pool.begin().await?;
     let mut created = vec![];
+    let mut raced = 0;
     for (r, hash) in valid.iter().zip(hashes) {
         let unusable = hash.is_none();
         let password = hash.unwrap_or_else(|| format!("!{}", uuid::Uuid::new_v4().simple()));
-        let id: i64 = sqlx::query_scalar("INSERT INTO usuarios(username,password,email,first_name,last_name,rol,telefono,is_active,activo,is_staff,is_superuser,date_joined,fecha_creacion) VALUES($1,$2,$3,$4,$5,$6,$7,true,true,false,false,now(),now()) RETURNING id")
+        // Una fila puede chocar con la carrera entre la previsualización y la
+        // confirmación (USR-06); se omite en vez de reventar con un 500.
+        let id: Option<i64> = sqlx::query_scalar("INSERT INTO usuarios(username,password,email,first_name,last_name,rol,telefono,is_active,activo,is_staff,is_superuser,date_joined,fecha_creacion) VALUES($1,$2,$3,$4,$5,$6,$7,true,true,false,false,now(),now()) ON CONFLICT DO NOTHING RETURNING id")
             .bind(r.get("username")).bind(password).bind(r.get("email")).bind(r.get("first_name")).bind(r.get("last_name"))
-            .bind(r.get("rol")).bind(r.get("telefono")).fetch_one(&mut *tx).await?;
+            .bind(r.get("rol")).bind(r.get("telefono")).fetch_optional(&mut *tx).await?;
+        let Some(id) = id else {
+            raced += 1;
+            continue;
+        };
+        // Perfil por rol (USR-05): estudiante/profesor, igual que importar().
+        match r.get("rol") {
+            "ESTUDIANTE" => {
+                sqlx::query("INSERT INTO estudiantes(usuario_id,semestre) VALUES($1,1) ON CONFLICT (usuario_id) DO NOTHING")
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+            "PROFESOR" => {
+                sqlx::query("INSERT INTO profesores(usuario_id,especialidad) VALUES($1,'') ON CONFLICT (usuario_id) DO NOTHING")
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+            _ => {}
+        }
         let mut link = None;
         if unusable {
             let token = format!(
@@ -372,7 +395,7 @@ pub async fn import(
         mail::send_later(email.clone(), "Bienvenido a RetosEAN".into(), text);
     }
     Ok(Json(
-        json!({"creados": created.len(), "omitidas": invalid.len()}),
+        json!({"creados": created.len(), "omitidas": invalid.len() + raced}),
     ))
 }
 

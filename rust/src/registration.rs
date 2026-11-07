@@ -121,11 +121,8 @@ pub async fn register(
     if input.password != input.password2 {
         return Err(AppError::bad("Las contraseñas no coinciden"));
     }
-    if input.password.chars().count() < 12 || input.password.len() > 1024 {
-        return Err(AppError::bad(
-            "La contraseña debe tener al menos 12 caracteres",
-        ));
-    }
+    // CFG-02: shared validator (length, numeric, common, similar to the user).
+    domain::validate_password(&input.password, Some(&input.username), Some(&email))?;
     if !bounded(&input.first_name, 150) || !bounded(&input.last_name, 150) {
         return Err(AppError::bad("Nombre o apellido demasiado largos"));
     }
@@ -310,20 +307,19 @@ pub async fn reset_confirm(
             "El enlace para restablecer la contraseña no es válido o ya fue usado.",
         ));
     }
-    if input.nueva.chars().count() < 12 || input.nueva.len() > 1024 {
-        return Err(AppError::bad(
-            "La contraseña debe tener al menos 12 caracteres",
-        ));
-    }
-    let user: Option<i64> = sqlx::query_scalar(
-        "SELECT user_id FROM rust_password_resets WHERE token_hash=$1 AND expires_at>now()",
+    // The link is resolved before validating the password, so CFG-02 can check
+    // similarity against the account's attributes (Django's SetPasswordForm
+    // receives the user for exactly that).
+    let account: Option<(i64, String, String)> = sqlx::query_as(
+        "SELECT r.user_id,u.username,u.email FROM rust_password_resets r JOIN usuarios u ON u.id=r.user_id WHERE r.token_hash=$1 AND r.expires_at>now()",
     )
     .bind(auth::digest(&input.token))
     .fetch_optional(&state.pool)
     .await?;
-    let user = user.ok_or_else(|| {
+    let (user, username, email) = account.ok_or_else(|| {
         AppError::bad("El enlace para restablecer la contraseña no es válido o ya fue usado.")
     })?;
+    domain::validate_password(&input.nueva, Some(&username), Some(&email))?;
     let password = hash(&state, input.nueva.clone()).await?;
     let mut tx = state.pool.begin().await?;
     sqlx::query("UPDATE usuarios SET password=$2 WHERE id=$1")

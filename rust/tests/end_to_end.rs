@@ -2043,3 +2043,265 @@ z,ESTUDIANTE
         std::panic::resume_unwind(error.into_panic());
     }
 }
+
+// Regresiones de QA (a39b9ce9b en Django): CFG-02, CFG-07, CFG-09 y CFG-10.
+
+/// CFG-07: compose sin secreto débil por defecto; RUST_POSTGRES_PASSWORD se
+/// toma del .env y es obligatorio (como DB_PASSWORD en el compose de Django).
+#[test]
+fn test_compose_exige_contrasena_de_base_de_datos() {
+    let compose = include_str!("../compose.yml");
+    assert!(
+        compose.matches("${RUST_POSTGRES_PASSWORD:?").count() == 2,
+        "db y web deben exigir la variable: {compose}"
+    );
+    assert!(
+        !compose.contains("rust-local-dev"),
+        "no queda ningún secreto débil por defecto"
+    );
+}
+
+/// CFG-09: la CI tiene puertas de lint y de auditoría de dependencias
+/// (equivalentes a ruff/bandit/pip-audit de quality.yml), además de las pruebas.
+#[test]
+fn test_ci_incluye_clippy_y_auditoria_de_dependencias() {
+    let workflow = include_str!("../../.github/workflows/rust.yml");
+    assert!(workflow.contains("cargo clippy --locked"), "puerta de lint");
+    assert!(
+        workflow.contains("cargo audit"),
+        "puerta de auditoría de dependencias"
+    );
+    assert!(workflow.contains("clippy"), "el toolchain instala clippy");
+    // Las puertas anteriores se conservan.
+    assert!(workflow.contains("cargo fmt --check"));
+    assert!(workflow.contains("node --check"));
+    assert!(workflow.contains("cargo test --locked -- --include-ignored"));
+}
+
+/// CFG-10: el backend de consola (EMAIL_HOST sin definir) escribe los cuerpos
+/// completos en el log; el token de restablecimiento nunca debe filtrarse.
+#[test]
+fn test_consola_no_registra_el_token_de_restablecimiento() {
+    let token = format!(
+        "{}{}",
+        uuid::Uuid::new_v4().simple(),
+        uuid::Uuid::new_v4().simple()
+    );
+    let body = format!(
+        "Hola Ana:\n\nAbre:\n\nhttp://localhost:8080/#restablecer/{token}\n\n— Equipo RetosEAN"
+    );
+    let out = retosean::mail::redact(&body);
+    assert!(!out.contains(&token), "the token would leak into the logs");
+    assert!(out.contains("#restablecer/***"));
+    assert!(!retosean::mail::redact("password=hunter2").contains("hunter2"));
+}
+
+/// CFG-02: Django configuró AUTH_PASSWORD_VALIDATORS; el port comparte un
+/// validador (longitud, numérica, común y parecida al usuario/correo) en los
+/// cuatro puntos donde se fija una contraseña: registro público, alta por
+/// admin, cambio con sesión y restablecimiento por enlace.
+#[tokio::test]
+#[ignore = "requires local PostgreSQL; creates and removes its own isolated schema"]
+async fn test_rechaza_contrasena_debil_en_registro_alta_cambio_y_restablecimiento() {
+    let mut config = Config::load().unwrap();
+    let admin = PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(config.database.clone())
+        .await
+        .unwrap();
+    let schema = format!("rust_test_{}", uuid::Uuid::new_v4().simple());
+    admin
+        .execute(format!("CREATE SCHEMA {schema}").as_str())
+        .await
+        .unwrap();
+    let search_path = schema.clone();
+    let pool = PgPoolOptions::new()
+        .max_connections(4)
+        .after_connect(move |conn, _| {
+            let statement = format!("SET search_path TO {search_path}");
+            Box::pin(async move {
+                conn.execute(statement.as_str()).await?;
+                Ok(())
+            })
+        })
+        .connect_with(config.database.clone())
+        .await
+        .unwrap();
+    sqlx::raw_sql(include_str!("../sql/schema.sql"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let hash = "pbkdf2_sha256$1000$test-salt$CqJFhYAc+mBaD+E6+znRWXbr3hP/JgZjkUaazakv+Ak=";
+    sqlx::raw_sql(&include_str!("../sql/demo.sql").replace("__DEMO_PASSWORD_HASH__", hash))
+        .execute(&pool)
+        .await
+        .unwrap();
+    retosean::auth::init(&pool).await.unwrap();
+    config.media_root = std::env::temp_dir().join(&schema);
+    let storage = config.media_root.clone();
+    let app = retosean::router(AppState {
+        pool: pool.clone(),
+        config,
+        password_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
+        login_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
+    });
+    let test_pool = pool.clone();
+    let result = std::panic::AssertUnwindSafe(async move {
+        let pool = test_pool;
+        let public = Session::default();
+        // /api/registro: common password, all-numeric and one similar to the
+        // username. Every case is rejected before the welcome email would be
+        // sent, so this test never touches the process-wide mailer.
+        for (password, fragment) in [
+            ("password123456", "demasiado común"),
+            ("202620262026", "completamente numérica"),
+            ("nueva.prueba2026!", "parecida al nombre de usuario"),
+        ] {
+            let data = json!({"tipo":"academico","rol":"ESTUDIANTE","username":"nueva.prueba","email":"nueva.prueba@universidadean.edu.co","password":password,"password2":password,"first_name":"Nueva","last_name":"Prueba"});
+            let (status, body, _) =
+                request(&app, &public, "POST", "/api/registro", Some(data)).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+            assert!(body["error"].as_str().unwrap().contains(fragment), "{body}");
+        }
+        let created: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM usuarios WHERE username='nueva.prueba'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(created, 0, "a weak password creates no account");
+        // /api/usuarios (admin create): common, numeric, similar to the email's
+        // local part and too short (the pre-existing length rule is kept).
+        let administrator = login(&app, "admin.demo").await;
+        let create = |password: &str| json!({"username":"usuario.prueba","password":password,"email":"prueba@example.test","first_name":"Usuario","last_name":"Prueba","rol":"EXPERTO","programa_id":null,"facultad_id":null});
+        for (password, fragment) in [
+            ("password123456", "demasiado común"),
+            ("313233343536", "completamente numérica"),
+            ("MiClave-prueba-2026", "dirección de correo electrónico"),
+            ("corta", "al menos 12 caracteres"),
+        ] {
+            let (status, body, _) = request(
+                &app,
+                &administrator,
+                "POST",
+                "/api/usuarios",
+                Some(create(password)),
+            )
+            .await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+            assert!(body["error"].as_str().unwrap().contains(fragment), "{body}");
+        }
+        let id = ok(
+            &app,
+            &administrator,
+            "POST",
+            "/api/usuarios",
+            Some(create("AltaSegura2026!")),
+        )
+        .await["id"]
+            .as_i64()
+            .unwrap();
+        assert!(id > 0, "a strong password still creates the account");
+        // /api/password (authenticated change): the validator also runs here.
+        let expert = login(&app, "experto.demo").await;
+        for (password, fragment) in [
+            ("password123456", "demasiado común"),
+            ("experto.demo2026x", "parecida al nombre de usuario"),
+        ] {
+            let (status, body, _) = request(
+                &app,
+                &expert,
+                "POST",
+                "/api/password",
+                Some(json!({"actual":"RetosEAN2026","nueva":password})),
+            )
+            .await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+            assert!(body["error"].as_str().unwrap().contains(fragment), "{body}");
+        }
+        ok(
+            &app,
+            &expert,
+            "POST",
+            "/api/password",
+            Some(json!({"actual":"RetosEAN2026","nueva":"ExpertoClaveFuerte2026"})),
+        )
+        .await;
+        // /api/password/reset/confirm: the token is seeded directly (no email),
+        // and the validator knows the account's username and email.
+        let token = format!(
+            "{}{}",
+            uuid::Uuid::new_v4().simple(),
+            uuid::Uuid::new_v4().simple()
+        );
+        sqlx::query("INSERT INTO rust_password_resets(token_hash,user_id,expires_at) VALUES($1,4,now()+interval '3 days')")
+            .bind(retosean::auth::digest(&token))
+            .execute(&pool)
+            .await
+            .unwrap();
+        let confirm = |nueva: &str| json!({"token": token, "nueva": nueva, "nueva2": nueva});
+        for (password, fragment) in [
+            ("202620262026", "completamente numérica"),
+            ("password123456", "demasiado común"),
+            ("estudiante.demo2026", "parecida al nombre de usuario"),
+        ] {
+            let (status, body, _) = request(
+                &app,
+                &public,
+                "POST",
+                "/api/password/reset/confirm",
+                Some(confirm(password)),
+            )
+            .await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+            assert!(body["error"].as_str().unwrap().contains(fragment), "{body}");
+        }
+        // The link survives the rejected attempts and works with a strong one.
+        ok(
+            &app,
+            &public,
+            "POST",
+            "/api/password/reset/confirm",
+            Some(confirm("ClaveRestablecida2026")),
+        )
+        .await;
+        assert_eq!(
+            request(
+                &app,
+                &public,
+                "POST",
+                "/api/login",
+                Some(json!({"username":"estudiante.demo","password":"ClaveRestablecida2026"}))
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+        assert_eq!(
+            request(
+                &app,
+                &public,
+                "POST",
+                "/api/login",
+                Some(json!({"username":"estudiante.demo","password":"RetosEAN2026"}))
+            )
+            .await
+            .0,
+            StatusCode::UNAUTHORIZED,
+            "the old password stops working"
+        );
+    });
+    // A spawned task captures assertion failures so cleanup runs before rethrowing.
+    let outcome = tokio::spawn(result).await;
+    pool.close().await;
+    admin
+        .execute(format!("DROP SCHEMA {schema} CASCADE").as_str())
+        .await
+        .unwrap();
+    admin.close().await;
+    if storage.exists() {
+        std::fs::remove_dir_all(&storage).unwrap();
+    }
+    if let Err(error) = outcome {
+        std::panic::resume_unwind(error.into_panic());
+    }
+}

@@ -1,10 +1,12 @@
+# CFG-07: sin secretos por defecto débiles; RUST_POSTGRES_PASSWORD se toma del
+# .env y es obligatorio definirlo (compose falla al arrancar si falta).
 services:
   db:
     image: postgres:18
     environment:
       POSTGRES_DB: retosean_rust
       POSTGRES_USER: retosean
-      POSTGRES_PASSWORD: ${RUST_POSTGRES_PASSWORD:-rust-local-dev}
+      POSTGRES_PASSWORD: ${RUST_POSTGRES_PASSWORD:?Definir RUST_POSTGRES_PASSWORD en el .env}
     volumes:
       - rust_pgdata:/var/lib/postgresql
     healthcheck:
@@ -18,7 +20,7 @@ services:
       DB_HOST: db
       DB_PORT: "5432"
       DB_USER: retosean
-      DB_PASSWORD: ${RUST_POSTGRES_PASSWORD:-rust-local-dev}
+      DB_PASSWORD: ${RUST_POSTGRES_PASSWORD:?Definir RUST_POSTGRES_PASSWORD en el .env}
       RUST_DB_NAME: retosean_rust
     ports:
       - "127.0.0.1:8080:8080"

@@ -3627,6 +3627,15 @@
         "null": true,
         "max_length": null,
         "choices": []
+      },
+      {
+        "name": "integracion_id",
+        "verbose_name": "integración",
+        "type": "ForeignKey",
+        "related_table": "integraciones_academicas",
+        "null": true,
+        "max_length": null,
+        "choices": []
       }
     ]
   },

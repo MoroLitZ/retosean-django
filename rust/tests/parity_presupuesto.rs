@@ -415,3 +415,39 @@ parity!(
         assert!(values.contains(&Data::String("concontrol".into())));
     }
 );
+
+// ReglaDeGastoContraDisponibleTests
+parity!(test_rechaza_gasto_mayor_a_disponible, |t| {
+    let reto = t.reto(COMPANY_USER, "aprobado", "reto").await;
+    let id = budget(&t, reto, "100.00").await;
+    let (status, body) = t
+        .req(
+            &t.admin,
+            "POST",
+            &format!("/api/presupuestos/{id}/gastos"),
+            Some(json!({"categoria":"OTROS","monto":"150","estado":"EJECUTADO"})),
+        )
+        .await;
+    assert_eq!(status, 400, "{body}");
+    assert_eq!(
+        t.i64(&format!(
+            "SELECT count(*) FROM gastos WHERE presupuesto_id={id}"
+        ))
+        .await,
+        0
+    );
+    assert_eq!(amount(&summary(&t, id).await["disponible"]), 100.0);
+});
+parity!(test_acepta_gasto_dentro_del_disponible, |t| {
+    let reto = t.reto(COMPANY_USER, "aprobado", "reto").await;
+    let id = budget(&t, reto, "100.00").await;
+    spend(&t, id, "90.00", "EJECUTADO").await;
+    assert_eq!(
+        t.i64(&format!(
+            "SELECT count(*) FROM gastos WHERE presupuesto_id={id}"
+        ))
+        .await,
+        1
+    );
+    assert_eq!(amount(&summary(&t, id).await["disponible"]), 10.0);
+});

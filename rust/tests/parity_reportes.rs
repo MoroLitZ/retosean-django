@@ -1,6 +1,7 @@
 //! apps/reportes/tests.py: report generation, access, exported fields, hostile
 //! data, preview and sending by email (HU06).
 mod common;
+use calamine::{Data, Reader};
 use common::*;
 use serde_json::{Value, json};
 
@@ -468,4 +469,75 @@ parity!(test_profesor_genera_y_envia_el_reporte_acotado, |t| {
         )
         .await;
     assert_eq!(code, 200, "{body}");
+});
+
+// LimiteDeFilasExcelTests
+/// True if any cell of the first worksheet of an xlsx contains `needle`.
+fn xlsx_has(bytes: Vec<u8>, needle: &str) -> bool {
+    let mut book: calamine::Xlsx<_> =
+        calamine::open_workbook_from_rs(std::io::Cursor::new(bytes)).unwrap();
+    let sheet = book.sheet_names()[0].clone();
+    book.worksheet_range(&sheet)
+        .unwrap()
+        .cells()
+        .any(|(_, _, cell)| matches!(cell, Data::String(s) if s.contains(needle)))
+}
+parity!(test_excel_trunca_y_avisa_cuando_supera_el_tope, |t| {
+    // 10010 retos: the Excel export must stop at the cap and flag the cut.
+    t.exec("TRUNCATE retos CASCADE").await;
+    t.exec(&format!(
+        "INSERT INTO retos(empresa_id,titulo) SELECT {COMPANY_USER},'Reto '||g FROM generate_series(1,10010) g"
+    ))
+    .await;
+    let (code, bytes) = generate(&t, &t.admin, "retos", "EXCEL").await;
+    assert_eq!(code, 200);
+    assert!(bytes.starts_with(b"PK"));
+    let total: i64 = t
+        .i64("SELECT (filtros->>'total_registros')::bigint FROM reportes_generados ORDER BY id DESC LIMIT 1")
+        .await;
+    assert_eq!(total, 10000);
+    assert!(xlsx_has(bytes, "truncado a 10000"));
+});
+
+// FiltrosDelReporteDeEmpresasTests
+parity!(test_respeta_el_periodo_por_fecha_de_registro, |t| {
+    t.company_user("emp-filt", "9002").await; // fecha_creacion = today
+    t.exec("INSERT INTO empresas(nit,razon_social,sector_industrial,usuario_id,estado_validacion,estado_listas_restrictivas,estado_convenio,renuncio_a_convenio,participacion_bloqueada,motivo_bloqueo,tipo_convocatoria,area_responsable,sitio_web) VALUES('9003','Beta','',NULL,'PENDIENTE','PENDIENTE','NO_RADICADO',false,false,'','RETO','','')")
+        .await;
+    t.exec("UPDATE empresas SET fecha_creacion='2020-01-01' WHERE nit='9003'")
+        .await;
+    let data = t
+        .ok(
+            &t.admin,
+            "POST",
+            "/api/reportes/vista-previa",
+            Some(json!({"reporte":"empresas","periodo":"custom","desde":"2025-01-01"})),
+        )
+        .await;
+    assert!(data.to_string().contains("emp-filt S.A.S."), "{data}");
+    assert!(!data.to_string().contains("Beta"), "{data}");
+});
+parity!(test_respeta_facultad_a_traves_de_sus_retos, |t| {
+    let (user, _) = t.company_user("emp-filt2", "9004").await;
+    let other = t.user("emp-filt2-b", "EMPRESA").await;
+    t.exec(&format!(
+        "INSERT INTO empresas(nit,razon_social,sector_industrial,usuario_id,estado_validacion,estado_listas_restrictivas,estado_convenio,renuncio_a_convenio,participacion_bloqueada,motivo_bloqueo,tipo_convocatoria,area_responsable,sitio_web) VALUES('9005','Beta','',{other},'PENDIENTE','PENDIENTE','NO_RADICADO',false,false,'','RETO','','')"
+    ))
+    .await;
+    // The company's reto belongs to FACULTY; Beta has none, so it drops out.
+    let reto = t.reto(user, "aprobado", "reto").await;
+    t.exec(&format!(
+        "UPDATE retos SET facultad_id={FACULTY} WHERE id={reto}"
+    ))
+    .await;
+    let data = t
+        .ok(
+            &t.admin,
+            "POST",
+            "/api/reportes/vista-previa",
+            Some(json!({"reporte":"empresas","periodo":"todo","facultad":FACULTY})),
+        )
+        .await;
+    assert!(data.to_string().contains("emp-filt2 S.A.S."), "{data}");
+    assert!(!data.to_string().contains("Beta"), "{data}");
 });

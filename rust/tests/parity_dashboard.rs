@@ -263,3 +263,24 @@ parity!(test_panel_estudiante_solo_usa_notas_publicadas, |t| {
         1
     );
 });
+
+// RangoDeFechasDelPanelTests
+parity!(test_kpis_estudiante_respetan_el_rango_de_fechas, |t| {
+    let reto = t.reto(COMPANY_USER, "abierto", "reto").await;
+    let student = t.user("est-rango", "ESTUDIANTE").await;
+    let old = t.deliverable(reto, student).await;
+    let recent = t.deliverable(reto, student).await;
+    t.exec(&format!(
+        "UPDATE entregables SET fecha_entrega=(now() AT TIME ZONE 'America/Bogota')::date - 400 WHERE id={old}"
+    ))
+    .await;
+    t.exec(&format!(
+        "UPDATE entregables SET fecha_entrega=(now() AT TIME ZONE 'America/Bogota')::date - 5 WHERE id={recent}"
+    ))
+    .await;
+    let session = t.login("est-rango").await;
+    let panel = t
+        .ok(&session, "GET", "/api/dashboard?periodo=30d", None)
+        .await;
+    assert_eq!(panel["kpis"]["entregables_total"], 1, "{panel}");
+});

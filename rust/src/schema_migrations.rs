@@ -3,7 +3,7 @@
 use sqlx::PgPool;
 
 pub const MIGRATIONS: &[(&str, &str)] = &[
-    // ("0001_short_name", include_str!("../sql/migrations/0001_short_name.sql")),
+    ("0001_equipo_reto_academico_integracion", include_str!("../sql/migrations/0001_equipo_reto_academico_integracion.sql")),
 ];
 
 const TABLE: &str = "CREATE TABLE IF NOT EXISTS rust_schema_migrations(name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())";
