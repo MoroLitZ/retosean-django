@@ -59,11 +59,7 @@ async fn teacher(tx: &mut Transaction<'_, Postgres>, reto: i64, user: &User) -> 
         .await?)
 }
 /// CIE-06: un reto finalizado no admite contenido nuevo en el cierre.
-async fn finished(
-    tx: &mut Transaction<'_, Postgres>,
-    reto: i64,
-    action: &str,
-) -> Result<()> {
+async fn finished(tx: &mut Transaction<'_, Postgres>, reto: i64, action: &str) -> Result<()> {
     let estado: String = sqlx::query_scalar("SELECT estado FROM retos WHERE id=$1")
         .bind(reto)
         .fetch_one(&mut **tx)

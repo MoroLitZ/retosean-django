@@ -210,13 +210,8 @@ parity!(test_get_gestionar_no_emite_certificados, |t| {
         "UPDATE retos SET estado='finalizado' WHERE id={reto}"
     ))
     .await;
-    t.ok(
-        &t.admin,
-        "GET",
-        &format!("/api/retos/{reto}/cierre"),
-        None,
-    )
-    .await;
+    t.ok(&t.admin, "GET", &format!("/api/retos/{reto}/cierre"), None)
+        .await;
     assert_eq!(
         t.i64(&format!(
             "SELECT count(*) FROM certificados WHERE reto_id={reto}"
@@ -243,7 +238,10 @@ parity!(
         .await;
         assert_eq!(code, 400, "{body}");
         assert!(
-            body["error"].as_str().unwrap().contains("ya fue finalizado"),
+            body["error"]
+                .as_str()
+                .unwrap()
+                .contains("ya fue finalizado"),
             "{body}"
         );
         assert_eq!(
@@ -256,12 +254,17 @@ parity!(
                 &t.admin,
                 "POST",
                 &format!("/api/retos/{reto}/cierre/reconocimientos"),
-                Some(json!({"usuario_id":student,"nombre_destinatario":"Alguien","descripcion":"x"})),
+                Some(
+                    json!({"usuario_id":student,"nombre_destinatario":"Alguien","descripcion":"x"}),
+                ),
             )
             .await;
         assert_eq!(code, 400, "{body}");
         assert!(
-            body["error"].as_str().unwrap().contains("ya fue finalizado"),
+            body["error"]
+                .as_str()
+                .unwrap()
+                .contains("ya fue finalizado"),
             "{body}"
         );
         assert_eq!(

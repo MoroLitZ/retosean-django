@@ -290,7 +290,11 @@ const ASSETS: &[(&str, &str, &str)] = &[
     ("records.css", CSS, include_str!("../web/css/records.css")),
     ("detail.css", CSS, include_str!("../web/css/detail.css")),
     ("forms.css", CSS, include_str!("../web/css/forms.css")),
-    ("workflows.css", CSS, include_str!("../web/css/workflows.css")),
+    (
+        "workflows.css",
+        CSS,
+        include_str!("../web/css/workflows.css"),
+    ),
     ("builder.css", CSS, include_str!("../web/css/builder.css")),
     ("icons.js", JS, include_str!("../web/js/icons.js")),
     ("core.js", JS, include_str!("../web/js/core.js")),

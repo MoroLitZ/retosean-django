@@ -309,8 +309,10 @@ async fn sections(
         rows
     };
     let ranking = rows(&ranking);
-    let winners: Vec<String> =
-        sqlx::query_scalar::<_, String>(WINNERS_SQL).bind(id).fetch_all(&state.pool).await?;
+    let winners: Vec<String> = sqlx::query_scalar::<_, String>(WINNERS_SQL)
+        .bind(id)
+        .fetch_all(&state.pool)
+        .await?;
     let winner = if call.8 {
         match winners.len() {
             0 => "-".into(),

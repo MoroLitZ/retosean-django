@@ -245,11 +245,19 @@ async fn native_http_lifecycle_and_permissions() {
             .as_i64()
             .unwrap();
         // Study units: professors manage them too, with an optional PDF and CSV bulk load.
-        let program_text = program.to_string();
+        // CIE-03: a professor only manages units in their own faculty; use the
+        // demo professor's own program (Ingeniería de Sistemas) rather than the new one.
+        let own_program = sqlx::query_scalar::<_, i64>(
+            "SELECT id FROM programas WHERE facultad_id=(SELECT facultad_id FROM profesores WHERE usuario_id=3) ORDER BY id LIMIT 1",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .to_string();
         let unit_fields = [
             ("codigo", "RS-01"),
             ("nombre", "Sistemas seguros"),
-            ("programa", program_text.as_str()),
+            ("programa", own_program.as_str()),
             ("periodo", "2026-2"),
             ("ciclo", "6"),
         ];
@@ -293,7 +301,7 @@ async fn native_http_lifecycle_and_permissions() {
         let renamed = [
             ("codigo", "RS-01"),
             ("nombre", "Sistemas seguros II"),
-            ("programa", program_text.as_str()),
+            ("programa", own_program.as_str()),
             ("periodo", "2026-2"),
             ("ciclo", "7"),
         ];
@@ -1194,6 +1202,22 @@ async fn native_http_lifecycle_and_permissions() {
             Some(json!({"estado":"publicado"})),
         )
         .await;
+        // HCK-05: voting needs a dated presentation stage that is open now.
+        let now = chrono::Utc::now();
+        ok(
+            &app,
+            &teacher,
+            "POST",
+            &format!("/api/hackathons/{hack}/etapa"),
+            Some(json!({
+                "tipo":"presentacion",
+                "titulo":"presentacion",
+                "inicia_en":now - chrono::Duration::hours(1),
+                "termina_en":now + chrono::Duration::days(1),
+                "orden":3
+            })),
+        )
+        .await;
         let registration = ok(
             &app,
             &student,
@@ -1986,7 +2010,7 @@ z,ESTUDIANTE
         sqlx::query("INSERT INTO retos_favoritos(usuario_id,reto_id,fecha) VALUES(4,4,now()) ON CONFLICT DO NOTHING").execute(&pool).await.unwrap();
         let created = retosean::reminders::run(&pool, &[7, 3, 1]).await.unwrap();
         assert!(created >= 1, "reminder created");
-        let reminders: i64 = sqlx::query_scalar("SELECT count(*) FROM notificaciones WHERE usuario_id=4 AND clave_dedupe='recordatorio:postulacion:4:3'").fetch_one(&pool).await.unwrap();
+        let reminders: i64 = sqlx::query_scalar("SELECT count(*) FROM notificaciones WHERE usuario_id=4 AND clave_dedupe LIKE 'recordatorio:postulacion:4:%:3'").fetch_one(&pool).await.unwrap();
         assert_eq!(reminders, 1);
         assert_eq!(
             retosean::reminders::run(&pool, &[7, 3, 1]).await.unwrap(),

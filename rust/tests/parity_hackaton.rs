@@ -248,6 +248,15 @@ parity!(test_gestor_acepta_la_inscripcion, |t| {
 
 // VotacionTests
 async fn voting(t: &Ctx, b: &Base, team_state: &str) -> (i64, Session) {
+    // HCK-05: la votación falla cerrado; abre una etapa de presentación
+    // fechada y vigente antes de votar.
+    b.stage(
+        t,
+        "presentacion",
+        "now()-interval '1 day'",
+        "now()+interval '1 day'",
+    )
+    .await;
     let team = b.team(t, "Equipo Voto", &[]).await;
     b.register(t, team, team_state).await;
     b.juror(t, "jurado-uno").await;
@@ -472,6 +481,9 @@ parity!(test_profesor_con_integracion_sin_aprobar_no_gestiona, |t| {
         403
     );
     assert_eq!(b.estado(&t).await.0, "publicado");
+    // RET-06: la integración en borrador sigue dejando al profesor armar su
+    // equipo académico (editable mientras está en borrador), a diferencia de
+    // gestionar el hackathon; por eso aquí la creación es exitosa.
     assert_eq!(
         t.status(
             &teacher,
@@ -480,7 +492,7 @@ parity!(test_profesor_con_integracion_sin_aprobar_no_gestiona, |t| {
             Some(json!({"nombre_equipo":"X","estudiantes":[]}))
         )
         .await,
-        403
+        200
     );
 });
 
@@ -775,6 +787,13 @@ parity!(test_ve_el_detalle_del_suyo_pero_no_el_ajeno, |t| {
 });
 parity!(test_vota_como_jurado, |t| {
     let (b, _, session) = expert(&t).await;
+    b.stage(
+        &t,
+        "presentacion",
+        "now()-interval '1 day'",
+        "now()+interval '1 day'",
+    )
+    .await;
     let student = b.student(&t, "est-exp").await;
     let team = b.team(&t, "Equipo Experto", &[student]).await;
     b.register(&t, team, "ACEPTADA").await;
@@ -787,3 +806,292 @@ parity!(test_vota_como_jurado, |t| {
     .await;
     assert_eq!(t.i64(&format!("SELECT count(*) FROM votaciones_hackaton v JOIN jurados_hackaton j ON j.id=v.jurado_id JOIN usuarios u ON u.id=j.usuario_id WHERE u.username='exp-jur' AND v.equipo_id={team}")).await, 1);
 });
+
+// Regresiones del informe de QA (apps/hackaton/tests.py): HCK-02, HCK-05,
+// HCK-06, HCK-08, HCK-10, RET-03 y RET-06.
+parity!(test_sin_etapa_de_presentacion_no_se_vota, |t| {
+    let b = base(&t).await;
+    let team = b.team(&t, "Equipo Sin Etapa", &[]).await;
+    b.register(&t, team, "ACEPTADA").await;
+    b.juror(&t, "jurado-cerrado").await;
+    let session = t.login("jurado-cerrado").await;
+    let (code, body) = t
+        .req(
+            &session,
+            "POST",
+            &format!("/api/hackathons/{}/votar", b.hack),
+            Some(json!({"equipo_id":team,"puntaje":"5.00"})),
+        )
+        .await;
+    assert_eq!(code, 400, "{body}");
+    assert!(
+        body["error"].as_str().unwrap().contains("no está abierta"),
+        "{body}"
+    );
+    assert_eq!(t.i64("SELECT count(*) FROM votaciones_hackaton").await, 0);
+});
+parity!(
+    test_etapa_de_presentacion_sin_fechas_no_abre_la_votacion,
+    |t| {
+        let b = base(&t).await;
+        b.stage(&t, "presentacion", "NULL", "NULL").await;
+        let team = b.team(&t, "Equipo Sin Fechas", &[]).await;
+        b.register(&t, team, "ACEPTADA").await;
+        b.juror(&t, "jurado-sinfechas").await;
+        let session = t.login("jurado-sinfechas").await;
+        assert_eq!(
+            t.status(
+                &session,
+                "POST",
+                &format!("/api/hackathons/{}/votar", b.hack),
+                Some(json!({"equipo_id":team,"puntaje":"5.00"}))
+            )
+            .await,
+            400
+        );
+        assert_eq!(t.i64("SELECT count(*) FROM votaciones_hackaton").await, 0);
+    }
+);
+parity!(test_equipo_rechazado_sale_del_ranking_y_no_gana, |t| {
+    let b = base(&t).await;
+    let a = b.team(&t, "Equipo A", &[]).await;
+    let bb = b.team(&t, "Equipo B", &[]).await;
+    b.register(&t, a, "ACEPTADA").await;
+    let reg_b = b.register(&t, bb, "ACEPTADA").await;
+    let j1 = b.juror(&t, "j1").await;
+    b.vote(&t, j1, a, "4.00").await;
+    b.vote(&t, j1, bb, "5.00").await;
+    // HCK-02: rechazar a B después de votar lo saca de la tabla; no puede ganar.
+    t.ok(
+        &t.admin,
+        "POST",
+        &format!("/api/inscripciones/{reg_b}/estado"),
+        Some(json!({"estado":"RECHAZADA"})),
+    )
+    .await;
+    let (_, body) = ranking(&t, &t.admin, b.hack).await;
+    let names: Vec<&str> = body["ranking"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["equipo"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["Equipo A"]);
+});
+parity!(test_equipo_aceptado_sin_votos_cierra_el_ranking, |t| {
+    let b = base(&t).await;
+    let a = b.team(&t, "Equipo A", &[]).await;
+    let bb = b.team(&t, "Equipo B", &[]).await;
+    b.register(&t, a, "ACEPTADA").await;
+    b.register(&t, bb, "ACEPTADA").await;
+    let j1 = b.juror(&t, "j1").await;
+    b.vote(&t, j1, a, "4.00").await;
+    // HCK-10: el equipo aceptado sin votos sigue en la tabla, con votos=0.
+    let (_, body) = ranking(&t, &t.admin, b.hack).await;
+    let rows = body["ranking"].as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0]["equipo"], "Equipo A");
+    assert_eq!(rows[1]["equipo"], "Equipo B");
+    assert_eq!(rows[1]["votos"].as_i64(), Some(0));
+    assert_eq!(rows[1]["posicion"].as_i64(), Some(2));
+});
+parity!(test_sin_votos_no_se_declara_ganador, |t| {
+    let b = base(&t).await;
+    let student = b.student(&t, "est-sinvotos").await;
+    let a = b.team(&t, "Equipo A", &[student]).await;
+    b.register(&t, a, "ACEPTADA").await;
+    t.exec(&format!(
+        "UPDATE hackathons SET estado='en_curso' WHERE id={}",
+        b.hack
+    ))
+    .await;
+    t.ok(
+        &t.admin,
+        "POST",
+        &format!("/api/hackathons/{}/estado", b.hack),
+        Some(json!({"estado":"finalizado"})),
+    )
+    .await;
+    let notice = t
+        .text(&format!(
+            "SELECT mensaje FROM notificaciones WHERE usuario_id={student} AND evento='HACKATON_RESULTADOS'"
+        ))
+        .await;
+    assert!(!notice.to_lowercase().contains("ganador"), "{notice}");
+});
+parity!(test_empate_total_no_declara_un_unico_ganador, |t| {
+    let b = base(&t).await;
+    let student = b.student(&t, "est-empate").await;
+    let a = b.team(&t, "Equipo A", &[student]).await;
+    let bb = b.team(&t, "Equipo B", &[]).await;
+    b.register(&t, a, "ACEPTADA").await;
+    b.register(&t, bb, "ACEPTADA").await;
+    let j1 = b.juror(&t, "j1").await;
+    // HCK-06: mismo promedio y mismos votos => empate, no un único ganador.
+    b.vote(&t, j1, a, "4.00").await;
+    b.vote(&t, j1, bb, "4.00").await;
+    t.exec(&format!(
+        "UPDATE hackathons SET estado='en_curso' WHERE id={}",
+        b.hack
+    ))
+    .await;
+    t.ok(
+        &t.admin,
+        "POST",
+        &format!("/api/hackathons/{}/estado", b.hack),
+        Some(json!({"estado":"finalizado"})),
+    )
+    .await;
+    let notice = t
+        .text(&format!(
+            "SELECT mensaje FROM notificaciones WHERE usuario_id={student} AND evento='HACKATON_RESULTADOS'"
+        ))
+        .await;
+    assert!(notice.contains("Equipo A"), "{notice}");
+    assert!(notice.contains("Equipo B"), "{notice}");
+    assert!(notice.contains("empate"), "{notice}");
+});
+parity!(test_un_estudiante_no_inscribe_dos_equipos_distintos, |t| {
+    let b = base(&t).await;
+    let student = b.student(&t, "est-dos-equipos").await;
+    let alfa = b.team(&t, "Alfa Doble", &[student]).await;
+    let beta = b.team(&t, "Beta Doble", &[student]).await;
+    let session = t.login("est-dos-equipos").await;
+    let url = format!("/api/hackathons/{}/inscribir", b.hack);
+    t.ok(&session, "POST", &url, Some(json!({"equipo_id":alfa})))
+        .await;
+    // HCK-08: un estudiante no inscribe dos equipos distintos en el mismo hackathon.
+    let (code, body) = t
+        .req(&session, "POST", &url, Some(json!({"equipo_id":beta})))
+        .await;
+    assert_eq!(code, 400, "{body}");
+    assert!(
+        body["error"].as_str().unwrap().contains("otro equipo"),
+        "{body}"
+    );
+    assert_eq!(
+        t.i64(&format!(
+            "SELECT count(*) FROM inscripciones_hackaton WHERE hackathon_id={}",
+            b.hack
+        ))
+        .await,
+        1
+    );
+});
+parity!(
+    test_profesor_con_integracion_activa_no_edita_equipo_de_otro_profesor,
+    |t| {
+        let b = base(&t).await;
+        let session_a = t.login("profe-hack").await;
+        let creado = t
+            .ok(
+                &session_a,
+                "POST",
+                &format!("/api/retos/{}/equipo", b.reto),
+                Some(json!({"nombre_equipo":"Equipo A","estudiantes":[]})),
+            )
+            .await;
+        let academic = creado["equipo_academico"].as_i64().unwrap();
+        // Profesor B con una integración aprobada sobre el mismo reto (RET-03).
+        let prof_b = t.user("profe-b", "PROFESOR").await;
+        let ib = t.integrate(b.reto, prof_b).await;
+        t.exec(&format!(
+            "UPDATE integraciones_academicas SET estado='aprobada' WHERE id={ib}"
+        ))
+        .await;
+        let session_b = t.login("profe-b").await;
+        assert_eq!(
+            t.status(
+                &session_b,
+                "POST",
+                &format!("/api/equipos-academicos/{academic}"),
+                Some(json!({"nombre_equipo":"x","estudiantes":[]}))
+            )
+            .await,
+            404
+        );
+        assert_eq!(
+            t.status(
+                &session_b,
+                "POST",
+                &format!("/api/equipos-academicos/{academic}/eliminar"),
+                None
+            )
+            .await,
+            404
+        );
+        assert!(
+            t.bool(&format!(
+                "SELECT EXISTS(SELECT 1 FROM equipos_reto_academico WHERE id={academic})"
+            ))
+            .await
+        );
+    }
+);
+parity!(
+    test_profesor_borrador_no_elimina_equipo_de_otro_profesor,
+    |t| {
+        let b = base(&t).await;
+        let session_a = t.login("profe-hack").await;
+        let creado = t
+            .ok(
+                &session_a,
+                "POST",
+                &format!("/api/retos/{}/equipo", b.reto),
+                Some(json!({"nombre_equipo":"Equipo A","estudiantes":[]})),
+            )
+            .await;
+        let academic = creado["equipo_academico"].as_i64().unwrap();
+        // Profesor B con solo un borrador tampoco elimina el equipo de A (RET-03).
+        let prof_b = t.user("profe-b", "PROFESOR").await;
+        t.integrate(b.reto, prof_b).await;
+        let session_b = t.login("profe-b").await;
+        assert_eq!(
+            t.status(
+                &session_b,
+                "POST",
+                &format!("/api/equipos-academicos/{academic}/eliminar"),
+                None
+            )
+            .await,
+            404
+        );
+        assert!(
+            t.bool(&format!(
+                "SELECT EXISTS(SELECT 1 FROM equipos_reto_academico WHERE id={academic})"
+            ))
+            .await
+        );
+    }
+);
+parity!(
+    test_crear_equipo_bloqueado_si_integracion_no_editable,
+    |t| {
+        let teacher = t.user("profe-ret6", "PROFESOR").await;
+        let reto = t.reto(COMPANY_USER, "aprobado", "reto").await;
+        let integration = t.integrate(reto, teacher).await;
+        // RET-06: aprobada sobre un reto que no está abierto/en curso no es editable.
+        t.exec(&format!(
+            "UPDATE integraciones_academicas SET estado='aprobada' WHERE id={integration}"
+        ))
+        .await;
+        let session = t.login("profe-ret6").await;
+        assert_eq!(
+            t.status(
+                &session,
+                "POST",
+                &format!("/api/retos/{reto}/equipo"),
+                Some(json!({"nombre_equipo":"x","estudiantes":[]}))
+            )
+            .await,
+            403
+        );
+        assert_eq!(
+            t.i64(&format!(
+                "SELECT count(*) FROM equipos_reto_academico WHERE reto_id={reto}"
+            ))
+            .await,
+            0
+        );
+    }
+);

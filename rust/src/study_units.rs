@@ -224,7 +224,11 @@ pub async fn set_active(
     Json(input): Json<ActiveInput>,
 ) -> Result<Json<Value>> {
     let user = manager(&state, &headers).await?;
-    let action = if input.activo { "activar" } else { "desactivar" };
+    let action = if input.activo {
+        "activar"
+    } else {
+        "desactivar"
+    };
     ensure_scope(&state.pool, &user, id, action).await?;
     let code: Option<String> = sqlx::query_scalar(
         "UPDATE unidades_estudio SET activo=$2,actualizado_en=now() WHERE id=$1 RETURNING codigo",

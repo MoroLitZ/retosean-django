@@ -191,7 +191,7 @@ parity!(test_detecta_rol_invalido, |t| {
     assert!(
         body["invalidas"][0]["errores"]
             .to_string()
-            .contains("Rol no valido"),
+            .contains("Rol no válido"),
         "{body}"
     );
 });

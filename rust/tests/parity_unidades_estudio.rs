@@ -172,51 +172,45 @@ async fn scope_setup(t: &Ctx) -> (i64, i64, i64) {
     let ajena = t.i64(&format!("INSERT INTO unidades_estudio(codigo,nombre,programa_id,periodo,ciclo,activo,creado_en,actualizado_en) VALUES('UNI-ADM','Unidad ajena',{ajeno},'2026-2','2',true,now(),now()) RETURNING id")).await;
     (unidad, ajena, negocios)
 }
-parity!(
-    test_profesor_puede_desactivar_unidad_de_su_facultad,
-    |t| {
-        let (unidad, ..) = scope_setup(&t).await;
-        t.user("profe-ing", "PROFESOR").await;
-        let session = t.login("profe-ing").await;
-        t.ok(
+parity!(test_profesor_puede_desactivar_unidad_de_su_facultad, |t| {
+    let (unidad, ..) = scope_setup(&t).await;
+    t.user("profe-ing", "PROFESOR").await;
+    let session = t.login("profe-ing").await;
+    t.ok(
+        &session,
+        "POST",
+        &format!("/api/unidades/{unidad}/activo"),
+        Some(json!({"activo":false})),
+    )
+    .await;
+    assert!(
+        !t.bool(&format!(
+            "SELECT activo FROM unidades_estudio WHERE id={unidad}"
+        ))
+        .await
+    );
+});
+parity!(test_profesor_no_desactiva_unidad_de_otra_facultad, |t| {
+    let (_, ajena, _) = scope_setup(&t).await;
+    t.user("profe-ing", "PROFESOR").await;
+    let session = t.login("profe-ing").await;
+    assert_eq!(
+        t.status(
             &session,
             "POST",
-            &format!("/api/unidades/{unidad}/activo"),
-            Some(json!({"activo":false})),
+            &format!("/api/unidades/{ajena}/activo"),
+            Some(json!({"activo":false}))
         )
-        .await;
-        assert!(
-            !t.bool(&format!(
-                "SELECT activo FROM unidades_estudio WHERE id={unidad}"
-            ))
-            .await
-        );
-    }
-);
-parity!(
-    test_profesor_no_desactiva_unidad_de_otra_facultad,
-    |t| {
-        let (_, ajena, _) = scope_setup(&t).await;
-        t.user("profe-ing", "PROFESOR").await;
-        let session = t.login("profe-ing").await;
-        assert_eq!(
-            t.status(
-                &session,
-                "POST",
-                &format!("/api/unidades/{ajena}/activo"),
-                Some(json!({"activo":false}))
-            )
-            .await,
-            403
-        );
-        assert!(
-            t.bool(&format!(
-                "SELECT activo FROM unidades_estudio WHERE id={ajena}"
-            ))
-            .await
-        );
-    }
-);
+        .await,
+        403
+    );
+    assert!(
+        t.bool(&format!(
+            "SELECT activo FROM unidades_estudio WHERE id={ajena}"
+        ))
+        .await
+    );
+});
 parity!(test_profesor_no_crea_unidad_en_otra_facultad, |t| {
     let (_, _, negocios) = scope_setup(&t).await;
     let ajeno = t
@@ -255,42 +249,39 @@ parity!(test_profesor_no_crea_unidad_en_otra_facultad, |t| {
         0
     );
 });
-parity!(
-    test_profesor_no_editar_unidad_de_otra_facultad,
-    |t| {
-        let (_, ajena, negocios) = scope_setup(&t).await;
-        let ajeno = t
-            .i64(&format!(
-                "SELECT id FROM programas WHERE facultad_id={negocios}"
-            ))
-            .await
-            .to_string();
-        t.user("profe-ing", "PROFESOR").await;
-        let session = t.login("profe-ing").await;
-        let (code, _) = multipart(
-            &t.app,
-            &session,
-            &format!("/api/unidades/{ajena}"),
-            &[
-                ("codigo", "UNI-ADM-MOD"),
-                ("nombre", "Unidad modificada"),
-                ("programa", ajeno.as_str()),
-                ("periodo", "2026-2"),
-                ("ciclo", "2"),
-            ],
-            &[],
-        )
-        .await;
-        assert_eq!(code, 403);
-        assert_eq!(
-            t.text(&format!(
-                "SELECT codigo FROM unidades_estudio WHERE id={ajena}"
-            ))
-            .await,
-            "UNI-ADM"
-        );
-    }
-);
+parity!(test_profesor_no_editar_unidad_de_otra_facultad, |t| {
+    let (_, ajena, negocios) = scope_setup(&t).await;
+    let ajeno = t
+        .i64(&format!(
+            "SELECT id FROM programas WHERE facultad_id={negocios}"
+        ))
+        .await
+        .to_string();
+    t.user("profe-ing", "PROFESOR").await;
+    let session = t.login("profe-ing").await;
+    let (code, _) = multipart(
+        &t.app,
+        &session,
+        &format!("/api/unidades/{ajena}"),
+        &[
+            ("codigo", "UNI-ADM-MOD"),
+            ("nombre", "Unidad modificada"),
+            ("programa", ajeno.as_str()),
+            ("periodo", "2026-2"),
+            ("ciclo", "2"),
+        ],
+        &[],
+    )
+    .await;
+    assert_eq!(code, 403);
+    assert_eq!(
+        t.text(&format!(
+            "SELECT codigo FROM unidades_estudio WHERE id={ajena}"
+        ))
+        .await,
+        "UNI-ADM"
+    );
+});
 parity!(test_profesor_sin_facultad_no_gestiona, |t| {
     let (unidad, ..) = scope_setup(&t).await;
     let profe = t.user("profe-sf", "PROFESOR").await;
@@ -365,8 +356,10 @@ async fn ambiguous(t: &Ctx) -> i64 {
     let negocios = t
         .i64("INSERT INTO facultades(nombre,codigo) VALUES('Negocios','NEG') RETURNING id")
         .await;
-    t.exec("INSERT INTO programas(nombre,facultad_id,nivel) VALUES('Sistemas de Informacion',1,'')")
-        .await;
+    t.exec(
+        "INSERT INTO programas(nombre,facultad_id,nivel) VALUES('Sistemas de Informacion',1,'')",
+    )
+    .await;
     t.exec(&format!("INSERT INTO programas(nombre,facultad_id,nivel) VALUES('Sistemas de Informacion',{negocios},'')")).await;
     negocios
 }

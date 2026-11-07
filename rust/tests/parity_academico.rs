@@ -58,21 +58,18 @@ parity!(test_no_emite_a_postulaciones_rechazadas, |t| {
     );
 });
 // CIE-01: rechazado o retirado no se certifica aunque haya subido un entregable.
-parity!(
-    test_no_emite_a_estudiante_rechazado_con_entregable,
-    |t| {
-        let (reto, _, _, _, rejected) = setup(&t).await;
-        t.deliverable(reto, rejected).await;
-        issue(&t, reto).await;
-        assert_eq!(
-            t.i64(&format!(
-                "SELECT count(*) FROM certificados WHERE usuario_id={rejected}"
-            ))
-            .await,
-            0
-        );
-    }
-);
+parity!(test_no_emite_a_estudiante_rechazado_con_entregable, |t| {
+    let (reto, _, _, _, rejected) = setup(&t).await;
+    t.deliverable(reto, rejected).await;
+    issue(&t, reto).await;
+    assert_eq!(
+        t.i64(&format!(
+            "SELECT count(*) FROM certificados WHERE usuario_id={rejected}"
+        ))
+        .await,
+        0
+    );
+});
 parity!(test_no_emite_si_el_reto_no_esta_finalizado, |t| {
     let (reto, ..) = setup(&t).await;
     t.exec(&format!(

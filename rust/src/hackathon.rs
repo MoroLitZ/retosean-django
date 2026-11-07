@@ -39,7 +39,11 @@ async fn integrated(tx: &mut Transaction<'_, Postgres>, reto: i64, user: &User) 
 /// `IntegracionAcademica.puede_editar_profesor`: the professor owns an integration
 /// on the reto whose configuration is still editable (borrador/rechazada, or the
 /// reto open/running). Returns the integration that owns the new academic team.
-async fn own_integration(tx: &mut Transaction<'_, Postgres>, reto: i64, user: &User) -> Result<i64> {
+async fn own_integration(
+    tx: &mut Transaction<'_, Postgres>,
+    reto: i64,
+    user: &User,
+) -> Result<i64> {
     if user.rol != "PROFESOR" {
         return Err(AppError::forbidden());
     }
@@ -125,7 +129,11 @@ async fn window(tx: &mut Transaction<'_, Postgres>, id: i64, kind: &str) -> Resu
     if allowed {
         Ok(())
     } else {
-        Err(AppError::bad("La etapa no está abierta"))
+        Err(AppError::bad(if kind == "presentacion" {
+            "La etapa de presentación no está abierta"
+        } else {
+            "La etapa no está abierta"
+        }))
     }
 }
 /// crear_equipo_academico: the academic team plus its operative mirror; students notified.

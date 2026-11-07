@@ -213,7 +213,7 @@ async fn validate(
             r.errores.push("El rol es obligatorio.".into());
         } else if !ROLES.contains(&rol.as_str()) {
             r.errores
-                .push(format!("Rol no valido. Usa uno de: {}.", ROLES.join(", ")));
+                .push(format!("Rol no válido. Usa uno de: {}.", ROLES.join(", ")));
         }
         let password = r.get("password");
         if !password.is_empty() && (password.chars().count() < 12 || password.len() > 1024) {
