@@ -191,3 +191,98 @@ parity!(test_otro_profesor_no_publica, |t| {
     );
     assert!(!published(&t, deliverable).await);
 });
+
+// IntegracionNoAprobadaTests (F2): a draft or in-review integration gives no
+// authority over the reto's deliverables.
+parity!(
+    test_integracion_sin_aprobar_no_autoriza_a_calificar_ni_publicar,
+    |t| {
+        let (reto, deliverable, _) = setup(&t, "borrador").await;
+        let session = t.login("profe-eval").await;
+        assert_eq!(
+            t.status(
+                &session,
+                "POST",
+                &format!("/api/entregables/{deliverable}/calificar"),
+                Some(json!({"nota":"4"}))
+            )
+            .await,
+            403
+        );
+        assert_eq!(
+            t.status(
+                &session,
+                "POST",
+                &format!("/api/retos/{reto}/publicar-calificaciones"),
+                Some(json!({}))
+            )
+            .await,
+            403
+        );
+        assert!(
+            t.bool(&format!(
+                "SELECT nota IS NULL FROM entregables WHERE id={deliverable}"
+            ))
+            .await
+        );
+    }
+);
+parity!(test_integracion_en_revision_tampoco_autoriza, |t| {
+    let (_, deliverable, _) = setup(&t, "en_revision").await;
+    let session = t.login("profe-eval").await;
+    assert_eq!(
+        t.status(
+            &session,
+            "POST",
+            &format!("/api/entregables/{deliverable}/calificar"),
+            Some(json!({"nota":"4"}))
+        )
+        .await,
+        403
+    );
+});
+
+// PuntajesQueNoCabenTests (F9): numeric(6,2) overflow is a 400, never a 500.
+parity!(test_criterio_mayor_a_9999_99_se_rechaza, |t| {
+    let (reto, _, _) = setup(&t, "aprobada").await;
+    let session = t.login("profe-eval").await;
+    let (code, body) = t
+        .req(
+            &session,
+            "POST",
+            &format!("/api/retos/{reto}/rubrica"),
+            Some(json!({"nombre":"R","criterios":[{"nombre":"A","puntaje_maximo":"10000.00"}]})),
+        )
+        .await;
+    assert_eq!(code, 400, "{body}");
+    assert_eq!(
+        t.i64(&format!(
+            "SELECT count(*) FROM evaluacion_rubrica WHERE reto_id={reto}"
+        ))
+        .await,
+        0
+    );
+});
+parity!(test_suma_de_rubrica_que_desborda_la_nota_se_rechaza, |t| {
+    let (reto, deliverable, teacher) = setup(&t, "aprobada").await;
+    let session = t.login("profe-eval").await;
+    // Two maximal criteria: each fits numeric(6,2) but the 19999.98 sum does not.
+    let rubric = t.i64(&format!("INSERT INTO evaluacion_rubrica(reto_id,nombre,descripcion,activa,creada_por_id,creada_en) VALUES({reto},'Grande','',true,{teacher},now()) RETURNING id")).await;
+    let c1 = t.i64(&format!("INSERT INTO evaluacion_criteriorubrica(rubrica_id,nombre,descripcion,puntaje_maximo,orden) VALUES({rubric},'A','',9999.99,1) RETURNING id")).await;
+    let c2 = t.i64(&format!("INSERT INTO evaluacion_criteriorubrica(rubrica_id,nombre,descripcion,puntaje_maximo,orden) VALUES({rubric},'B','',9999.99,2) RETURNING id")).await;
+    let code = t
+        .status(
+            &session,
+            "POST",
+            &format!("/api/entregables/{deliverable}/calificar"),
+            Some(json!({"rubrica_id":rubric,"criterios":{c1.to_string():"9999.99",c2.to_string():"9999.99"}})),
+        )
+        .await;
+    assert_eq!(code, 400, "the overflowing sum must be a 400");
+    assert!(
+        t.bool(&format!(
+            "SELECT nota IS NULL FROM entregables WHERE id={deliverable}"
+        ))
+        .await
+    );
+});

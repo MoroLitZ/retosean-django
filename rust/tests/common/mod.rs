@@ -197,6 +197,35 @@ pub async fn multipart(
         serde_json::from_slice(&bytes).unwrap_or(Value::Null),
     )
 }
+/// POST a raw body with a chosen content type (e.g. a malformed multipart).
+pub async fn post_raw(
+    app: &Router,
+    session: &Session,
+    path: &str,
+    content_type: &str,
+    body: &'static [u8],
+) -> (StatusCode, Value) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(path)
+                .header("cookie", &session.cookie)
+                .header("x-csrf-token", &session.csrf)
+                .header("content-type", content_type)
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
+}
 pub async fn login_with(app: &Router, name: &str, password: &str) -> (StatusCode, Session) {
     let (status, body, cookie) = request(
         app,
@@ -407,6 +436,7 @@ where
         pool: pool.clone(),
         config,
         password_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
+        login_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
     });
     let ctx = Ctx {
         admin: login(&app, "admin.demo").await,

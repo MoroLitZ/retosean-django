@@ -47,7 +47,7 @@ pub async fn set_budget(
     let id: i64=sqlx::query_scalar("INSERT INTO presupuestos(reto_id,monto_total,alerta_80_enviada,creado_en,actualizado_en) VALUES($1,$2,false,now(),now()) ON CONFLICT(reto_id) DO UPDATE SET monto_total=excluded.monto_total,actualizado_en=now() RETURNING id").bind(reto).bind(amount).fetch_one(&mut *tx).await?;
     check_threshold(&mut tx, id).await?;
     tx.commit().await?;
-    Ok(Json(json!({"id":id,"monto_total":amount.to_string()})))
+    Ok(Json(json!({"id":id,"monto_total":format!("{amount:.2}")})))
 }
 #[derive(Deserialize)]
 pub struct ExpenseInput {
@@ -102,7 +102,7 @@ pub async fn expense(
         .bind(id).bind(&input.categoria).bind(amount).bind(estado).bind(&input.descripcion).bind(user.id).fetch_one(&mut *tx).await?;
     check_threshold(&mut tx, id).await?;
     tx.commit().await?;
-    Ok(Json(json!({"id":gasto,"monto":amount.to_string()})))
+    Ok(Json(json!({"id":gasto,"monto":format!("{amount:.2}")})))
 }
 /// (total, comprometido, ejecutado) of a budget.
 async fn amounts(
@@ -143,6 +143,14 @@ async fn check_threshold(tx: &mut Transaction<'_, Postgres>, id: i64) -> Result<
         pct.round_dp(1),
         total - committed - executed
     );
+    // The dedupe key is versioned: after the alert re-arms (budget increased or an
+    // expense removed), the next crossing notifies again instead of being deduped.
+    let round: i64 = sqlx::query_scalar(
+        "SELECT count(DISTINCT clave_dedupe) FROM notificaciones WHERE clave_dedupe LIKE $1",
+    )
+    .bind(format!("presupuesto:{id}:80:%"))
+    .fetch_one(&mut **tx)
+    .await?;
     let mut recipients: Vec<i64> = sqlx::query_scalar(
         "SELECT id FROM usuarios WHERE is_active AND (is_superuser OR rol='ADMIN')",
     )
@@ -157,7 +165,7 @@ async fn check_threshold(tx: &mut Transaction<'_, Postgres>, id: i64) -> Result<
             recipient,
             "PRESUPUESTO_80",
             &message,
-            &format!("presupuesto:{id}:80"),
+            &format!("presupuesto:{id}:80:{round}"),
         )
         .await?;
     }
@@ -238,11 +246,11 @@ pub async fn summary(
     Ok(Json(json!({
         "reto": reto,
         "gastos": expenses,
-        "total": total.to_string(),
-        "comprometido": committed.to_string(),
-        "ejecutado": executed.to_string(),
-        "asignado": (committed + executed).to_string(),
-        "disponible": (total - committed - executed).to_string(),
+        "total": format!("{total:.2}"),
+        "comprometido": format!("{committed:.2}"),
+        "ejecutado": format!("{executed:.2}"),
+        "asignado": format!("{:.2}", committed + executed),
+        "disponible": format!("{:.2}", total - committed - executed),
         "porcentaje": pct.round_dp(2).to_string(),
         "alerta": pct >= Decimal::from(80),
     })))

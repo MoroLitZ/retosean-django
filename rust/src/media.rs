@@ -284,10 +284,11 @@ async fn read_document(mut multipart: Multipart) -> Result<Upload> {
                     .await
                     .map_err(|_| AppError::bad("Fecha inválida"))?;
                 if !text.is_empty() {
-                    issued = Some(
-                        text.parse::<chrono::NaiveDate>()
-                            .map_err(|_| AppError::bad("Fecha de expedición inválida"))?,
-                    );
+                    let date = text
+                        .parse::<chrono::NaiveDate>()
+                        .map_err(|_| AppError::bad("Fecha de expedición inválida"))?;
+                    domain::validate_date(Some(date), "Fecha de expedición")?;
+                    issued = Some(date);
                 }
             }
             // The expiry comes from the catalog (fecha_vencimiento_para), never the client.
@@ -529,22 +530,34 @@ pub async fn reto_files(
     multipart: Multipart,
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, true).await?;
+    // Authorize before reading the body: a rejected upload never reaches memory.
+    let row: Option<(i64, String)> =
+        sqlx::query_as("SELECT empresa_id,estado FROM retos WHERE id=$1 AND eliminado_en IS NULL")
+            .bind(reto)
+            .fetch_optional(&state.pool)
+            .await?;
+    let (owner, estado) = row.ok_or_else(AppError::not_found)?;
+    let editable = |estado: &str| {
+        user.rol == "EMPRESA" && owner == user.id && ["borrador", "rechazado"].contains(&estado)
+    };
+    if !user.admin() && !editable(&estado) {
+        return Err(AppError::forbidden());
+    }
     let (_, files) = read_with_files(multipart, "archivos").await?;
     if files.is_empty() {
         return Err(AppError::bad("Adjunta al menos un archivo"));
     }
     let mut tx = state.pool.begin().await?;
-    let row: Option<(i64, String)> = sqlx::query_as(
-        "SELECT empresa_id,estado FROM retos WHERE id=$1 AND eliminado_en IS NULL FOR UPDATE",
+    // Re-check under the row lock: the reto may have changed while reading.
+    let row: Option<String> = sqlx::query_scalar(
+        "SELECT estado FROM retos WHERE id=$1 AND eliminado_en IS NULL AND empresa_id=$2 FOR UPDATE",
     )
     .bind(reto)
+    .bind(owner)
     .fetch_optional(&mut *tx)
     .await?;
-    let (owner, estado) = row.ok_or_else(AppError::not_found)?;
-    let editable = user.rol == "EMPRESA"
-        && owner == user.id
-        && ["borrador", "rechazado"].contains(&estado.as_str());
-    if !user.admin() && !editable {
+    let current = row.ok_or_else(AppError::not_found)?;
+    if !user.admin() && !editable(&current) {
         return Err(AppError::forbidden());
     }
     let saved = save_attachments(&state, &files).await?;

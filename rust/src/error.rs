@@ -31,6 +31,16 @@ impl From<sqlx::Error> for AppError {
             if db.is_foreign_key_violation() || db.is_check_violation() {
                 return Self::bad("Datos relacionados inválidos");
             }
+            // Bad client data reaching a column: NUL/invalid bytes (22021), numeric
+            // out of range (22003), datetime overflow (22008), bad datetime (22007).
+            if matches!(
+                db.code().as_deref(),
+                Some("22021") | Some("22003") | Some("22008") | Some("22007")
+            ) {
+                return Self::bad(
+                    "Datos inválidos: un valor está fuera de rango o tiene caracteres no permitidos",
+                );
+            }
         }
         tracing::error!(%error, "database operation failed");
         Self(

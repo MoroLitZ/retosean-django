@@ -191,10 +191,7 @@ async fn validate(
         }
         if email.is_empty() {
             r.errores.push("El correo es obligatorio.".into());
-        } else if email.len() > 254
-            || email.split('@').filter(|p| !p.is_empty()).count() != 2
-            || !email.split('@').nth(1).unwrap_or("").contains('.')
-        {
+        } else if email.len() > 254 || !crate::domain::valid_email(&email) {
             r.errores
                 .push("El correo no tiene un formato valido.".into());
         } else if emails_seen.contains(&email.to_lowercase()) {

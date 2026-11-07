@@ -139,6 +139,23 @@ async fn log_access(
         .bind(user).bind(identifier).bind(action).bind(client_ip(headers)).execute(&state.pool).await?;
     Ok(())
 }
+/// Waits briefly for a password-hashing slot instead of failing at once.
+pub(crate) async fn hash_slot(
+    slots: &std::sync::Arc<tokio::sync::Semaphore>,
+) -> Result<tokio::sync::OwnedSemaphorePermit> {
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        slots.clone().acquire_owned(),
+    )
+    .await
+    {
+        Ok(Ok(permit)) => Ok(permit),
+        _ => Err(AppError(
+            StatusCode::TOO_MANY_REQUESTS,
+            "Servidor ocupado. Intenta de nuevo".into(),
+        )),
+    }
+}
 pub async fn login(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -147,7 +164,20 @@ pub async fn login(
     if input.username.len() > 150 || input.password.len() > 1024 || input.username.is_empty() {
         return Err(AppError::bad("Credenciales inválidas"));
     }
-    let subject = digest(&input.username.to_lowercase());
+    // Resolve the account first: username and email then share one counter.
+    let record: Option<(i64, String, String)> = sqlx::query_as(
+        "SELECT id,username,password FROM usuarios WHERE is_active AND activo AND (username=$1 OR (strpos($1,'@')>0 AND lower(email)=lower($1) AND (SELECT count(*) FROM usuarios WHERE lower(email)=lower($1))=1)) ORDER BY username=$1 DESC LIMIT 1",
+    )
+    .bind(&input.username)
+    .fetch_optional(&state.pool)
+    .await?;
+    let subject = match &record {
+        Some((id, ..)) => digest(&format!("cuenta:{id}")),
+        None => digest(&input.username.to_lowercase()),
+    };
+    // A server too busy to hash rejects without recording an attempt; no DB
+    // connection is held while waiting for a slot.
+    let permit = hash_slot(&state.login_slots).await?;
     sqlx::query("DELETE FROM rust_login_attempts WHERE attempted_at < now()-interval '10 minutes'")
         .execute(&state.pool)
         .await?;
@@ -167,31 +197,18 @@ pub async fn login(
             "Demasiados intentos. Espera 10 minutos".into(),
         ));
     }
+    // Recorded before verifying, so parallel guesses cannot all pass the check
+    // above; a successful login clears the counter, so only failures remain.
     sqlx::query("INSERT INTO rust_login_attempts(subject) VALUES($1)")
         .bind(&subject)
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
-    let record: Option<(i64, String)> = sqlx::query_as(
-        "SELECT id,password FROM usuarios WHERE is_active AND activo AND (username=$1 OR (strpos($1,'@')>0 AND lower(email)=lower($1) AND (SELECT count(*) FROM usuarios WHERE lower(email)=lower($1))=1)) ORDER BY username=$1 DESC LIMIT 1",
-    )
-    .bind(&input.username)
-    .fetch_optional(&state.pool)
-    .await?;
-    let (id, hash) = record.unwrap_or((
+    let (id, account, hash) = record.unwrap_or((
         0,
+        String::new(),
         "pbkdf2_sha256$1000000$dummy$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=".into(),
     ));
-    let permit = state
-        .password_slots
-        .clone()
-        .try_acquire_owned()
-        .map_err(|_| {
-            AppError(
-                StatusCode::TOO_MANY_REQUESTS,
-                "Servidor ocupado. Intenta de nuevo".into(),
-            )
-        })?;
     let username = input.username.clone();
     let valid = tokio::task::spawn_blocking(move || {
         let _permit = permit;
@@ -206,9 +223,9 @@ pub async fn login(
             "Usuario o contraseña incorrectos".into(),
         ));
     }
-    let account: String = sqlx::query_scalar("SELECT username FROM usuarios WHERE id=$1")
-        .bind(id)
-        .fetch_one(&state.pool)
+    sqlx::query("DELETE FROM rust_login_attempts WHERE subject=$1")
+        .bind(&subject)
+        .execute(&state.pool)
         .await?;
     log_access(&state, Some(id), &account, "LOGIN", &headers).await?;
     start_session(&state, id).await

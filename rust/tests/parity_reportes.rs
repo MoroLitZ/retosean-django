@@ -382,3 +382,90 @@ parity!(test_fallo_de_envio_conserva_el_reporte_y_lo_marca, |t| {
         .await;
     assert!(history.to_string().contains("SMTP caido"));
 });
+
+// ReportesDelProfesorTests (F3): a professor's participacion/evaluacion reports
+// only cover retos with their approved/published integration; admins see all.
+async fn two_retos(t: &Ctx) -> (i64, i64, Session) {
+    let own = t.reto(COMPANY_USER, "aprobado", "reto").await;
+    t.exec(&format!(
+        "UPDATE retos SET titulo='Reto del profesor' WHERE id={own}"
+    ))
+    .await;
+    let other = t.reto(COMPANY_USER, "aprobado", "reto").await;
+    t.exec(&format!(
+        "UPDATE retos SET titulo='Reto ajeno' WHERE id={other}"
+    ))
+    .await;
+    let teacher = t.user("prof-scope", "PROFESOR").await;
+    t.integrate(own, teacher).await;
+    // A second integration still in review must not count (F2 states).
+    let draft = t.integrate(other, teacher).await;
+    t.exec(&format!(
+        "UPDATE integraciones_academicas SET estado='en_revision' WHERE id={draft}"
+    ))
+    .await;
+    t.accept(own, STUDENT).await;
+    t.accept(other, STUDENT).await;
+    t.deliverable(own, STUDENT).await;
+    t.deliverable(other, STUDENT).await;
+    (own, other, t.login("prof-scope").await)
+}
+parity!(
+    test_profesor_solo_reporta_los_retos_de_sus_integraciones,
+    |t| {
+        let (_, _, session) = two_retos(&t).await;
+        let data = t
+            .ok(
+                &session,
+                "POST",
+                "/api/reportes/vista-previa",
+                Some(json!({"reporte":"participacion","periodo":"todo"})),
+            )
+            .await;
+        assert_eq!(data["total"], 1, "{data}");
+        assert!(data.to_string().contains("Reto del profesor"));
+        assert!(!data.to_string().contains("Reto ajeno"));
+        let data = t
+            .ok(
+                &session,
+                "POST",
+                "/api/reportes/vista-previa",
+                Some(json!({"reporte":"evaluacion","periodo":"todo"})),
+            )
+            .await;
+        assert_eq!(data["total"], 1, "{data}");
+        assert!(!data.to_string().contains("Reto ajeno"), "{data}");
+        // The admin keeps the global view.
+        let data = preview(&t, "participacion", json!([])).await;
+        assert!(data["total"].as_i64().unwrap() >= 2, "{data}");
+    }
+);
+parity!(test_profesor_genera_y_envia_el_reporte_acotado, |t| {
+    let (_, _, session) = two_retos(&t).await;
+    let (code, bytes) = post_bytes(
+        &t.app,
+        &session,
+        "/api/reportes/generar",
+        json!({"reporte":"participacion","formato":"EXCEL","periodo":"todo"}),
+    )
+    .await;
+    assert_eq!(code, 200);
+    assert!(bytes.starts_with(b"PK"));
+    let (user, total): (i64, i64) = sqlx::query_as("SELECT usuario_id,(filtros->>'total_registros')::bigint FROM reportes_generados ORDER BY id DESC LIMIT 1")
+        .fetch_one(&t.pool)
+        .await
+        .unwrap();
+    let teacher = t
+        .i64("SELECT id FROM usuarios WHERE username='prof-scope'")
+        .await;
+    assert_eq!((user, total), (teacher, 1));
+    let (code, body) = t
+        .req(
+            &session,
+            "POST",
+            "/api/reportes/enviar",
+            Some(json!({"reporte":"evaluacion","formato":"PDF","periodo":"todo"})),
+        )
+        .await;
+    assert_eq!(code, 200, "{body}");
+});

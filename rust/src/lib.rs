@@ -44,7 +44,10 @@ use sqlx::PgPool;
 pub struct AppState {
     pub pool: PgPool,
     pub config: config::Config,
+    /// Hashing slots for registration/reset/profile; login has its own pool so a
+    /// login flood cannot block account creation.
     pub password_slots: std::sync::Arc<tokio::sync::Semaphore>,
+    pub login_slots: std::sync::Arc<tokio::sync::Semaphore>,
 }
 
 pub fn router(state: AppState) -> Router {

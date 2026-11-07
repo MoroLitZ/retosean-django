@@ -89,6 +89,13 @@ impl ChallengeInput {
         {
             return Err(AppError::bad("Revisa el orden de las fechas"));
         }
+        for (date, label) in [
+            (self.fecha_inicio_tentativa, "Fecha de inicio"),
+            (self.fecha_fin_tentativa, "Fecha de fin"),
+            (self.fecha_limite_postulacion, "Fecha límite de postulación"),
+        ] {
+            domain::validate_date(date, label)?;
+        }
         Ok(())
     }
 }
@@ -149,6 +156,20 @@ pub async fn edit_challenge(
     let (owner, previous) = record.ok_or_else(AppError::not_found)?;
     if user.id != owner || user.rol != "EMPRESA" {
         return Err(AppError::forbidden());
+    }
+    // solo_empresa_con_documentos: the HU00 gate of crear_reto also applies to edits.
+    let company: Option<i64> = sqlx::query_scalar("SELECT id FROM empresas WHERE usuario_id=$1")
+        .bind(user.id)
+        .fetch_optional(&mut *tx)
+        .await?;
+    let company =
+        company.ok_or_else(|| AppError::bad("No tienes un perfil de empresa asociado."))?;
+    let reasons = crate::permissions::operating_reasons(&mut tx, company).await?;
+    if !reasons.is_empty() {
+        return Err(AppError::bad(format!(
+            "Tu empresa aún no puede publicar retos: {}",
+            reasons.join(" ")
+        )));
     }
     if !["borrador", "rechazado"].contains(&previous.as_str()) {
         return Err(AppError::bad(
@@ -226,6 +247,22 @@ pub async fn challenge_state(
             {
                 return Err(AppError::bad(format!("Completa el campo {name}")));
             }
+        }
+        // enviar_revision is also solo_empresa_con_documentos: the HU00 gate applies.
+        let company: Option<i64> =
+            sqlx::query_scalar("SELECT id FROM empresas WHERE usuario_id=$1")
+                .bind(owner)
+                .fetch_optional(&mut *tx)
+                .await?;
+        let reasons = match company {
+            Some(company) => crate::permissions::operating_reasons(&mut tx, company).await?,
+            None => vec!["La empresa no tiene perfil registrado.".to_string()],
+        };
+        if !reasons.is_empty() {
+            return Err(AppError::bad(format!(
+                "Tu empresa aún no puede publicar retos: {}",
+                reasons.join(" ")
+            )));
         }
     }
     if input.estado == "rechazado" && input.comentario.trim().is_empty() {
@@ -620,7 +657,7 @@ pub async fn application_state(
     let row: Option<(String,i64,i64,i64)> = sqlx::query_as("SELECT p.estado,p.estudiante_id,p.reto_id,r.empresa_id FROM postulaciones p JOIN retos r ON r.id=p.reto_id WHERE p.id=$1 AND r.eliminado_en IS NULL FOR UPDATE OF p,r").bind(id).fetch_optional(&mut *tx).await?;
     let (from, student, challenge, owner) = row.ok_or_else(AppError::not_found)?;
     let teacher: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2)",
+        "SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2 AND estado IN ('aprobada','publicada'))",
     )
     .bind(challenge)
     .bind(user.id)

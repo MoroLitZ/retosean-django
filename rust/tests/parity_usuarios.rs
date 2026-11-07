@@ -472,3 +472,212 @@ parity!(test_correo_con_clave_incorrecta_falla, |t| {
     ana(&t).await;
     assert_eq!(login_with(&t.app, "ana@example.com", "otra").await.0, 401);
 });
+
+// RegistroProfesorPendienteTests (F1)
+parity!(
+    test_registro_profesor_queda_inactivo_y_sin_sesion_hasta_aprobar,
+    |t| {
+        let data = json!({"tipo":"academico","rol":"PROFESOR","username":"profe.nuevo","email":"profe.nuevo@universidadean.edu.co","password":"Clave-Segura-2026","password2":"Clave-Segura-2026","first_name":"Profe","last_name":"Nuevo","facultad_id":FACULTY,"especialidad":"Otra"});
+        let (code, body, cookie) =
+            request(&t.app, &t.anon, "POST", "/api/registro", Some(data)).await;
+        assert_eq!(code, 200, "{body}");
+        assert_eq!(body["pendiente_aprobacion"], true, "{body}");
+        assert!(
+            body["mensaje"]
+                .as_str()
+                .unwrap()
+                .contains("pendiente de aprobación"),
+            "{body}"
+        );
+        assert!(cookie.is_none(), "a pending professor gets no session");
+        let id = t
+            .i64("SELECT id FROM usuarios WHERE username='profe.nuevo'")
+            .await;
+        assert!(
+            t.bool(&format!(
+                "SELECT NOT activo AND NOT is_active FROM usuarios WHERE id={id}"
+            ))
+            .await
+        );
+        // Cannot log in until an administrator approves the account (user-status endpoint).
+        assert_eq!(
+            login_with(&t.app, "profe.nuevo", "Clave-Segura-2026")
+                .await
+                .0,
+            401
+        );
+        t.ok(
+            &t.admin,
+            "POST",
+            &format!("/api/usuarios/{id}/estado"),
+            Some(json!({"activo":true})),
+        )
+        .await;
+        assert_eq!(
+            login_with(&t.app, "profe.nuevo", "Clave-Segura-2026")
+                .await
+                .0,
+            200
+        );
+    }
+);
+parity!(test_registro_estudiante_sigue_activo_y_con_sesion, |t| {
+    let data = json!({"tipo":"academico","rol":"ESTUDIANTE","username":"est.nueva","email":"est.nueva@universidadean.edu.co","password":"Clave-Segura-2026","password2":"Clave-Segura-2026","programa_id":PROGRAM,"semestre":3});
+    let (code, body, cookie) = request(&t.app, &t.anon, "POST", "/api/registro", Some(data)).await;
+    assert_eq!(code, 200, "{body}");
+    assert!(body["csrf"].as_str().is_some(), "{body}");
+    assert!(cookie.is_some(), "students still open a session");
+    assert!(
+        t.bool("SELECT activo AND is_active FROM usuarios WHERE username='est.nueva'")
+            .await
+    );
+});
+
+// ThrottlingDeLoginTests (F4)
+parity!(
+    test_fallos_por_correo_y_usuario_comparten_un_contador,
+    |t| {
+        let id = t.user("compartido", "ESTUDIANTE").await;
+        t.exec(&format!(
+            "UPDATE usuarios SET email='compartido@ean.edu.co' WHERE id={id}"
+        ))
+        .await;
+        for _ in 0..5 {
+            assert_eq!(login_with(&t.app, "compartido", "mala-clave").await.0, 401);
+        }
+        for _ in 0..5 {
+            assert_eq!(
+                login_with(&t.app, "compartido@ean.edu.co", "mala-clave")
+                    .await
+                    .0,
+                401
+            );
+        }
+        // Ten failed attempts across both identifiers throttle the account itself.
+        assert_eq!(
+            login_with(&t.app, "compartido", "RetosEAN2026").await.0,
+            429
+        );
+    }
+);
+parity!(test_el_exito_limpia_los_intentos_fallidos, |t| {
+    t.user("limpio", "ESTUDIANTE").await;
+    for _ in 0..9 {
+        assert_eq!(login_with(&t.app, "limpio", "mala-clave").await.0, 401);
+    }
+    // Nine failures do not throttle; a success clears the counter.
+    assert_eq!(login_with(&t.app, "limpio", "RetosEAN2026").await.0, 200);
+    for _ in 0..9 {
+        assert_eq!(login_with(&t.app, "limpio", "mala-clave").await.0, 401);
+    }
+    assert_eq!(login_with(&t.app, "limpio", "RetosEAN2026").await.0, 200);
+});
+parity!(
+    test_los_fallos_de_un_desconocido_no_bloquean_a_la_cuenta,
+    |t| {
+        t.user("conocido", "ESTUDIANTE").await;
+        for _ in 0..11 {
+            login_with(&t.app, "fantasma", "mala-clave").await;
+        }
+        // Unknown identifiers throttle themselves; the real account still enters.
+        assert_eq!(login_with(&t.app, "fantasma", "mala-clave").await.0, 429);
+        assert_eq!(login_with(&t.app, "conocido", "RetosEAN2026").await.0, 200);
+    }
+);
+
+// ValidacionDeCorreoTests (F12)
+parity!(test_correo_mal_formado_se_rechaza_en_registro, |t| {
+    for email in [
+        "sin-arroba",
+        "a@@b.co",
+        "sin-punto@ean",
+        "con espacio@ean.edu.co",
+        "<x>@ean.edu.co",
+    ] {
+        let data = json!({"tipo":"academico","rol":"ESTUDIANTE","username":"est.correo","email":email,"password":"Clave-Segura-2026","password2":"Clave-Segura-2026"});
+        assert_eq!(
+            t.status(&t.anon, "POST", "/api/registro", Some(data)).await,
+            400,
+            "{email}"
+        );
+    }
+    assert_eq!(
+        t.i64("SELECT count(*) FROM usuarios WHERE username='est.correo'")
+            .await,
+        0
+    );
+});
+parity!(test_correo_mal_formado_en_perfil_y_en_alta_admin, |t| {
+    // The format rule fires even when the institutional suffix would match.
+    assert_eq!(
+        t.status(
+            &t.student,
+            "POST",
+            "/api/perfil",
+            Some(json!({"first_name":"E","last_name":"D","email":"<estudiante>@universidadean.edu.co"}))
+        )
+        .await,
+        400
+    );
+    assert_eq!(
+        t.status(
+            &t.admin,
+            "POST",
+            "/api/usuarios",
+            Some(json!({"username":"alta.mala","password":"UnaClaveSegura2026","email":"sin-punto@localhost","first_name":"A","last_name":"B","rol":"ESTUDIANTE"}))
+        )
+        .await,
+        400
+    );
+    assert!(
+        !t.bool("SELECT EXISTS(SELECT 1 FROM usuarios WHERE username='alta.mala')")
+            .await
+    );
+});
+parity!(
+    test_importacion_rechaza_correos_con_espacios_o_arrobas_dobles,
+    |t| {
+        let (_, body) = import(
+            &t,
+            &t.admin,
+            &[
+                "malo1,pe tre@ean.edu.co,A,B,ESTUDIANTE,,",
+                "malo2,a@@b.co,A,B,ESTUDIANTE,,",
+            ],
+            HEADER,
+            false,
+        )
+        .await;
+        assert_eq!(count(&body, "invalidas"), 2, "{body}");
+    }
+);
+parity!(
+    test_usuario_duplicado_en_otra_capitalizacion_se_rechaza,
+    |t| {
+        t.user("Original", "ESTUDIANTE").await;
+        // Admin create: a clean 400, not a 409/500 from the case-sensitive index.
+        let (code, body) = t
+        .req(
+            &t.admin,
+            "POST",
+            "/api/usuarios",
+            Some(json!({"username":"original","password":"UnaClaveSegura2026","email":"otro@ean.edu.co","first_name":"A","last_name":"B","rol":"ESTUDIANTE"})),
+        )
+        .await;
+        assert_eq!(code, 400, "{body}");
+        assert!(
+            body["error"].as_str().unwrap().contains("Ya existe"),
+            "{body}"
+        );
+        // Bulk import: also case-insensitive against existing accounts.
+        let (_, body) = import(
+            &t,
+            &t.admin,
+            &["ORIGINAL,otro2@ean.edu.co,A,B,ESTUDIANTE,,"],
+            HEADER,
+            false,
+        )
+        .await;
+        assert_eq!(count(&body, "invalidas"), 1, "{body}");
+    }
+);

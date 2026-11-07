@@ -2,6 +2,7 @@
 //! routes and the expert panel.
 mod common;
 use common::*;
+use serde_json::json;
 
 /// GET routes declared in src/lib.rs, so new routes are walked automatically.
 fn get_routes() -> Vec<String> {
@@ -209,4 +210,56 @@ parity!(test_el_experto_tiene_su_panel_de_jurado, |t| {
     assert_eq!(panel["sin_rol"], false, "{panel}");
     assert_eq!(panel["kpis"]["hackathones_asignados"], 1, "{panel}");
     assert_eq!(panel["kpis"]["hackathones_en_curso"], 1, "{panel}");
+});
+
+// PanelEstudianteNotasTests (F7): unpublished grades never reach the student panel.
+parity!(test_panel_estudiante_solo_usa_notas_publicadas, |t| {
+    let reto = t.reto(COMPANY_USER, "en_curso", "reto").await;
+    let student = t.user("est-dash", "ESTUDIANTE").await;
+    let teacher = t.user("profe-dash", "PROFESOR").await;
+    t.integrate(reto, teacher).await;
+    let deliverable = t.deliverable(reto, student).await;
+    let profe = t.login("profe-dash").await;
+    t.ok(
+        &profe,
+        "POST",
+        &format!("/api/entregables/{deliverable}/calificar"),
+        Some(json!({"nota":"4.50"})),
+    )
+    .await;
+    let session = t.login("est-dash").await;
+    let panel = t
+        .ok(&session, "GET", "/api/dashboard?periodo=todo", None)
+        .await;
+    assert!(panel["kpis"]["nota_promedio"].is_null(), "{panel}");
+    assert!(
+        panel["series"]["notas_recientes"]["data"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "{panel}"
+    );
+    assert_eq!(panel["kpis"]["entregables_total"], 1, "{panel}");
+    t.ok(
+        &profe,
+        "POST",
+        &format!("/api/retos/{reto}/publicar-calificaciones"),
+        Some(json!({})),
+    )
+    .await;
+    let panel = t
+        .ok(&session, "GET", "/api/dashboard?periodo=todo", None)
+        .await;
+    assert_eq!(
+        panel["kpis"]["nota_promedio"].as_f64(),
+        Some(4.5),
+        "{panel}"
+    );
+    assert_eq!(
+        panel["series"]["notas_recientes"]["data"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
 });

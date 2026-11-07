@@ -81,11 +81,7 @@ fn bounded(value: &str, max: usize) -> bool {
 }
 
 async fn hash(state: &AppState, password: String) -> Result<String> {
-    let permit = state
-        .password_slots
-        .clone()
-        .try_acquire_owned()
-        .map_err(|_| AppError::bad("Servidor ocupado. Intenta de nuevo"))?;
+    let permit = auth::hash_slot(&state.password_slots).await?;
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
         auth::hash_password(&password)
@@ -114,7 +110,7 @@ pub async fn register(
     {
         return Err(AppError::bad("Usuario: solo letras, números y @ . + - _"));
     }
-    if email.len() > 254 || email.split('@').filter(|p| !p.is_empty()).count() != 2 {
+    if email.len() > 254 || !domain::valid_email(&email) {
         return Err(AppError::bad("Indica un correo electrónico válido"));
     }
     if input.password != input.password2 {
@@ -173,9 +169,12 @@ pub async fn register(
     } else {
         ("EMPRESA".to_string(), input.razon_social.trim().to_string())
     };
+    // A self-registered professor starts inactive, pending admin approval
+    // (the admin approves with the user-status endpoint); everyone else enters at once.
+    let pending = rol == "PROFESOR";
     let mut tx = state.pool.begin().await?;
-    let id: i64 = sqlx::query_scalar("INSERT INTO usuarios(username,password,email,first_name,last_name,rol,telefono,is_active,activo,is_staff,is_superuser,date_joined,fecha_creacion) VALUES($1,$2,$3,$4,$5,$6,'',true,true,false,false,now(),now()) RETURNING id")
-        .bind(&input.username).bind(password).bind(&email).bind(&first_name).bind(input.last_name.trim()).bind(&rol)
+    let id: i64 = sqlx::query_scalar("INSERT INTO usuarios(username,password,email,first_name,last_name,rol,telefono,is_active,activo,is_staff,is_superuser,date_joined,fecha_creacion) VALUES($1,$2,$3,$4,$5,$6,'',$7,$7,false,false,now(),now()) RETURNING id")
+        .bind(&input.username).bind(password).bind(&email).bind(&first_name).bind(input.last_name.trim()).bind(&rol).bind(!pending)
         .fetch_one(&mut *tx).await?;
     match rol.as_str() {
         "ESTUDIANTE" => {
@@ -227,6 +226,10 @@ pub async fn register(
             site().trim_end_matches('/')
         ),
     );
+    if pending {
+        // No session: an administrator must approve the account first.
+        return Ok(Json(json!({"ok":true,"pendiente_aprobacion":true,"mensaje":"Tu cuenta de profesor fue creada y está pendiente de aprobación por un administrador."})).into_response());
+    }
     auth::start_session(&state, id).await
 }
 

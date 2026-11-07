@@ -17,10 +17,11 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
-/// Django `_retos_profesor`: retos the professor integrated (any state).
+/// Django `_retos_profesor`: retos the professor integrated; authority over the
+/// reto requires the integration approved or published.
 async fn owns(state: &AppState, user: &User, reto: i64) -> Result<()> {
     let ok: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2)",
+        "SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2 AND estado IN ('aprobada','publicada'))",
     )
     .bind(reto)
     .bind(user.id)
@@ -66,7 +67,9 @@ pub async fn create_rubric(
     for (n, c) in input.criterios.iter().enumerate() {
         let score = crate::finance::money(&c.puntaje_maximo)
             .map_err(|_| AppError::bad(format!("Criterio {}: puntaje inválido", n + 1)))?;
-        if c.nombre.trim().is_empty() || c.nombre.chars().count() > 150 || score <= Decimal::ZERO {
+        // puntaje_maximo is numeric(6,2): never store a value that overflows it.
+        let fits = score > Decimal::ZERO && score <= Decimal::new(999999, 2);
+        if c.nombre.trim().is_empty() || c.nombre.chars().count() > 150 || !fits {
             return Err(AppError::bad(format!("Criterio {} inválido", n + 1)));
         }
         criteria.push((c.nombre.trim().to_string(), score));
@@ -168,6 +171,10 @@ pub async fn grade(
         }
         (nota, vec![])
     };
+    // nota is numeric(6,2): a rubric sum beyond 9999.99 would overflow the column.
+    if nota > Decimal::new(999999, 2) {
+        return Err(invalid());
+    }
     if from != "CALIFICADO" {
         domain::transition("MAQUINA_ENTREGABLE", &from, "CALIFICADO")?;
     }
@@ -251,7 +258,7 @@ pub async fn mark_in_review(state: &AppState, user: &crate::auth::User) -> Resul
         return Ok(());
     }
     let mut tx = state.pool.begin().await?;
-    let opened: Vec<i64> = sqlx::query_scalar("UPDATE entregables SET estado='EN_REVISION',actualizado_en=now() WHERE estado='ENVIADO' AND reto_id IN (SELECT reto_id FROM integraciones_academicas WHERE profesor_id=$1) RETURNING id")
+    let opened: Vec<i64> = sqlx::query_scalar("UPDATE entregables SET estado='EN_REVISION',actualizado_en=now() WHERE estado='ENVIADO' AND reto_id IN (SELECT reto_id FROM integraciones_academicas WHERE profesor_id=$1 AND estado IN ('aprobada','publicada')) RETURNING id")
         .bind(user.id).fetch_all(&mut *tx).await?;
     for id in opened {
         crate::workflows::history(

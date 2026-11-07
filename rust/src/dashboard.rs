@@ -209,10 +209,11 @@ pub async fn panel(
                 'postulaciones_aceptadas', (SELECT count(*) FROM po WHERE estado = 'ACEPTADA'),
                 'entregables_total', (SELECT count(*) FROM e),
                 'entregables_pendientes', (SELECT count(*) FROM e WHERE estado IN ('ENVIADO','EN_REVISION')),
-                'nota_promedio', (SELECT avg(nota)::float8 FROM e))",
+                -- HU12: a grade counts for the student only once published.
+                'nota_promedio', (SELECT avg(nota)::float8 FROM e WHERE calificacion_publicada))",
             vec![
                 ("postulaciones_por_estado", "SELECT estado, count(*)::float8 FROM po GROUP BY estado ORDER BY 2 DESC", Some(("postulaciones", "estado"))),
-                ("notas_recientes", "SELECT k, v FROM (SELECT left(titulo, 24) k, nota::float8 v, fecha_entrega FROM e WHERE nota IS NOT NULL ORDER BY fecha_entrega DESC LIMIT 8) x ORDER BY fecha_entrega", None),
+                ("notas_recientes", "SELECT k, v FROM (SELECT left(titulo, 24) k, nota::float8 v, fecha_entrega FROM e WHERE nota IS NOT NULL AND calificacion_publicada ORDER BY fecha_entrega DESC LIMIT 8) x ORDER BY fecha_entrega", None),
             ],
         ),
         // Django kpis_experto / series_experto: the expert as hackathon juror.

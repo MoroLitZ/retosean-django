@@ -92,6 +92,7 @@ pub fn validate(team: &TeamInput) -> Result<()> {
         if !["inicio", "seguimiento", "preseleccion", "evaluacion"].contains(&s.tipo.as_str()) {
             return Err(AppError::bad(format!("Sesión {fila}: tipo inválido")));
         }
+        crate::domain::validate_date(Some(s.fecha_hora.date_naive()), &format!("Sesión {fila}"))?;
         let link = s.enlace_reunion.trim();
         if !link.is_empty()
             && (link.len() > 200 || !(link.starts_with("https://") || link.starts_with("http://")))

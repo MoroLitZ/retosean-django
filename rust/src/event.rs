@@ -140,7 +140,7 @@ pub async fn advance_all(pool: &PgPool) -> Result<usize> {
 async fn is_manager(state: &AppState, user: &auth::User, reto: i64) -> Result<bool> {
     Ok(user.admin()
         || (user.rol == "PROFESOR"
-            && sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2)")
+            && sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2 AND estado IN ('aprobada','publicada'))")
                 .bind(reto).bind(user.id).fetch_one(&state.pool).await?))
 }
 
@@ -409,15 +409,16 @@ pub async fn show_logistics(
     let user = auth::current(&state, &headers, false).await?;
     let record = crate::resources::visible_record(&state, &user, "hackathons", id).await?;
     let reto = record["reto_id"].as_i64().unwrap_or(0);
-    let guests: Value = sqlx::query_scalar("SELECT coalesce(jsonb_agg(jsonb_build_object('tipo',tipo,'nombre',nombre,'organizacion',organizacion,'email',email,'confirmado',confirmado) ORDER BY tipo,nombre),'[]') FROM invitados_hackaton WHERE hackathon_id=$1")
-        .bind(id).fetch_one(&state.pool).await?;
+    let manager = is_manager(&state, &user, reto).await?;
+    // Guest emails only for admins and hackathon managers.
+    let guests: Value = sqlx::query_scalar("SELECT coalesce(jsonb_agg(jsonb_build_object('tipo',tipo,'nombre',nombre,'organizacion',organizacion,'email',CASE WHEN $2 THEN email ELSE '' END,'confirmado',confirmado) ORDER BY tipo,nombre),'[]') FROM invitados_hackaton WHERE hackathon_id=$1")
+        .bind(id).bind(manager).fetch_one(&state.pool).await?;
     let company: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM retos WHERE id=$1 AND empresa_id=$2)")
             .bind(reto)
             .bind(user.id)
             .fetch_one(&state.pool)
             .await?;
-    let manager = is_manager(&state, &user, reto).await?;
     let closes: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar("SELECT COALESCE((SELECT min(inicia_en) FROM etapas_hackaton WHERE hackathon_id=$1 AND tipo='premiacion'),(SELECT max(termina_en) FROM etapas_hackaton WHERE hackathon_id=$1))")
         .bind(id).fetch_one(&state.pool).await?;
     Ok(Json(json!({

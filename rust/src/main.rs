@@ -152,6 +152,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             pool,
             config,
             password_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
+            login_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
         }),
     )
     .with_graceful_shutdown(async {

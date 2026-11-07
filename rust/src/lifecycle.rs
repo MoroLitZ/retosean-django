@@ -35,6 +35,27 @@ pub async fn progress(
     use axum::extract::FromRequest;
     let headers = request.headers().clone();
     let user = auth::current(&state, &headers, true).await?;
+    // Authenticate and authorize before reading the (possibly large) body.
+    let owner: Option<i64> =
+        sqlx::query_scalar("SELECT empresa_id FROM retos WHERE id=$1 AND eliminado_en IS NULL")
+            .bind(reto)
+            .fetch_optional(&state.pool)
+            .await?;
+    let owner = owner.ok_or_else(AppError::not_found)?;
+    let teacher: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2 AND estado IN ('aprobada','publicada'))",
+    )
+    .bind(reto)
+    .bind(user.id)
+    .fetch_one(&state.pool)
+    .await?;
+    // _puede_ver_seguimiento.
+    let allowed = user.admin()
+        || (user.rol == "EMPRESA" && owner == user.id)
+        || (user.rol == "PROFESOR" && teacher);
+    if !allowed {
+        return Err(AppError::forbidden());
+    }
     let multipart = headers
         .get(axum::http::header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
@@ -83,27 +104,17 @@ pub async fn progress(
             "Avance inválido; el porcentaje debe estar entre 0 y 100",
         ));
     }
+    domain::validate_date(input.fecha_sesion, "Fecha de la sesión")?;
     let mut tx = state.pool.begin().await?;
-    let owner: Option<i64> = sqlx::query_scalar(
+    // Re-check under the row lock: the reto may have changed while reading the body.
+    let still: Option<i64> = sqlx::query_scalar(
         "SELECT empresa_id FROM retos WHERE id=$1 AND eliminado_en IS NULL FOR UPDATE",
     )
     .bind(reto)
     .fetch_optional(&mut *tx)
     .await?;
-    let owner = owner.ok_or_else(AppError::not_found)?;
-    let teacher: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2)",
-    )
-    .bind(reto)
-    .bind(user.id)
-    .fetch_one(&mut *tx)
-    .await?;
-    // _puede_ver_seguimiento.
-    let allowed = user.admin()
-        || (user.rol == "EMPRESA" && owner == user.id)
-        || (user.rol == "PROFESOR" && teacher);
-    if !allowed {
-        return Err(AppError::forbidden());
+    if still != Some(owner) {
+        return Err(AppError::not_found());
     }
     let id: i64 = sqlx::query_scalar("INSERT INTO seguimientos_reto(reto_id,tipo_sesion,fecha_sesion,porcentaje_avance,avances,observaciones,acuerdos,creado_por_id,creado_en) VALUES($1,$2,COALESCE($3,(now() AT TIME ZONE 'America/Bogota')::date),$4,$5,$6,$7,$8,now()) RETURNING id")
         .bind(reto).bind(kind).bind(input.fecha_sesion).bind(input.porcentaje_avance as i16).bind(&input.avances).bind(&input.observaciones).bind(&input.acuerdos).bind(user.id).fetch_one(&mut *tx).await?;
@@ -145,7 +156,7 @@ pub async fn close(
     .await?;
     let from = from.ok_or_else(AppError::not_found)?;
     let teacher: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2)",
+        "SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2 AND estado IN ('aprobada','publicada'))",
     )
     .bind(reto)
     .bind(user.id)
@@ -170,24 +181,55 @@ pub async fn close(
         .bind(reto)
         .execute(&mut *tx)
         .await?;
+    let title: String = sqlx::query_scalar("SELECT titulo FROM retos WHERE id=$1")
+        .bind(reto)
+        .fetch_one(&mut *tx)
+        .await?;
     if from != "finalizado" {
+        // Django finalizar: cambiar_estado_reto with this fixed comment.
         crate::workflows::challenge_history(
             &mut tx,
             reto,
             &from,
             "finalizado",
             user.id,
-            &input.notas,
+            "Cierre formal del reto completado.",
         )
         .await?;
+        // _notificar_cambio_estado with evento RETO_FINALIZADO: the company and
+        // every integrated professor.
+        let company: i64 = sqlx::query_scalar("SELECT empresa_id FROM retos WHERE id=$1")
+            .bind(reto)
+            .fetch_one(&mut *tx)
+            .await?;
+        notify(
+            &mut tx,
+            company,
+            "RETO_FINALIZADO",
+            &format!("Tu reto \"{title}\" paso a estado: Finalizado."),
+            &format!("reto:{reto}:{from}->finalizado"),
+        )
+        .await?;
+        let teachers: Vec<i64> = sqlx::query_scalar(
+            "SELECT DISTINCT profesor_id FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id IS NOT NULL",
+        )
+        .bind(reto)
+        .fetch_all(&mut *tx)
+        .await?;
+        for teacher in teachers {
+            notify(
+                &mut tx,
+                teacher,
+                "RETO_FINALIZADO",
+                &format!("El reto \"{title}\" fue marcado como Finalizado."),
+                &format!("reto:{reto}:finalizado:profesor"),
+            )
+            .await?;
+        }
     }
     // cierre._participantes: the company, professors, accepted applicants and team members.
     let participants: Vec<i64> = sqlx::query_scalar("SELECT empresa_id FROM retos WHERE id=$1 UNION SELECT profesor_id FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id IS NOT NULL UNION SELECT estudiante_id FROM postulaciones WHERE reto_id=$1 AND estado='ACEPTADA' UNION SELECT m.estudiante_id FROM miembros_equipo m JOIN equipos e ON e.id=m.equipo_id WHERE e.reto_id=$1")
         .bind(reto).fetch_all(&mut *tx).await?;
-    let title: String = sqlx::query_scalar("SELECT titulo FROM retos WHERE id=$1")
-        .bind(reto)
-        .fetch_one(&mut *tx)
-        .await?;
     let key = format!("cierre:{reto}:encuesta");
     for participant in participants {
         sqlx::query("INSERT INTO cierre_encuestasatisfaccion(cierre_id,participante_id,comentario,creada_en) VALUES($1,$2,'',now()) ON CONFLICT(cierre_id,participante_id) DO NOTHING").bind(cierre).bind(participant).execute(&mut *tx).await?;
@@ -244,7 +286,7 @@ pub async fn issue_certificates(
         eligible.entry(id).or_insert("ESTUDIANTE");
     }
     let teachers: Vec<i64> = sqlx::query_scalar(
-        "SELECT profesor_id FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id IS NOT NULL",
+        "SELECT profesor_id FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id IS NOT NULL AND estado IN ('aprobada','publicada')",
     )
     .bind(reto)
     .fetch_all(&mut **tx)

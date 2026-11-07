@@ -173,3 +173,37 @@ parity!(test_estudiante_no_pide_logistica, |t| {
         0
     );
 });
+
+// NotificacionRetoFinalizadoTests (F8): RETO_FINALIZADO for the company and the
+// integrated professors, with Django's fixed history comment.
+parity!(
+    test_finalizar_notifica_reto_finalizado_y_deja_el_comentario,
+    |t| {
+        let (reto, _) = setup(&t).await;
+        let teacher = t.user("profe-cierre", "PROFESOR").await;
+        t.integrate(reto, teacher).await;
+        t.ok(
+            &t.admin,
+            "POST",
+            &format!("/api/retos/{reto}/cerrar"),
+            Some(json!({"notas":"Notas internas"})),
+        )
+        .await;
+        let company = t.text(&format!(
+        "SELECT mensaje FROM notificaciones WHERE usuario_id={COMPANY_USER} AND evento='RETO_FINALIZADO'"
+    ))
+    .await;
+        assert!(company.contains("paso a estado: Finalizado"), "{company}");
+        let teacher_notice = t.text(&format!(
+        "SELECT mensaje FROM notificaciones WHERE usuario_id={teacher} AND evento='RETO_FINALIZADO'"
+    ))
+    .await;
+        assert!(
+            teacher_notice.contains("fue marcado como Finalizado"),
+            "{teacher_notice}"
+        );
+        // The history comment is Django's fixed text, not the close notes.
+        let comment = t.text(&format!("SELECT h.comentario FROM historial_estados h JOIN django_content_type c ON c.id=h.content_type_id WHERE c.app_label='retos' AND h.object_id={reto} AND h.estado_nuevo='finalizado'")).await;
+        assert_eq!(comment, "Cierre formal del reto completado.");
+    }
+);

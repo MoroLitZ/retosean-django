@@ -40,7 +40,7 @@ pub fn scope(table: &str, user: &User) -> Option<String> {
     let challenge = match user.rol.as_str() {
         "EMPRESA" => format!("r.empresa_id={actor}"),
         "PROFESOR" => format!(
-            "EXISTS(SELECT 1 FROM integraciones_academicas i WHERE i.reto_id=r.id AND i.profesor_id={actor})"
+            "EXISTS(SELECT 1 FROM integraciones_academicas i WHERE i.reto_id=r.id AND i.profesor_id={actor} AND i.estado IN ('aprobada','publicada'))"
         ),
         "ESTUDIANTE" => format!(
             "EXISTS(SELECT 1 FROM postulaciones p WHERE p.reto_id=r.id AND p.estudiante_id={actor} AND p.estado='ACEPTADA')"
@@ -116,6 +116,13 @@ pub fn data_expression_for(table: &str, user: &User) -> String {
     if table == "entregables" && user.rol == "ESTUDIANTE" && !user.admin() {
         format!(
             "({expr})||CASE WHEN t.calificacion_publicada THEN '{{}}'::jsonb ELSE jsonb_build_object('nota',NULL,'comentario_profesor',NULL) END"
+        )
+    } else if table == "invitados_hackaton" && !user.admin() {
+        // HU09: a guest's email is only for admins and the hackathon's managers
+        // (professors with an approved/published integration on the reto).
+        let manager = user.id;
+        format!(
+            "({expr})||jsonb_build_object('email',CASE WHEN EXISTS(SELECT 1 FROM hackathons h JOIN integraciones_academicas i ON i.reto_id=h.reto_id WHERE h.id=t.hackathon_id AND i.profesor_id={manager} AND i.estado IN ('aprobada','publicada')) THEN t.email ELSE '' END)"
         )
     } else {
         expr

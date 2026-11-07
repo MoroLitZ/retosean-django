@@ -202,6 +202,53 @@ parity!(test_ampliar_el_presupuesto_rearma_la_alerta, |t| {
     .await;
     assert!(!alert(&t, id).await);
 });
+parity!(test_la_alerta_rearmada_vuelve_a_notificar, |t| {
+    // F11: after re-arming, crossing 80% again notifies again (versioned dedupe key).
+    let id = watched(&t).await;
+    spend(&t, id, "850.00", "").await;
+    assert_eq!(alerts(&t).await, 2);
+    let reto = t
+        .i64(&format!("SELECT reto_id FROM presupuestos WHERE id={id}"))
+        .await;
+    t.ok(
+        &t.admin,
+        "POST",
+        &format!("/api/retos/{reto}/presupuesto"),
+        Some(json!({"monto_total":"5000.00"})),
+    )
+    .await;
+    assert!(!alert(&t, id).await);
+    spend(&t, id, "3400.00", "").await; // 4250/5000 = 85%: crosses again
+    assert!(alert(&t, id).await);
+    assert_eq!(alerts(&t).await, 4);
+});
+parity!(test_los_montos_se_serializan_con_dos_decimales, |t| {
+    let reto = t.reto(COMPANY_USER, "aprobado", "reto").await;
+    let created = t
+        .ok(
+            &t.admin,
+            "POST",
+            &format!("/api/retos/{reto}/presupuesto"),
+            Some(json!({"monto_total":"1000"})),
+        )
+        .await;
+    assert_eq!(created["monto_total"], "1000.00");
+    let id = created["id"].as_i64().unwrap();
+    let expense = t
+        .ok(
+            &t.admin,
+            "POST",
+            &format!("/api/presupuestos/{id}/gastos"),
+            Some(json!({"categoria":"OTROS","monto":"250"})),
+        )
+        .await;
+    assert_eq!(expense["monto"], "250.00");
+    let s = summary(&t, id).await;
+    assert_eq!(s["total"], "1000.00");
+    assert_eq!(s["ejecutado"], "250.00");
+    assert_eq!(s["disponible"], "750.00");
+    assert_eq!(s["gastos"][0]["monto"], "250.00");
+});
 
 // AccesoAPresupuestoTests
 async fn own(t: &Ctx) -> (i64, i64, Session) {

@@ -54,6 +54,33 @@ pub fn validate_text(value: &str, max: usize, label: &str) -> Result<()> {
         Ok(())
     }
 }
+/// One @, non-empty local and domain parts, a dot in the domain, and no
+/// whitespace or angle brackets.
+pub fn valid_email(email: &str) -> bool {
+    let parts: Vec<&str> = email.split('@').collect();
+    let [local, domain] = parts.as_slice() else {
+        return false;
+    };
+    !local.is_empty()
+        && !domain.is_empty()
+        && domain.contains('.')
+        && domain.split('.').all(|label| !label.is_empty())
+        && !email
+            .chars()
+            .any(|c| c.is_whitespace() || c == '<' || c == '>')
+}
+
+/// User-supplied dates stay within 1900..=2100; wider years overflow PostgreSQL
+/// or its arithmetic and used to surface as a 500.
+pub fn validate_date(date: Option<chrono::NaiveDate>, label: &str) -> Result<()> {
+    use chrono::Datelike;
+    if date.is_some_and(|d| !(1900..=2100).contains(&d.year())) {
+        return Err(AppError::bad(format!(
+            "{label}: el año debe estar entre 1900 y 2100"
+        )));
+    }
+    Ok(())
+}
 pub fn csv_cell(value: &serde_json::Value) -> String {
     let text = match value {
         serde_json::Value::Null => String::new(),
@@ -111,5 +138,36 @@ mod tests {
             csv_cell(&serde_json::json!("hello,\"world\"")),
             "\"hello,\"\"world\"\"\""
         );
+    }
+    #[test]
+    fn email_validation_requires_a_real_address() {
+        for good in [
+            "a@example.co",
+            "correo.con+puntos@universidadean.edu.co",
+            "x@sub.dominio.example",
+        ] {
+            assert!(valid_email(good), "{good}");
+        }
+        for bad in [
+            "sin-arroba",
+            "a@b",
+            "a@dominio..co",
+            "a b@dominio.co",
+            "a<b@dominio.co",
+            "a@b@c.co",
+            "@dominio.co",
+            "a@.co",
+        ] {
+            assert!(!valid_email(bad), "{bad}");
+        }
+    }
+    #[test]
+    fn user_dates_stay_in_1900_2100() {
+        let day = |y| chrono::NaiveDate::from_ymd_opt(y, 1, 1);
+        assert!(validate_date(day(1900), "x").is_ok());
+        assert!(validate_date(day(2100), "x").is_ok());
+        assert!(validate_date(None, "x").is_ok());
+        assert!(validate_date(day(1899), "x").is_err());
+        assert!(validate_date(day(2101), "x").is_err());
     }
 }

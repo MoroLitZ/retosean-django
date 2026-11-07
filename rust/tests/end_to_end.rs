@@ -187,6 +187,7 @@ async fn native_http_lifecycle_and_permissions() {
         pool: pool.clone(),
         config,
         password_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
+        login_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
     });
     let test_pool = pool.clone();
     let result = std::panic::AssertUnwindSafe(async move {

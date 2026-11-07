@@ -28,7 +28,7 @@ pub async fn challenge_options(
 }
 /// solo_profesor + IntegracionAcademica(profesor=user): admins do not pass in Django.
 async fn integrated(tx: &mut Transaction<'_, Postgres>, reto: i64, user: &User) -> Result<()> {
-    let ok: bool = sqlx::query_scalar("SELECT $3='PROFESOR' AND EXISTS(SELECT 1 FROM integraciones_academicas i JOIN retos r ON r.id=i.reto_id WHERE i.reto_id=$1 AND i.profesor_id=$2 AND r.eliminado_en IS NULL)")
+    let ok: bool = sqlx::query_scalar("SELECT $3='PROFESOR' AND EXISTS(SELECT 1 FROM integraciones_academicas i JOIN retos r ON r.id=i.reto_id WHERE i.reto_id=$1 AND i.profesor_id=$2 AND i.estado IN ('aprobada','publicada') AND r.eliminado_en IS NULL)")
         .bind(reto).bind(user.id).bind(&user.rol).fetch_one(&mut **tx).await?;
     if ok {
         Ok(())
@@ -77,7 +77,7 @@ async fn manager(tx: &mut Transaction<'_, Postgres>, reto: i64, user: &User) -> 
         return Ok(());
     }
     let teacher: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2)",
+        "SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2 AND estado IN ('aprobada','publicada'))",
     )
     .bind(reto)
     .bind(user.id)
@@ -176,7 +176,7 @@ async fn academic_team(
     id: i64,
     user: &User,
 ) -> Result<(i64, Option<i64>)> {
-    let row: Option<(i64, Option<i64>)> = sqlx::query_as("SELECT q.reto_id,q.equipo_espejo_id FROM equipos_reto_academico q WHERE q.id=$1 AND $3='PROFESOR' AND EXISTS(SELECT 1 FROM integraciones_academicas i WHERE i.reto_id=q.reto_id AND i.profesor_id=$2) FOR UPDATE")
+    let row: Option<(i64, Option<i64>)> = sqlx::query_as("SELECT q.reto_id,q.equipo_espejo_id FROM equipos_reto_academico q WHERE q.id=$1 AND $3='PROFESOR' AND EXISTS(SELECT 1 FROM integraciones_academicas i WHERE i.reto_id=q.reto_id AND i.profesor_id=$2 AND i.estado IN ('aprobada','publicada')) FOR UPDATE")
         .bind(id).bind(user.id).bind(&user.rol).fetch_optional(&mut **tx).await?;
     row.ok_or_else(AppError::not_found)
 }
@@ -525,6 +525,11 @@ pub async fn stage(
     {
         return Err(AppError::bad("Etapa inválida"));
     }
+    crate::domain::validate_date(
+        input.inicia_en.map(|d| d.date_naive()),
+        "Inicio de la etapa",
+    )?;
+    crate::domain::validate_date(input.termina_en.map(|d| d.date_naive()), "Fin de la etapa")?;
     let mut tx = state.pool.begin().await?;
     let (reto, status, _) = lock(&mut tx, id).await?;
     manager(&mut tx, reto, &user).await?;

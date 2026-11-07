@@ -145,6 +145,7 @@ pub async fn agreement(
     {
         return Err(AppError::bad("Para firmar, indica la fecha de vencimiento"));
     }
+    domain::validate_date(input.fecha_vencimiento, "Fecha de vencimiento")?;
     let mut tx = state.pool.begin().await?;
     let row: Option<(String, Option<i64>)> =
         sqlx::query_as("SELECT estado_convenio,usuario_id FROM empresas WHERE id=$1 FOR UPDATE")
@@ -448,7 +449,7 @@ pub async fn comment(
         .await?;
     let (reto, student, owner, title, reto_title) = row.ok_or_else(AppError::not_found)?;
     let teacher: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2)",
+        "SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2 AND estado IN ('aprobada','publicada'))",
     )
     .bind(reto)
     .bind(user.id)

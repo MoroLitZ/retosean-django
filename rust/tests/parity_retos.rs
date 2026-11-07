@@ -944,3 +944,188 @@ parity!(
         );
     }
 );
+
+// AutoridadDelProfesorTests (F2): only an approved/published integration counts.
+parity!(
+    test_profesor_con_integracion_en_borrador_no_registra_seguimiento,
+    |t| {
+        let (_, linked, id) = professors(&t).await;
+        let reto = t.reto(COMPANY_USER, "en_curso", "reto").await;
+        let integration = t.integrate(reto, id).await;
+        t.exec(&format!(
+            "UPDATE integraciones_academicas SET estado='borrador' WHERE id={integration}"
+        ))
+        .await;
+        assert_eq!(
+            t.status(
+                &linked,
+                "POST",
+                &format!("/api/retos/{reto}/seguimiento"),
+                Some(json!({"porcentaje_avance":5}))
+            )
+            .await,
+            403
+        );
+        t.exec(&format!(
+            "UPDATE integraciones_academicas SET estado='aprobada' WHERE id={integration}"
+        ))
+        .await;
+        t.ok(
+            &linked,
+            "POST",
+            &format!("/api/retos/{reto}/seguimiento"),
+            Some(json!({"porcentaje_avance":5})),
+        )
+        .await;
+    }
+);
+parity!(
+    test_profesor_con_integracion_en_borrador_no_resuelve_postulaciones,
+    |t| {
+        let (_, linked, id) = professors(&t).await;
+        let reto = t.reto(COMPANY_USER, "en_curso", "reto").await;
+        let integration = t.integrate(reto, id).await;
+        t.exec(&format!(
+            "UPDATE integraciones_academicas SET estado='en_revision' WHERE id={integration}"
+        ))
+        .await;
+        let application = t.accept(reto, STUDENT).await;
+        t.exec(&format!(
+            "UPDATE postulaciones SET estado='EN_REVISION' WHERE id={application}"
+        ))
+        .await;
+        assert_eq!(
+            t.status(
+                &linked,
+                "POST",
+                &format!("/api/postulaciones/{application}/estado"),
+                Some(json!({"estado":"ACEPTADA"}))
+            )
+            .await,
+            403
+        );
+        assert_eq!(
+            t.text(&format!(
+                "SELECT estado FROM postulaciones WHERE id={application}"
+            ))
+            .await,
+            "EN_REVISION"
+        );
+    }
+);
+
+// CompuertaHU00EnEdicionTests (F5): editing and submitting also require the gate.
+parity!(test_empresa_sin_documentos_no_edita_ni_envia_el_reto, |t| {
+    let (company, _) = t.company_user("empresa-hu00", "900700100").await;
+    let reto = t.reto(company, "borrador", "reto").await;
+    t.exec(&format!("UPDATE retos SET fecha_inicio_tentativa=CURRENT_DATE+10,fecha_fin_tentativa=CURRENT_DATE+40,fecha_limite_postulacion=CURRENT_DATE+7 WHERE id={reto}")).await;
+    let session = t.login("empresa-hu00").await;
+    let edit = json!({"titulo":"Editado","descripcion":"Desc","area":"Tecnología","tipo":"reto","fecha_inicio_tentativa":"2026-11-01","fecha_fin_tentativa":"2026-12-01","fecha_limite_postulacion":"2026-11-15"});
+    let (code, body) = t
+        .req(&session, "POST", &format!("/api/retos/{reto}"), Some(edit))
+        .await;
+    assert_eq!(code, 400, "{body}");
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap()
+            .contains("aún no puede publicar"),
+        "{body}"
+    );
+    let (code, body) = t
+        .req(
+            &session,
+            "POST",
+            &format!("/api/retos/{reto}/estado"),
+            Some(json!({"estado":"en_revision"})),
+        )
+        .await;
+    assert_eq!(code, 400, "{body}");
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap()
+            .contains("aún no puede publicar"),
+        "{body}"
+    );
+    assert_eq!(estado(&t, reto).await, "borrador");
+});
+parity!(test_empresa_verificada_si_edita_y_envia, |t| {
+    let (company, empresa) = t.company_user("empresa-hu00-ok", "900700101").await;
+    t.verify_documents(empresa).await;
+    let reto = t.reto(company, "borrador", "reto").await;
+    let session = t.login("empresa-hu00-ok").await;
+    let edit = json!({"titulo":"Editado","descripcion":"Desc","area":"Tecnología","tipo":"reto","fecha_inicio_tentativa":"2026-11-01","fecha_fin_tentativa":"2026-12-01","fecha_limite_postulacion":"2026-11-15"});
+    t.ok(&session, "POST", &format!("/api/retos/{reto}"), Some(edit))
+        .await;
+    t.ok(
+        &session,
+        "POST",
+        &format!("/api/retos/{reto}/estado"),
+        Some(json!({"estado":"en_revision"})),
+    )
+    .await;
+    assert_eq!(estado(&t, reto).await, "en_revision");
+});
+
+// CargaTrasAutorizacionTests (F6): the body is never read when access is denied.
+parity!(test_subida_rechazada_antes_de_leer_el_cuerpo, |t| {
+    let reto = t.reto(COMPANY_USER, "borrador", "reto").await;
+    t.company_user("empresa-ajena2", "900700200").await;
+    let other = t.login("empresa-ajena2").await;
+    // A malformed multipart body would fail parsing with 400; the permission
+    // check runs first and answers 403.
+    let (code, _) = post_raw(
+        &t.app,
+        &other,
+        &format!("/api/retos/{reto}/archivos"),
+        "multipart/form-data; boundary=FRM",
+        b"this is not multipart",
+    )
+    .await;
+    assert_eq!(code, 403);
+    let (code, _) = post_raw(
+        &t.app,
+        &t.student,
+        &format!("/api/retos/{reto}/seguimiento"),
+        "multipart/form-data; boundary=FRM",
+        b"garbage",
+    )
+    .await;
+    assert_eq!(code, 403);
+    assert_eq!(t.i64("SELECT count(*) FROM retos_retoarchivo").await, 0);
+    assert_eq!(t.i64("SELECT count(*) FROM seguimientos_reto").await, 0);
+});
+
+// FechasInvalidasTests (F9): out-of-range years and NUL bytes are a 400.
+parity!(test_fechas_fuera_de_rango_y_nul_en_el_titulo_son_400, |t| {
+    let (company, empresa) = t.company_user("empresa-fechas", "900700300").await;
+    t.verify_documents(empresa).await;
+    let session = t.login("empresa-fechas").await;
+    for date in ["1810-01-01", "2200-01-01"] {
+        let code = t
+            .status(
+                &session,
+                "POST",
+                "/api/retos",
+                Some(json!({"titulo":"Fechas","descripcion":"d","area":"a","tipo":"reto","fecha_inicio_tentativa":date})),
+            )
+            .await;
+        assert_eq!(code, 400, "{date}");
+    }
+    // A NUL byte reaches PostgreSQL as error 22021: a 400, not a 500.
+    let (code, body) = t
+        .req(
+            &session,
+            "POST",
+            "/api/retos",
+            Some(json!({"titulo":"Reto\u{0}con nulo","descripcion":"d","area":"a","tipo":"reto"})),
+        )
+        .await;
+    assert_eq!(code, 400, "{body}");
+    assert!(
+        body["error"].as_str().unwrap().contains("inválidos"),
+        "{body}"
+    );
+    let _ = company;
+});

@@ -39,7 +39,7 @@ pub async fn create(
         .username
         .chars()
         .all(|c| c.is_alphanumeric() || "@.+-_".contains(c))
-        || !input.email.contains('@')
+        || !domain::valid_email(input.email.trim())
         || input.email.len() > 254
         || input.telefono.chars().count() > 20
         || input.password.chars().count() < 12
@@ -50,15 +50,20 @@ pub async fn create(
             "Revisa el usuario, correo y rol; la contraseña debe tener al menos 12 caracteres",
         ));
     }
+    // Usernames are unique case-insensitively (the DB unique index is case-sensitive).
+    let taken: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM usuarios WHERE lower(username)=lower($1))")
+            .bind(input.username.trim())
+            .fetch_one(&state.pool)
+            .await?;
+    if taken {
+        return Err(AppError::bad("Ya existe un usuario con ese nombre."));
+    }
     if input.rol == "EMPRESA" {
         domain::validate_text(&input.nit, 20, "NIT")?;
         domain::validate_text(&input.razon_social, 150, "Razón social")?;
     }
-    let permit = state
-        .password_slots
-        .clone()
-        .try_acquire_owned()
-        .map_err(|_| AppError::bad("Servidor ocupado"))?;
+    let permit = auth::hash_slot(&state.password_slots).await?;
     let password = input.password;
     let hash = tokio::task::spawn_blocking(move || {
         let _permit = permit;
@@ -143,7 +148,9 @@ pub async fn profile(
     if input.first_name.chars().count() > 150 || input.last_name.chars().count() > 150 {
         return Err(AppError::bad("Nombre y apellido: máximo 150 caracteres"));
     }
-    if !input.email.contains('@') || input.email.len() > 254 || input.telefono.chars().count() > 20
+    if !domain::valid_email(input.email.trim())
+        || input.email.len() > 254
+        || input.telefono.chars().count() > 20
     {
         return Err(AppError::bad("Datos de contacto inválidos"));
     }
@@ -224,11 +231,7 @@ pub async fn password(
         .fetch_one(&state.pool)
         .await?;
     let comparison = old.clone();
-    let permit = state
-        .password_slots
-        .clone()
-        .try_acquire_owned()
-        .map_err(|_| AppError::bad("Servidor ocupado"))?;
+    let permit = auth::hash_slot(&state.password_slots).await?;
     let hash = tokio::task::spawn_blocking(move || {
         let _permit = permit;
         if !auth::verify_password(&input.actual, &comparison) {

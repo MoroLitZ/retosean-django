@@ -452,6 +452,37 @@ parity!(test_profesor_ajeno_no_gestiona_el_hackathon, |t| {
     );
     assert_eq!(b.estado(&t).await.0, "publicado");
 });
+parity!(test_profesor_con_integracion_sin_aprobar_no_gestiona, |t| {
+    // F2: a draft integration gives no authority over the hackathon.
+    let b = base(&t).await;
+    t.exec(&format!(
+        "UPDATE integraciones_academicas SET estado='borrador' WHERE reto_id={}",
+        b.reto
+    ))
+    .await;
+    let teacher = t.login("profe-hack").await;
+    assert_eq!(
+        t.status(
+            &teacher,
+            "POST",
+            &format!("/api/hackathons/{}/estado", b.hack),
+            Some(json!({"estado":"en_curso"}))
+        )
+        .await,
+        403
+    );
+    assert_eq!(b.estado(&t).await.0, "publicado");
+    assert_eq!(
+        t.status(
+            &teacher,
+            "POST",
+            &format!("/api/retos/{}/equipo", b.reto),
+            Some(json!({"nombre_equipo":"X","estudiantes":[]}))
+        )
+        .await,
+        403
+    );
+});
 
 // CalendarioAutomaticoHU09Tests
 async fn advance(t: &Ctx, hack: i64) -> Vec<&'static str> {
@@ -655,6 +686,51 @@ parity!(test_estudiante_no_descarga_el_informe, |t| {
         .0
         .is_success()
     );
+});
+
+// CorreoDeInvitadosTests (F10): guest emails only for admins and managers.
+parity!(test_el_correo_de_los_invitados_solo_lo_ve_la_gestion, |t| {
+    let b = base(&t).await;
+    t.ok(&t.admin, "POST", &format!("/api/hackathons/{}/logistica", b.hack), Some(json!({"modalidad":"presencial","lugar":"Auditorio","invitados":[{"tipo":"MENTOR","nombre":"Ana Mentora","organizacion":"ACME","email":"ana@acme.co","confirmado":true}]}))).await;
+    // Admin and the manager professor see the email...
+    let manager = t.login("profe-hack").await;
+    for session in [&t.admin, &manager] {
+        let view = t
+            .ok(
+                session,
+                "GET",
+                &format!("/api/hackathons/{}/logistica", b.hack),
+                None,
+            )
+            .await;
+        assert_eq!(view["invitados"][0]["email"], "ana@acme.co");
+    }
+    // ...the company and students see the guest but not the email.
+    for session in [&t.company, &t.student] {
+        let view = t
+            .ok(
+                session,
+                "GET",
+                &format!("/api/hackathons/{}/logistica", b.hack),
+                None,
+            )
+            .await;
+        assert_eq!(view["invitados"][0]["email"], "", "{view}");
+        assert_eq!(view["invitados"][0]["nombre"], "Ana Mentora");
+    }
+    // The records browser and the CSV export follow the same rule.
+    let records = t
+        .ok(&t.company, "GET", "/api/records/invitados_hackaton", None)
+        .await;
+    assert_eq!(records["records"][0]["email"], "", "{records}");
+    let records = t
+        .ok(&t.admin, "GET", "/api/records/invitados_hackaton", None)
+        .await;
+    assert_eq!(records["records"][0]["email"], "ana@acme.co");
+    let (_, csv) = download(&t.app, &t.company, "/api/export/invitados_hackaton").await;
+    assert!(!String::from_utf8_lossy(&csv).contains("ana@acme.co"));
+    let (_, csv) = download(&t.app, &t.admin, "/api/export/invitados_hackaton").await;
+    assert!(String::from_utf8_lossy(&csv).contains("ana@acme.co"));
 });
 
 // ExpertoJuradoTests

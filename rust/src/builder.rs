@@ -488,6 +488,18 @@ async fn build(
             }
         }
     }
+    // A professor's participacion/evaluacion reports only cover retos where they
+    // hold an approved or published integration (both SQLs alias retos as r).
+    if !user.admin()
+        && user.rol == "PROFESOR"
+        && ["participacion", "evaluacion"].contains(&report.key)
+    {
+        binds.push(user.id.to_string());
+        clauses.push_str(&format!(
+            " AND r.id IN (SELECT i.reto_id FROM integraciones_academicas i WHERE i.profesor_id=${}::bigint AND i.estado IN ('aprobada','publicada'))",
+            binds.len()
+        ));
+    }
     let base = report.sql.replace("{where}", &clauses);
     let count_sql = format!("SELECT count(*) FROM ({base}) x");
     let mut count = sqlx::query_scalar::<_, i64>(&count_sql);

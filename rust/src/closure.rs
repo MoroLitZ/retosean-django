@@ -51,7 +51,7 @@ async fn manage(
 async fn teacher(tx: &mut Transaction<'_, Postgres>, reto: i64, user: &User) -> Result<bool> {
     Ok(user.rol == "PROFESOR"
         && sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2)",
+            "SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2 AND estado IN ('aprobada','publicada'))",
         )
         .bind(reto)
         .bind(user.id)
@@ -171,8 +171,13 @@ pub async fn save(
     let (fields, acta) = read_form(multipart, "acta_url").await?;
     let get = |name: &str| fields.get(name).map(|v| v.trim()).unwrap_or("");
     let when = get("fecha_hora");
-    if !when.is_empty() && chrono::NaiveDateTime::parse_from_str(when, "%Y-%m-%dT%H:%M").is_err() {
-        return Err(AppError::bad("Fecha y hora inválidas"));
+    if !when.is_empty() {
+        match chrono::NaiveDateTime::parse_from_str(when, "%Y-%m-%dT%H:%M") {
+            Ok(parsed) => {
+                crate::domain::validate_date(Some(parsed.date()), "Fecha y hora")?;
+            }
+            Err(_) => return Err(AppError::bad("Fecha y hora inválidas")),
+        }
     }
     if get("espacio").chars().count() > 200 {
         return Err(AppError::bad("Espacio: máximo 200 caracteres"));
