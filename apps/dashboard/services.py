@@ -191,7 +191,11 @@ def kpis_profesor(usuario, desde, hasta):
         IntegracionAcademica.objects.filter(profesor=usuario), "creado_en", desde, hasta
     )
     retos_ids = list(integraciones.values_list("reto_id", flat=True))
-    entregables = Entregable.objects.filter(reto_id__in=retos_ids)
+    # PRE-03: los entregables tambien respetan el periodo elegido, igual que
+    # las integraciones; antes se contaban todos los de la historia.
+    entregables = acotar(
+        Entregable.objects.filter(reto_id__in=retos_ids), "fecha_entrega", desde, hasta
+    )
 
     return {
         "cursos_activos": integraciones.filter(estado__in=["aprobada", "publicada"]).count(),
@@ -218,7 +222,9 @@ def series_profesor(usuario, desde, hasta):
         IntegracionAcademica.objects.filter(profesor=usuario), "creado_en", desde, hasta
     )
     retos_ids = list(integraciones.values_list("reto_id", flat=True))
-    entregables = Entregable.objects.filter(reto_id__in=retos_ids)
+    entregables = acotar(
+        Entregable.objects.filter(reto_id__in=retos_ids), "fecha_entrega", desde, hasta
+    )
 
     etiquetas = dict(Entregable.ESTADOS)
     por_estado = [
@@ -245,7 +251,10 @@ def kpis_estudiante(usuario, desde, hasta):
     postulaciones = acotar(
         Postulacion.objects.filter(estudiante=usuario), "fecha_postulacion", desde, hasta
     )
-    entregables = Entregable.objects.filter(estudiante=usuario)
+    # PRE-03: el periodo elegido tambien acota los entregables del estudiante.
+    entregables = acotar(
+        Entregable.objects.filter(estudiante=usuario), "fecha_entrega", desde, hasta
+    )
 
     return {
         "retos_disponibles": Reto.objects.filter(estado__in=Reto.ESTADOS_ABIERTOS).count(),
@@ -278,8 +287,9 @@ def series_estudiante(usuario, desde, hasta):
 
     notas = [
         (entregable.titulo[:24], float(entregable.nota))
-        for entregable in Entregable.objects.filter(
-            estudiante=usuario, nota__isnull=False
+        for entregable in acotar(
+            Entregable.objects.filter(estudiante=usuario, nota__isnull=False),
+            "fecha_entrega", desde, hasta,
         ).order_by("-fecha_entrega")[:8]
     ]
     return {

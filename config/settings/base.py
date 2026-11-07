@@ -94,11 +94,22 @@ DATABASES = {
         "PASSWORD": config("DB_PASSWORD"),
         "HOST": config("DB_HOST", default="localhost"),
         "PORT": config("DB_PORT", default="5432"),
+        # Permite correr varias suites en paralelo, cada una con su BD de prueba.
+        "TEST": {"NAME": config("DB_TEST_NAME", default=None)},
     }
 }
 
 AUTH_USER_MODEL = "usuarios.Usuario"
 AUTHENTICATION_BACKENDS = ["apps.usuarios.backends.UsuarioOCorreoBackend"]
+
+# CFG-02: validadores de contrasena por defecto de Django (similitud con los
+# datos del usuario, longitud minima, contrasenas comunes y solo numeros).
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
 
 LANGUAGE_CODE = "es-co"
 TIME_ZONE = "America/Bogota"
@@ -124,13 +135,22 @@ STORAGES = {
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024
-FILE_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_SIZE
+# CFG-06: los archivos por encima de este umbral se vuelcan a un temporal en
+# disco en vez de RAM; con el umbral anterior (MAX_UPLOAD_SIZE) varias subidas
+# concurrentes de decenas de MB podian agotar la memoria del proceso.
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
+# Acota por separado los datos de formulario sin archivo en cada peticion.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LOGIN_URL = "/usuarios/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/usuarios/login/"
+
+# CFG-11: la ruta del administrador se define por entorno; en produccion se
+# cambia para no dejar el panel expuesto en la ruta conocida "admin/".
+ADMIN_URL = config("ADMIN_URL", default="admin/")
 
 # --- Correo (HU15) --------------------------------------------------------
 # En desarrollo se sobreescribe por el backend de consola.
@@ -152,12 +172,22 @@ LOGGING = {
     "disable_existing_loggers": False,
     "formatters": {
         "simple": {"format": "[{levelname}] {asctime} {name}: {message}", "style": "{"},
+        # CFG-10: mismo formato, pero redacta contrasenas, tokens y secretos
+        # que puedan colarse en los mensajes (MAN-CFG-08).
+        "seguro": {
+            "()": "config.registro.FormateadorSeguro",
+            "format": "[{levelname}] {asctime} {name}: {message}",
+            "style": "{",
+        },
     },
     "handlers": {
-        "console": {"class": "logging.StreamHandler", "formatter": "simple"},
+        "console": {"class": "logging.StreamHandler", "formatter": "seguro"},
     },
     "root": {"handlers": ["console"], "level": config("LOG_LEVEL", default="INFO")},
     "loggers": {
         "django.request": {"handlers": ["console"], "level": "ERROR", "propagate": False},
+        # CFG-10: eventos de seguridad (CSRF sospechoso, cabeceras falsificadas,
+        # denegaciones) con logger propio para que destaquen en el registro.
+        "django.security": {"handlers": ["console"], "level": "WARNING", "propagate": False},
     },
 }

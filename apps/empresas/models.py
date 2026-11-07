@@ -134,6 +134,8 @@ class TipoDocumentoLegal(models.Model):
 class DocumentoEmpresa(models.Model):
     # Formatos aceptados para cualquier documento legal.
     EXTENSIONES_PERMITIDAS = ("pdf",)
+    # Tamanio maximo admitido para un documento legal (10 MB).
+    TAMANO_MAXIMO = 10 * 1024 * 1024
     ESTADOS = [
         ("PENDIENTE", "Pendiente"),
         ("CARGADO", "En Revision"),
@@ -188,21 +190,24 @@ class DocumentoEmpresa(models.Model):
 
     def save(self, *args, **kwargs):
         self.full_clean()
-        
+
+        anterior = None
         if self.pk:
             try:
                 anterior = DocumentoEmpresa.objects.get(id=self.id)
             except DocumentoEmpresa.DoesNotExist:
                 anterior = None
-            # Solo intentamos borrar si realmente habia archivo previo:
-            # sobre un FileField vacio, .path lanza ValueError.
-            if anterior and anterior.archivo and anterior.archivo != self.archivo:
-                try:
-                    if os.path.isfile(anterior.archivo.path):
-                        os.remove(anterior.archivo.path)
-                except (ValueError, NotImplementedError, OSError):
-                    pass
+
         super().save(*args, **kwargs)
+
+        # Solo borramos el archivo anterior una vez confirmado el guardado, para
+        # no perder el original si la persistencia del nuevo falla.
+        if anterior and anterior.archivo and anterior.archivo != self.archivo:
+            try:
+                if os.path.isfile(anterior.archivo.path):
+                    os.remove(anterior.archivo.path)
+            except (ValueError, NotImplementedError, OSError):
+                pass
 
     def __str__(self):
         return f"{self.empresa.razon_social} - {self.get_tipo_documento_display()} ({self.estado})"

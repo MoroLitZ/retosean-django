@@ -214,7 +214,7 @@
                     </td>
                     <td>
                         {% if doc.archivo %}
-                            <a href="{{ doc.archivo.url }}" target="_blank" class="btn btn-sm btn-outline-primary" style="font-size:0.78rem;">
+                            <a href="{% url 'empresas:descargar_documento' doc.id %}" target="_blank" class="btn btn-sm btn-outline-primary" style="font-size:0.78rem;">
                                 <i class="bi bi-eye me-1"></i>Ver Archivo
                             </a>
                         {% else %}

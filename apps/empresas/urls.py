@@ -10,6 +10,7 @@ urlpatterns = [
     path('postulaciones/',  views.postulaciones_empresa,      name='postulaciones'),
     path('postulaciones/<int:postulacion_id>/gestionar/', views.gestionar_postulacion, name='gestionar_postulacion'),
     path('documentos/',     views.panel_documentos_empresa,   name='documentos'),
+    path('documentos/<int:documento_id>/descargar/', views.descargar_documento, name='descargar_documento'),
     path('indicadores/',    views.indicadores_empresa,        name='indicadores_empresa'),
     path('seguimiento/',    views.seguimiento_avance,         name='seguimiento_avance'),
     path('seguimiento/<int:reto_id>/', views.seguimiento_avance, name='seguimiento_reto'),

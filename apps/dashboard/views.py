@@ -14,6 +14,15 @@ from . import services
 from .filters import PERIODOS, rango_de_fechas
 
 
+def _id_de_filtro(valor):
+    """PRE-02: solo se aceptan identificadores numericos; el resto se ignora.
+
+    Un ?facultad=abc llegaba tal cual a .filter(facultad_id="abc") y el panel
+    reventaba con un 500 (ValueError al coercionar la clave foranea).
+    """
+    return valor if valor and valor.isdigit() else None
+
+
 @login_required(login_url='usuarios:login')
 def panel(request):
     """Panel de indicadores. El contenido depende del rol de quien entra."""
@@ -30,9 +39,9 @@ def panel(request):
     }
 
     if rol == ROL_ADMIN:
-        facultad_id = request.GET.get('facultad') or None
-        programa_id = request.GET.get('programa') or None
-        ecosistema_id = request.GET.get('ecosistema') or None
+        facultad_id = _id_de_filtro(request.GET.get('facultad'))
+        programa_id = _id_de_filtro(request.GET.get('programa'))
+        ecosistema_id = _id_de_filtro(request.GET.get('ecosistema'))
         contexto.update(services.opciones_de_filtro())
         contexto.update({
             'kpis': services.kpis_admin(desde, hasta, facultad_id, programa_id, ecosistema_id),

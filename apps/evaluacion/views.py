@@ -7,6 +7,7 @@ from django.db.models import Count
 from django.urls import reverse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from apps.usuarios.decorators import rol_requerido
 from apps.seguimiento.models import IntegracionAcademica
@@ -15,24 +16,24 @@ from .forms import ComentarioEntregableForm, RubricaForm
 from apps.notificaciones.services import notificar
 from apps.seguimiento.services import cambiar_estado
 
-from .services import MAQUINA_ENTREGABLE, marcar_en_revision
+from .services import MAQUINA_ENTREGABLE
 
 from .models import CriterioRubrica, Entregable, Evaluacion, EvaluacionCriterio, Rubrica
 
 
+ESTADOS_INTEGRACION_ACTIVOS = ("aprobada", "publicada")
+
+
 def _retos_profesor(usuario):
-    return IntegracionAcademica.objects.filter(profesor=usuario).values_list("reto_id", flat=True)
+    return IntegracionAcademica.objects.filter(
+        profesor=usuario, estado__in=ESTADOS_INTEGRACION_ACTIVOS
+    ).values_list("reto_id", flat=True)
 
 
 @rol_requerido("PROFESOR", raise_exception=True)
 def panel_profesor(request):
-    # Al abrir el panel, el profesor "abre" sus entregables para revisarlos:
-    # los que siguen ENVIADO pasan a EN_REVISION. Es el único punto donde ese
-    # estado se alcanza; los KPIs y las plantillas ya lo contaban.
-    marcar_en_revision(
-        Entregable.objects.filter(reto_id__in=_retos_profesor(request.user)), request.user
-    )
-
+    # El panel es solo informativo: no muta el estado de los entregables en GET.
+    # Los entregables se marcan en revision cuando el profesor califica (POST).
     entregables = Entregable.objects.filter(reto_id__in=_retos_profesor(request.user)).select_related(
         "reto", "estudiante", "equipo"
     ).prefetch_related("historial_comentarios__autor").order_by("estado", "-fecha_entrega")
@@ -57,6 +58,10 @@ def calificar(request, pk):
         raise PermissionDenied("La calificacion solo se registra mediante POST.")
     entregable = get_object_or_404(Entregable, pk=pk, reto_id__in=_retos_profesor(request.user))
     next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("evaluacion:panel_profesor")
+    if not url_has_allowed_host_and_scheme(
+        next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        next_url = reverse("evaluacion:panel_profesor")
     # HU12: volver a calificar exige confirmacion explicita.
     if entregable.estado == "CALIFICADO" and request.POST.get("confirmar_recalificacion") != "1":
         messages.error(
@@ -79,6 +84,9 @@ def calificar(request, pk):
                     raise ValueError
                 puntajes.append((criterio, valor))
             nota = sum((valor for _, valor in puntajes), Decimal("0"))
+            # PAR-01: el total de la rubrica no puede superar la escala del entregable.
+            if nota > entregable.puntaje_maximo:
+                raise ValueError
         else:
             nota = Decimal(request.POST.get("nota", ""))
             if nota < 0 or nota > entregable.puntaje_maximo:
@@ -87,6 +95,13 @@ def calificar(request, pk):
     except (Rubrica.DoesNotExist, InvalidOperation, ValueError):
         messages.error(request, "La calificacion o los puntajes de la rubrica no son validos.")
         return redirect(next_url)
+
+    # El profesor abre el entregable para revisarlo en el momento de calificar.
+    if entregable.estado == "ENVIADO":
+        cambiar_estado(
+            entregable, MAQUINA_ENTREGABLE, "EN_REVISION", request.user,
+            "Entregable abierto para revision.",
+        )
 
     comentario = request.POST.get("comentario", "").strip()
     evaluacion, _ = Evaluacion.objects.update_or_create(
@@ -156,7 +171,12 @@ def publicar_calificaciones(request, reto_id):
         messages.success(request, f"{len(pendientes)} calificacion(es) publicadas y estudiantes notificados.")
     else:
         messages.info(request, "No hay calificaciones pendientes de publicar en este reto.")
-    return redirect(request.POST.get("next") or reverse("evaluacion:panel_profesor"))
+    next_url = request.POST.get("next") or reverse("evaluacion:panel_profesor")
+    if not url_has_allowed_host_and_scheme(
+        next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        next_url = reverse("evaluacion:panel_profesor")
+    return redirect(next_url)
 
 
 @rol_requerido("PROFESOR", raise_exception=True)
@@ -185,10 +205,7 @@ def comentario(request, pk):
     rol = request.user.rol
     autorizado = (
         (rol == "ESTUDIANTE" and entregable.estudiante_id == request.user.pk)
-        or (
-            rol == "PROFESOR"
-            and IntegracionAcademica.objects.filter(reto_id=entregable.reto_id, profesor=request.user).exists()
-        )
+        or (rol == "PROFESOR" and entregable.reto_id in _retos_profesor(request.user))
         # HU14: la empresa comenta los entregables de sus propios retos.
         or (rol == "EMPRESA" and entregable.reto.empresa_id == request.user.pk)
     )

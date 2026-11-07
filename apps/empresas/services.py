@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.urls import reverse
 from django.utils import timezone
 
@@ -161,16 +161,26 @@ def cargar_documento(empresa, tipo_documento, archivo, fecha_expedicion, usuario
         empresa=empresa, tipo_documento=tipo_documento
     ).first()
     if documento is None:
-        documento = DocumentoEmpresa.objects.create(
-            empresa=empresa,
-            tipo_documento=tipo_documento,
-            archivo=archivo,
-            fecha_expedicion=fecha_expedicion,
-            fecha_vencimiento=vencimiento,
-            estado="CARGADO",
-        )
-        registrar_cambio_estado(documento, "", "CARGADO", usuario, "Documento cargado.")
-        return documento, True
+        try:
+            # El savepoint permite absorber la carrera sin ensuciar la transaccion
+            # exterior: si otro proceso creo el documento entre el select y el
+            # create, el `unique_together` lanza IntegrityError y lo reutilizamos.
+            with transaction.atomic():
+                documento = DocumentoEmpresa.objects.create(
+                    empresa=empresa,
+                    tipo_documento=tipo_documento,
+                    archivo=archivo,
+                    fecha_expedicion=fecha_expedicion,
+                    fecha_vencimiento=vencimiento,
+                    estado="CARGADO",
+                )
+                registrar_cambio_estado(documento, "", "CARGADO", usuario, "Documento cargado.")
+        except IntegrityError:
+            documento = DocumentoEmpresa.objects.select_for_update().get(
+                empresa=empresa, tipo_documento=tipo_documento
+            )
+        else:
+            return documento, True
 
     documento.archivo = archivo
     documento.fecha_expedicion = fecha_expedicion

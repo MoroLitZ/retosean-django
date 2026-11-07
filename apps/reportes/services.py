@@ -39,6 +39,10 @@ GRIS_TEXTO = colors.HexColor("#6b7280")
 GRIS_SUAVE = colors.HexColor("#f3f4f6")
 
 MAX_FILAS_PDF = 2000
+# PRE-05: openpyxl conserva todas las celdas en memoria, asi que un Excel sin
+# tope podia agotarla con reportes gigantes. Se acota muy por encima del PDF
+# (cada fila pesa mucho menos) y muy por debajo del limite de Excel (~1M).
+MAX_FILAS_EXCEL = 10_000
 
 
 def _filas(definicion, queryset, columnas):
@@ -103,7 +107,14 @@ def generar_excel(definicion, queryset, columnas, filtros):
         celda.alignment = Alignment(vertical="center", wrap_text=True)
 
     total = 0
-    for fila in _filas(definicion, queryset, columnas):
+    truncado = False
+    # El corte va en la base (LIMIT): iterar el queryset completo traeria a
+    # memoria todos los objetos aunque no quepan en la hoja. Se pide una fila
+    # de mas para saber con certeza si hubo truncamiento.
+    for fila in _filas(definicion, queryset[: MAX_FILAS_EXCEL + 1], columnas):
+        if total >= MAX_FILAS_EXCEL:
+            truncado = True
+            break
         agregar_fila(hoja, fila)
         total += 1
 
@@ -112,7 +123,13 @@ def generar_excel(definicion, queryset, columnas, filtros):
     hoja.freeze_panes = hoja.cell(row=fila_encabezado + 1, column=1)
 
     hoja.append([])
-    hoja.append([f"Total de registros: {total}"])
+    hoja.append([
+        f"Total de registros: {total}"
+        + (
+            f" (truncado a {MAX_FILAS_EXCEL}; ajusta los filtros para el listado completo)"
+            if truncado else ""
+        )
+    ])
 
     buffer = io.BytesIO()
     libro.save(buffer)

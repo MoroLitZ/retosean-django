@@ -57,7 +57,7 @@ class DocumentacionEmpresaTests(TestCase):
             reverse("empresas:documentos"),
             {
                 "tipo_documento": "RUT",
-                "archivo": SimpleUploadedFile("rut.pdf", b"contenido"),
+                "archivo": SimpleUploadedFile("rut.pdf", b"%PDF-1.4"),
                 "fecha_expedicion": date.today().isoformat(),
             },
         )
@@ -122,7 +122,7 @@ class VigenciaCamaraComercioTests(TestCase):
                 "tipo_documento": "CAMARA_COMERCIO",
                 "fecha_expedicion": date.today() - timedelta(days=dias_atras),
             },
-            files={"archivo": SimpleUploadedFile("camara.pdf", b"contenido")},
+            files={"archivo": SimpleUploadedFile("camara.pdf", b"%PDF-1.4")},
         )
 
     def test_documento_reciente_es_valido(self):
@@ -154,6 +154,15 @@ class GateDeDocumentacionTests(TestCase):
         self.assertRedirects(response, reverse("empresas:documentos"))
         self.empresa.refresh_from_db()
         self.assertTrue(self.empresa.renuncio_a_convenio)
+
+    def test_elegir_si_convenio_revierte_la_renuncia(self):
+        self.empresa.renuncio_a_convenio = True
+        self.empresa.save()
+        self.client.force_login(self.usuario)
+        response = self.client.post(reverse("empresas:elegir_convenio"), {"opcion": "si_convenio"})
+        self.assertRedirects(response, reverse("empresas:documentos"))
+        self.empresa.refresh_from_db()
+        self.assertFalse(self.empresa.renuncio_a_convenio)
 
     def test_sin_convenio_no_se_salta_la_documentacion(self):
         """Elegir participar sin convenio ya no habilita a la empresa por si solo."""
@@ -375,6 +384,23 @@ class CatalogoDocumentosTests(TestCase):
         })
         self.assertFalse(DocumentoEmpresa.objects.filter(empresa=self.empresa, tipo_documento="RUT").exists())
 
+    def test_pdf_con_contenido_no_pdf_se_rechaza(self):
+        self.client.force_login(self.usuario_empresa)
+        self.client.post(reverse("empresas:documentos"), {
+            "tipo_documento": "RUT", "archivo": SimpleUploadedFile("rut.pdf", b"<html>no soy pdf</html>"),
+            "fecha_expedicion": date.today().isoformat(),
+        })
+        self.assertFalse(DocumentoEmpresa.objects.filter(empresa=self.empresa, tipo_documento="RUT").exists())
+
+    def test_documento_que_excede_el_tamano_maximo_se_rechaza(self):
+        contenido = b"%PDF-1.4" + b"x" * DocumentoEmpresa.TAMANO_MAXIMO
+        self.client.force_login(self.usuario_empresa)
+        self.client.post(reverse("empresas:documentos"), {
+            "tipo_documento": "RUT", "archivo": SimpleUploadedFile("grande.pdf", contenido),
+            "fecha_expedicion": date.today().isoformat(),
+        })
+        self.assertFalse(DocumentoEmpresa.objects.filter(empresa=self.empresa, tipo_documento="RUT").exists())
+
     def test_vigencia_fija_la_fecha_de_vencimiento(self):
         self.client.force_login(self.usuario_empresa)
         expedicion = date.today() - timedelta(days=10)
@@ -555,3 +581,135 @@ class VencimientoHistorialYSiembraTests(TestCase):
             self._correr_comando()
         self.assertEqual(len(llamadas), 2)  # intento los dos
         self.assertEqual(DocumentoEmpresa.objects.filter(empresa=self.empresa, estado="VENCIDO").count(), 1)
+
+
+class DescargaDocumentoTests(TestCase):
+    """EMP-01: descarga protegida de documentos legales (IDOR via media)."""
+
+    def setUp(self):
+        self.usuario_a = Usuario.objects.create_user(username="empresa-desc-a", password="x", rol="EMPRESA")
+        self.usuario_b = Usuario.objects.create_user(username="empresa-desc-b", password="x", rol="EMPRESA")
+        self.admin = Usuario.objects.create_superuser(username="admin-desc", password="x", email="admin-desc@ean.edu.co")
+        self.empresa_a = Empresa.objects.create(usuario=self.usuario_a, nit="900000011", razon_social="Descarga A SAS")
+        self.empresa_b = Empresa.objects.create(usuario=self.usuario_b, nit="900000022", razon_social="Descarga B SAS")
+        self.documento_b = DocumentoEmpresa.objects.create(
+            empresa=self.empresa_b, tipo_documento="RUT",
+            archivo=SimpleUploadedFile("rut_b.pdf", b"%PDF-1.4"),
+        )
+
+    def _url(self, documento):
+        return reverse("empresas:descargar_documento", args=[documento.pk])
+
+    def test_empresa_no_descarga_documento_de_otra(self):
+        self.client.force_login(self.usuario_a)
+        response = self.client.get(self._url(self.documento_b))
+        self.assertIn(response.status_code, (403, 404))
+
+    def test_empresa_descarga_su_propio_documento(self):
+        documento_a = DocumentoEmpresa.objects.create(
+            empresa=self.empresa_a, tipo_documento="RUT",
+            archivo=SimpleUploadedFile("rut_a.pdf", b"%PDF-1.4"),
+        )
+        self.client.force_login(self.usuario_a)
+        self.assertEqual(self.client.get(self._url(documento_a)).status_code, 200)
+
+    def test_admin_descarga_documento_de_otra_empresa(self):
+        self.client.force_login(self.admin)
+        self.assertEqual(self.client.get(self._url(self.documento_b)).status_code, 200)
+
+    def test_usuario_anonimo_es_redirigido_al_login(self):
+        response = self.client.get(self._url(self.documento_b))
+        self.assertEqual(response.status_code, 302)
+
+
+class ListasRestrictivasTests(TestCase):
+    """EMP-03/EMP-04: atomicidad del flujo y validacion de la evidencia."""
+
+    def setUp(self):
+        self.admin = Usuario.objects.create_user(username="admin-listas", password="x", rol="ADMIN")
+        self.usuario = Usuario.objects.create_user(username="empresa-listas", password="x", rol="EMPRESA", email="e@listas.com")
+        self.empresa = Empresa.objects.create(usuario=self.usuario, nit="900111222", razon_social="Listas SAS")
+        self.documento = DocumentoEmpresa.objects.create(
+            empresa=self.empresa, tipo_documento="RUT", estado="CARGADO",
+            archivo=SimpleUploadedFile("rut.pdf", b"%PDF-1.4"),
+        )
+        self.url = reverse("empresas:procesar_listas_restrictivas", args=[self.empresa.pk])
+
+    def test_rechazo_por_listas_rechaza_documentos_e_inhabilita(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(self.url, {"estado_listas_restrictivas": "RECHAZADO"})
+        self.assertRedirects(response, reverse("empresas:admin_revisar_documentacion", args=[self.empresa.pk]))
+        self.empresa.refresh_from_db()
+        self.documento.refresh_from_db()
+        self.usuario.refresh_from_db()
+        self.assertEqual(self.empresa.estado_listas_restrictivas, "RECHAZADO")
+        self.assertEqual(self.empresa.estado_validacion, "RECHAZADA")
+        self.assertEqual(self.documento.estado, "RECHAZADO")
+        self.assertFalse(self.usuario.is_active)
+
+    def test_el_flujo_de_listas_es_atomico(self):
+        from unittest import mock
+
+        self.client.force_login(self.admin)
+        with mock.patch("apps.empresas.views.cambiar_estado_cuenta", side_effect=RuntimeError("fallo simulado")):
+            with self.assertRaises(RuntimeError):
+                self.client.post(self.url, {"estado_listas_restrictivas": "RECHAZADO"})
+        self.empresa.refresh_from_db()
+        self.documento.refresh_from_db()
+        self.assertEqual(self.empresa.estado_listas_restrictivas, "PENDIENTE")
+        self.assertEqual(self.documento.estado, "CARGADO")
+
+    def test_evidencia_con_formato_no_permitido_se_rechaza(self):
+        self.client.force_login(self.admin)
+        self.client.post(self.url, {
+            "estado_listas_restrictivas": "APROBADO",
+            "evidencia_listas": SimpleUploadedFile("ev.html", b"<html>"),
+        })
+        self.empresa.refresh_from_db()
+        self.assertEqual(self.empresa.estado_listas_restrictivas, "PENDIENTE")
+        self.assertFalse(self.empresa.evidencia_listas)
+
+    def test_evidencia_pdf_valida_se_guarda(self):
+        self.client.force_login(self.admin)
+        self.client.post(self.url, {
+            "estado_listas_restrictivas": "APROBADO",
+            "evidencia_listas": SimpleUploadedFile("ev.pdf", b"%PDF-1.4"),
+        })
+        self.empresa.refresh_from_db()
+        self.assertEqual(self.empresa.estado_listas_restrictivas, "APROBADO")
+        self.assertTrue(self.empresa.evidencia_listas)
+
+
+class AccesoPanelYTramiteTests(TestCase):
+    """EMP-09/EMP-10: acceso al panel y documentos vencidos en la cola del admin."""
+
+    def setUp(self):
+        self.admin = Usuario.objects.create_superuser(username="admin-colas", password="x", email="a@colas.com")
+        self.usuario = Usuario.objects.create_user(username="empresa-colas", password="x", rol="EMPRESA")
+        self.empresa = Empresa.objects.create(usuario=self.usuario, nit="900333444", razon_social="Colas SAS")
+
+    def test_staff_sin_perfil_de_empresa_no_accede_al_panel(self):
+        staff = Usuario.objects.create_user(username="staff-solo", password="x", rol="ADMIN", is_staff=True)
+        self.client.force_login(staff)
+        response = self.client.get(reverse("empresas:documentos"))
+        self.assertEqual(response.status_code, 302)
+
+    def test_documento_verificado_vencido_aparece_en_pendientes(self):
+        documento = DocumentoEmpresa.objects.create(
+            empresa=self.empresa, tipo_documento="RUT", estado="VERIFICADO",
+            archivo=SimpleUploadedFile("rut.pdf", b"%PDF-1.4"),
+            fecha_vencimiento=date.today() - timedelta(days=1),
+        )
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("empresas:admin_revisar_documentacion", args=[self.empresa.pk]))
+        self.assertIn(documento, response.context["pendientes"])
+
+    def test_documento_verificado_vigente_no_aparece_en_pendientes(self):
+        documento = DocumentoEmpresa.objects.create(
+            empresa=self.empresa, tipo_documento="RUT", estado="VERIFICADO",
+            archivo=SimpleUploadedFile("rut.pdf", b"%PDF-1.4"),
+            fecha_vencimiento=date.today() + timedelta(days=365),
+        )
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("empresas:admin_revisar_documentacion", args=[self.empresa.pk]))
+        self.assertNotIn(documento, response.context["pendientes"])

@@ -39,6 +39,13 @@ def _participantes_del_reto(reto):
 
     elegibles = {}
 
+    # CIE-01: un estudiante cuyo cupo fue rechazado o que se retiro no debe
+    # certificarse aunque haya subido algun entregable.
+    rechazados = set(
+        Postulacion.objects.filter(reto=reto, estado__in=["RECHAZADA", "RETIRADA"])
+        .values_list("estudiante_id", flat=True)
+    )
+
     # Estudiantes aceptados, incorporados a un equipo academico o que entregaron evidencias.
     for postulacion in Postulacion.objects.filter(reto=reto, estado="ACEPTADA").select_related("estudiante"):
         elegibles[postulacion.estudiante_id] = (postulacion.estudiante, "ESTUDIANTE")
@@ -47,6 +54,8 @@ def _participantes_del_reto(reto):
     ).distinct():
         elegibles.setdefault(estudiante.pk, (estudiante, "ESTUDIANTE"))
     for entregable in Entregable.objects.filter(reto=reto).select_related("estudiante"):
+        if entregable.estudiante_id in rechazados:
+            continue
         elegibles.setdefault(entregable.estudiante_id, (entregable.estudiante, "ESTUDIANTE"))
 
     # Docentes con integracion vinculada al reto.

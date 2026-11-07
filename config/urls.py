@@ -15,14 +15,16 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path, include
+from django.contrib.auth.decorators import login_required
+from django.urls import path, include, re_path
 from django.conf import settings
-from django.conf.urls.static import static
 from django.views.generic import RedirectView
+from django.views.static import serve
 
 urlpatterns = [
     path('', RedirectView.as_view(pattern_name='usuarios:perfil', permanent=False), name='home'),
-    path('admin/', admin.site.urls),
+    # CFG-11: ruta configurable por entorno en lugar de "admin/" fijo.
+    path(settings.ADMIN_URL, admin.site.urls),
     path('usuarios/', include('apps.usuarios.urls')),
     path('retos/', include('apps.retos.urls')),
     path('empresas/', include('apps.empresas.urls')),
@@ -39,6 +41,18 @@ urlpatterns = [
     path('hackatones/', include('apps.hackaton.urls')),
 ]
 
+# CFG-04: en DEBUG los /media/ tambien contienen archivos privados (p. ej.
+# PDFs legales de empresas). Exigir sesion iniciada evita que un usuario
+# anonimo los lea adivinando la URL. La autorizacion por empresa/objeto la
+# aplican las vistas de la app correspondiente, no el servidor estatico.
+media_en_desarrollo = login_required(serve)
+
 if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += [
+        re_path(
+            r"^media/(?P<path>.*)$",
+            media_en_desarrollo,
+            {"document_root": settings.MEDIA_ROOT},
+        ),
+    ]
 

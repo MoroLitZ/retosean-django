@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
@@ -288,3 +290,65 @@ class PostulacionCompletaTests(TestCase):
         postulacion.refresh_from_db()
         self.assertEqual(postulacion.estado, "RETIRADA")
 
+
+class EntregableFinalNoSeReemplazaTests(TestCase):
+    """PAR-03: un entregable final o con calificacion publicada no se reemplaza."""
+
+    def setUp(self):
+        self.empresa = Usuario.objects.create_user(username="empresa-final", password="x", rol="EMPRESA")
+        self.estudiante = Usuario.objects.create_user(username="est-final", password="x", rol="ESTUDIANTE")
+        self.reto = Reto.objects.create(empresa=self.empresa, titulo="Reto entregable", estado="en_curso")
+        Postulacion.objects.create(reto=self.reto, estudiante=self.estudiante, estado="ACEPTADA")
+        self.url = reverse("participaciones:mis_entregables_reto", args=[self.reto.pk])
+
+    def _payload(self, archivo):
+        return {
+            "titulo": "Final",
+            "archivo": archivo,
+            "comentario_estudiante": "",
+        }
+
+    def test_no_reemplaza_entregable_final(self):
+        entregable = Entregable.objects.create(
+            reto=self.reto, estudiante=self.estudiante, titulo="Final",
+            archivo=SimpleUploadedFile("final.pdf", b"original"),
+            es_final=True, estado="ENVIADO",
+        )
+        self.client.force_login(self.estudiante)
+        self.client.post(self.url, self._payload(SimpleUploadedFile("nuevo.pdf", b"nuevo")))
+        entregable.refresh_from_db()
+        self.assertTrue(entregable.es_final)
+        with entregable.archivo.open("rb") as f:
+            self.assertEqual(f.read(), b"original")
+
+    def test_no_reemplaza_entregable_con_calificacion_publicada(self):
+        entregable = Entregable.objects.create(
+            reto=self.reto, estudiante=self.estudiante, titulo="Final",
+            archivo=SimpleUploadedFile("final.pdf", b"original"),
+            estado="CALIFICADO", nota=Decimal("4.50"), calificacion_publicada=True,
+        )
+        self.client.force_login(self.estudiante)
+        self.client.post(self.url, self._payload(SimpleUploadedFile("nuevo.pdf", b"nuevo")))
+        entregable.refresh_from_db()
+        self.assertEqual(entregable.nota, Decimal("4.50"))
+        self.assertTrue(entregable.calificacion_publicada)
+        with entregable.archivo.open("rb") as f:
+            self.assertEqual(f.read(), b"original")
+
+
+class EntregableSoloEnRetosActivosTests(TestCase):
+    """PAR-06: solo se admiten entregables en retos abiertos o en curso."""
+
+    def setUp(self):
+        self.empresa = Usuario.objects.create_user(username="empresa-activo", password="x", rol="EMPRESA")
+        self.estudiante = Usuario.objects.create_user(username="est-activo", password="x", rol="ESTUDIANTE")
+
+    def test_no_sube_entregable_en_reto_pausado(self):
+        reto = Reto.objects.create(empresa=self.empresa, titulo="Reto pausado", estado="pausado")
+        Postulacion.objects.create(reto=reto, estudiante=self.estudiante, estado="ACEPTADA")
+        self.client.force_login(self.estudiante)
+        self.client.post(
+            reverse("participaciones:mis_entregables_reto", args=[reto.pk]),
+            {"titulo": "Avance", "archivo": SimpleUploadedFile("a.pdf", b"x")},
+        )
+        self.assertFalse(Entregable.objects.filter(reto=reto, estudiante=self.estudiante).exists())

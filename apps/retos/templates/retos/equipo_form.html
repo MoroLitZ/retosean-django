@@ -13,7 +13,7 @@
       {{ form.as_p }}
       
       <div class="d-flex justify-content-between mt-4">
-        <a href="{% url 'retos:detalle_integracion' integracion.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+        <a href="{% if integracion %}{% url 'retos:detalle_integracion' integracion.pk %}{% else %}{% url 'retos:mis_integraciones' %}{% endif %}" class="btn btn-outline-secondary">Cancelar</a>
         <button type="submit" class="btn btn-primary">{{ boton|default:"Guardar Equipo" }}</button>
       </div>
     </form>

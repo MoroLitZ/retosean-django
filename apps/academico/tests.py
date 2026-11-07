@@ -54,6 +54,16 @@ class EmisionDeCertificadosTests(TestCase):
         emitir_certificados_de_reto(self.reto, self.admin)
         self.assertFalse(Certificado.objects.filter(usuario=self.rechazado).exists())
 
+    def test_no_emite_a_estudiante_rechazado_con_entregable(self):
+        from apps.evaluacion.models import Entregable
+
+        Entregable.objects.create(
+            reto=self.reto, estudiante=self.rechazado,
+            titulo="Entrega", archivo=SimpleUploadedFile("avance.pdf", b"x"),
+        )
+        emitir_certificados_de_reto(self.reto, self.admin)
+        self.assertFalse(Certificado.objects.filter(usuario=self.rechazado).exists())
+
     def test_no_emite_si_el_reto_no_esta_finalizado(self):
         self.reto.estado = "en_curso"
         self.reto.save()
@@ -186,7 +196,7 @@ class CierreEmiteCertificadosTests(TestCase):
         reto = Reto.objects.create(empresa=empresa, titulo="Reto con entregable", estado="en_curso")
         Entregable.objects.create(
             reto=reto, estudiante=estudiante, titulo="Entrega de avance",
-            archivo=SimpleUploadedFile("avance.pdf", b"contenido"),
+            archivo=SimpleUploadedFile("avance.pdf", b"contenido"), estado="CALIFICADO",
         )
 
         self.client.force_login(admin)

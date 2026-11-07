@@ -230,6 +230,12 @@ class RetoArchivo(models.Model):
 
 class EquipoRetoAcademico(models.Model): # <--- Cambiamos el nombre para que no choque con 'participaciones.Equipo'
     reto = models.ForeignKey(Reto, on_delete=models.CASCADE, related_name='equipos_academicos') # <--- related_name único
+    # HU03/RET-03: la integracion academica propietaria del equipo; solo su
+    # profesor (o un admin) puede editar/eliminar el equipo y su espejo.
+    integracion = models.ForeignKey(
+        'seguimiento.IntegracionAcademica', on_delete=models.CASCADE,
+        null=True, blank=True, related_name='equipos',
+    )
     nombre_equipo = models.CharField(max_length=100)
     profesores = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='equipos_academicos_profesor', blank=True)
     estudiantes = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='equipos_academicos_estudiante', blank=True)

@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
@@ -59,7 +60,14 @@ def postular_a_reto(request, reto_id):
 
     form = PostulacionForm(request.POST or None, request.FILES or None, instance=postulacion, initial=inicial)
     if request.method == 'POST' and form.is_valid():
-        postulacion = form.save()
+        try:
+            postulacion = form.save()
+        except IntegrityError:
+            messages.error(
+                request,
+                'Tu postulacion ya fue registrada por otra via. Revisa tu lista de postulaciones.'
+            )
+            return redirect('academico:mis_postulaciones')
         if creada:
             registrar_cambio_estado(postulacion, '', 'PENDIENTE', request.user, 'Postulacion enviada.')
         elif postulacion.estado == 'RETIRADA':
@@ -280,30 +288,49 @@ def mis_entregables(request, reto_id=None):
             return redirect('participaciones:mis_entregables')
 
         if request.method == 'POST':
-            if reto.estado == 'finalizado':
-                messages.error(request, 'Este reto ya fue cerrado formalmente y no recibe mas entregables.')
+            if reto.estado not in ('abierto', 'en_curso'):
+                if reto.estado == 'finalizado':
+                    messages.error(request, 'Este reto ya fue cerrado formalmente y no recibe mas entregables.')
+                else:
+                    messages.error(request, 'Este reto no acepta entregables en este momento.')
                 return redirect('participaciones:mis_entregables_reto', reto_id=reto.id)
 
             form = EntregableForm(request.POST, request.FILES)
             if form.is_valid():
                 titulo = form.cleaned_data.get('titulo') or 'Entregable del reto'
-                entregable, created = Entregable.objects.get_or_create(
-                    reto=reto,
-                    estudiante=request.user,
-                    titulo=titulo,
-                    defaults={
-                        'archivo': form.cleaned_data['archivo'],
-                        'es_final': form.cleaned_data.get('es_final', False),
-                        'comentario_estudiante': form.cleaned_data.get('comentario_estudiante', ''),
-                        'estado': 'ENVIADO',
-                    }
-                )
-                if not created:
-                    entregable.archivo = form.cleaned_data['archivo']
-                    entregable.es_final = form.cleaned_data.get('es_final', False)
-                    entregable.comentario_estudiante = form.cleaned_data.get('comentario_estudiante', '')
-                    entregable.save()
-                registrar_entrega(entregable, request.user, created)
+                try:
+                    with transaction.atomic():
+                        entregable, created = Entregable.objects.get_or_create(
+                            reto=reto,
+                            estudiante=request.user,
+                            titulo=titulo,
+                            defaults={
+                                'archivo': form.cleaned_data['archivo'],
+                                'es_final': form.cleaned_data.get('es_final', False),
+                                'comentario_estudiante': form.cleaned_data.get('comentario_estudiante', ''),
+                                'estado': 'ENVIADO',
+                            }
+                        )
+                        if not created:
+                            if entregable.es_final or entregable.calificacion_publicada:
+                                messages.error(
+                                    request,
+                                    'No puedes reemplazar un entregable final o con calificacion publicada.'
+                                )
+                                return redirect(
+                                    'participaciones:mis_entregables_reto', reto_id=reto.id
+                                )
+                            entregable.archivo = form.cleaned_data['archivo']
+                            entregable.es_final = form.cleaned_data.get('es_final', False)
+                            entregable.comentario_estudiante = form.cleaned_data.get('comentario_estudiante', '')
+                            entregable.save()
+                        registrar_entrega(entregable, request.user, created)
+                except IntegrityError:
+                    messages.error(
+                        request,
+                        'El entregable ya fue registrado. Verifica tu lista de entregables.'
+                    )
+                    return redirect('participaciones:mis_entregables_reto', reto_id=reto.id)
                 _notificar_entregable_recibido(reto, request.user, entregable)
                 messages.success(request, 'Entregable guardado con exito!')
                 return redirect('participaciones:mis_entregables_reto', reto_id=reto.id)

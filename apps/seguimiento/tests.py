@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase
@@ -11,7 +12,13 @@ from apps.retos.models import Reto
 from apps.usuarios.models import Usuario
 
 from .models import HistorialEstado, IntegracionAcademica
-from .services import MaquinaEstados, TransicionInvalida, cambiar_estado, historial_de
+from .services import (
+    MAQUINA_INTEGRACION,
+    MaquinaEstados,
+    TransicionInvalida,
+    cambiar_estado,
+    historial_de,
+)
 
 
 class MaquinaEstadosTests(SimpleTestCase):
@@ -62,7 +69,7 @@ class HistorialEstadoTests(TestCase):
         self.client.force_login(self.empresa_user)
         self.client.post(reverse("empresas:documentos"), {
             "tipo_documento": "RUT",
-            "archivo": SimpleUploadedFile("rut.pdf", b"contenido"),
+            "archivo": SimpleUploadedFile("rut.pdf", b"%PDF-1.4"),
             "fecha_expedicion": date.today().isoformat(),
         })
         documento = DocumentoEmpresa.objects.get(empresa=self.empresa, tipo_documento="RUT")
@@ -74,7 +81,7 @@ class HistorialEstadoTests(TestCase):
         self.client.force_login(self.empresa_user)
         self.client.post(reverse("empresas:documentos"), {
             "tipo_documento": "RUT",
-            "archivo": SimpleUploadedFile("rut2.pdf", b"contenido nuevo"),
+            "archivo": SimpleUploadedFile("rut2.pdf", b"%PDF-1.4"),
             "fecha_expedicion": date.today().isoformat(),
         })
 
@@ -149,3 +156,19 @@ class HistorialEstadoTests(TestCase):
         integracion.refresh_from_db()
         self.assertEqual(integracion.estado, "aprobada")
         self.assertFalse(HistorialEstado.objects.filter(object_id=integracion.pk, estado_nuevo="en_revision").exists())
+
+    def test_cambiar_estado_es_atomico(self):
+        """CIE-07: si falla el historial, se revierte el cambio de estado."""
+        reto = Reto.objects.create(empresa=self.empresa_user, titulo="Reto", estado="aprobado")
+        integracion = IntegracionAcademica.objects.create(
+            reto=reto, profesor=self.profesor, estado="borrador",
+            facultad="F", programa_academico="P", nivel_formacion="Pregrado", descripcion="d",
+            alcance="a", entregable_esperado="e", cronograma_sesiones="c",
+        )
+        with self.assertRaises(RuntimeError):
+            with patch("apps.seguimiento.services.registrar_cambio_estado") as mock_registrar:
+                mock_registrar.side_effect = RuntimeError("fallo historial")
+                cambiar_estado(integracion, MAQUINA_INTEGRACION, "en_revision", self.admin)
+        integracion.refresh_from_db()
+        self.assertEqual(integracion.estado, "borrador")
+        self.assertFalse(HistorialEstado.objects.filter(object_id=integracion.pk).exists())

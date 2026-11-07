@@ -48,7 +48,14 @@ def revisar_umbral(presupuesto):
     pagado: reservar presupuesto ya reduce lo disponible de verdad, asi que
     debe poder disparar la alerta igual que un gasto pagado.
     """
-    porcentaje = presupuesto.porcentaje_ejecutado
+    # PRE-08: una sola consulta agregada para el porcentaje y los montos del
+    # mensaje; antes cada propiedad relanzaba sus propios Sum() (6 consultas
+    # con los mismos numeros en cada llamada).
+    comprometido, ejecutado, asignado, disponible = presupuesto.totales()
+    porcentaje = (
+        (asignado / presupuesto.monto_total) * 100
+        if presupuesto.monto_total else Decimal("0.00")
+    )
 
     if porcentaje < UMBRAL_ALERTA:
         # Si el presupuesto se amplia o se borra/reduce un gasto, se rearma la alerta.
@@ -63,8 +70,8 @@ def revisar_umbral(presupuesto):
     reto = presupuesto.reto
     mensaje = (
         f"El presupuesto del reto '{reto.titulo}' va en {porcentaje:.1f}% asignado "
-        f"(comprometido: {presupuesto.monto_comprometido}, ejecutado: {presupuesto.monto_ejecutado}, "
-        f"de {presupuesto.monto_total}). Disponible: {presupuesto.monto_disponible}."
+        f"(comprometido: {comprometido}, ejecutado: {ejecutado}, "
+        f"de {presupuesto.monto_total}). Disponible: {disponible}."
     )
     link = reverse("presupuesto:detalle", kwargs={"reto_id": reto.pk})
 
@@ -130,6 +137,9 @@ def exportar_excel(presupuesto):
     hoja.title = "Gastos"
     relleno = PatternFill("solid", fgColor="3BAC52")  # verde EAN, igual que los reportes
     blanca = Font(color="FFFFFF", bold=True)
+    # PRE-04: los montos se escriben como Decimal (openpyxl los acepta) y con
+    # formato de moneda; pasarlos por float perdia precision en los centavos.
+    formato_moneda = '"$"#,##0.00'
 
     def encabezado(*valores):
         hoja.append(list(valores))
@@ -144,13 +154,19 @@ def exportar_excel(presupuesto):
     hoja.append([f"Generado el {timezone.localtime():%d/%m/%Y %H:%M}"])
     hoja.append([])
     for etiqueta, valor in _resumen_general(presupuesto):
-        hoja.append([etiqueta, float(valor)])
-        hoja.cell(row=hoja.max_row, column=1).font = Font(bold=True)
+        hoja.append([etiqueta, valor])
+        fila = hoja.max_row
+        hoja.cell(row=fila, column=1).font = Font(bold=True)
+        hoja.cell(row=fila, column=2).number_format = (
+            '0.00"%"' if etiqueta == "% asignado" else formato_moneda
+        )
 
     hoja.append([])
     encabezado("Categoria", "Comprometido", "Ejecutado", "Total")
     for etiqueta, comprometido, ejecutado in _resumen_por_categoria(presupuesto):
-        hoja.append([etiqueta, float(comprometido), float(ejecutado), float(comprometido + ejecutado)])
+        hoja.append([etiqueta, comprometido, ejecutado, comprometido + ejecutado])
+        for columna in (2, 3, 4):
+            hoja.cell(row=hoja.max_row, column=columna).number_format = formato_moneda
 
     hoja.append([])
     encabezado("Fecha", "Categoria", "Estado", "Descripcion", "Monto", "Registrado por", "Comprobante")
@@ -160,10 +176,11 @@ def exportar_excel(presupuesto):
             gasto.get_categoria_display(),
             gasto.get_estado_display(),
             gasto.descripcion,
-            float(gasto.monto),
+            gasto.monto,
             gasto.registrado_por.username if gasto.registrado_por else "",
             "Si" if gasto.comprobante else "No",
         ])
+        hoja.cell(row=hoja.max_row, column=5).number_format = formato_moneda
     for columna, ancho in zip("ABCDEFG", (16, 18, 16, 40, 14, 18, 12)):
         hoja.column_dimensions[columna].width = ancho
 

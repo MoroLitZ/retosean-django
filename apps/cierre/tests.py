@@ -107,3 +107,61 @@ class CierreSprintTests(TestCase):
         })
         self.assertEqual(response.status_code, 403)
         self.assertFalse(SolicitudLogistica.objects.exists())
+
+    def test_finalizar_bloquea_evaluaciones_pendientes(self):
+        from apps.academico.models import Certificado
+        from apps.evaluacion.models import Entregable
+
+        Entregable.objects.create(
+            reto=self.reto, estudiante=self.estudiante, titulo="Avance sin evaluar",
+            archivo=SimpleUploadedFile("avance.pdf", b"x"),
+        )
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("cierre:finalizar", args=[self.reto.pk]))
+        self.assertRedirects(response, reverse("cierre:gestionar", args=[self.reto.pk]))
+        self.reto.refresh_from_db()
+        self.assertEqual(self.reto.estado, "en_curso")
+        self.assertFalse(Certificado.objects.filter(reto=self.reto).exists())
+        self.assertFalse(EncuestaSatisfaccion.objects.filter(cierre=self.cierre).exists())
+
+    def test_encuesta_ya_respondida_no_se_modifica(self):
+        encuesta = EncuestaSatisfaccion.objects.create(
+            cierre=self.cierre, participante=self.estudiante,
+            calificacion=5, comentario="Original", respondida_en=timezone.now(),
+        )
+        self.client.force_login(self.estudiante)
+        response = self.client.post(reverse("cierre:responder_encuesta", args=[encuesta.pk]), {
+            "calificacion": 1, "comentario": "Cambiado",
+        })
+        self.assertRedirects(response, reverse("cierre:mis_encuestas"))
+        encuesta.refresh_from_db()
+        self.assertEqual(encuesta.calificacion, 5)
+        self.assertEqual(encuesta.comentario, "Original")
+
+    def test_get_gestionar_no_emite_certificados(self):
+        from apps.academico.models import Certificado
+
+        self.reto.estado = "finalizado"
+        self.reto.save(update_fields=["estado"])
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("cierre:gestionar", args=[self.reto.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Certificado.objects.filter(reto=self.reto).exists())
+
+    def test_reto_finalizado_no_recibe_entregables_ni_reconocimientos(self):
+        from .models import Reconocimiento
+
+        self.reto.estado = "finalizado"
+        self.reto.save(update_fields=["estado"])
+        self.client.force_login(self.admin)
+
+        response = self.client.post(reverse("cierre:agregar_entregable", args=[self.reto.pk]), {
+            "nombre": "Nuevo final", "archivo": SimpleUploadedFile("final2.zip", b"z"),
+        })
+        self.assertRedirects(response, reverse("cierre:gestionar", args=[self.reto.pk]))
+        self.assertFalse(EntregableFinal.objects.filter(nombre="Nuevo final").exists())
+
+        self.client.post(reverse("cierre:agregar_reconocimiento", args=[self.reto.pk]), {
+            "usuario": self.estudiante.pk, "nombre_destinatario": "Alguien", "descripcion": "x",
+        })
+        self.assertFalse(Reconocimiento.objects.exists())

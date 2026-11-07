@@ -18,7 +18,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 from apps.reportes.services import GRIS_SUAVE, GRIS_TEXTO, VERDE_EAN, agregar_fila, encabezado_de_marca
 
-from .services import ranking
+from .services import ganadores, ranking
 
 
 def _fecha(valor, con_hora=True):
@@ -33,7 +33,9 @@ def datos_informe(hackathon):
     """Secciones del informe como (titulo, encabezados, filas); igual para PDF y Excel."""
     reto = hackathon.reto
     tabla = ranking(hackathon)
-    ganador = tabla[0]["equipo"] if tabla and hackathon.resultados_publicados else None
+    # Sin votos no hay ganador, y un empate total lista a todos los empatados.
+    campeones = ganadores(tabla) if hackathon.resultados_publicados else []
+    ganador = " y ".join(fila["equipo"] for fila in campeones) or None
 
     convocatoria = [
         ("Reto", reto.titulo),

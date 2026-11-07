@@ -1,9 +1,15 @@
+from datetime import timedelta
+from io import StringIO
+
 from django.core import mail
+from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.retos.models import Reto
 from apps.retos.services import cambiar_estado_reto
+from apps.seguimiento.models import IntegracionAcademica
 from apps.usuarios.models import Usuario
 
 from .models import Notificacion, PreferenciaNotificacion
@@ -57,6 +63,14 @@ class MotorNotificacionesTests(TestCase):
         Usuario.objects.create_user(username="admin-rol", password="x", rol="ADMIN")
         creadas = notificar_admins("POSTULACION_NUEVA", mensaje="nueva postulacion")
         self.assertEqual(len(creadas), 2)
+
+    def test_notificar_duplicado_loguea_warning(self):
+        """NOT-03: un error de integridad por deduplicacion no se silencia."""
+        notificar(self.usuario, "RETO_ESTADO_CAMBIADO", mensaje="uno", clave_dedupe="k2")
+        with self.assertLogs("apps.notificaciones.services", level="WARNING") as cm:
+            notificar(self.usuario, "RETO_ESTADO_CAMBIADO", mensaje="dos", clave_dedupe="k2")
+        self.assertEqual(Notificacion.objects.filter(usuario=self.usuario).count(), 1)
+        self.assertTrue(any("duplicada" in mensaje for mensaje in cm.output))
 
 
 @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
@@ -205,3 +219,136 @@ class RegistroEnviosAdminTests(TestCase):
     def test_solo_el_admin_lo_ve(self):
         self.client.force_login(self.destino)
         self.assertNotEqual(self.client.get(reverse("notificaciones:registro_envios")).status_code, 200)
+
+    def test_filtro_fecha_invalida_no_genera_500(self):
+        """NOT-07: fechas malformadas en el registro de envios se ignoran."""
+        self.client.force_login(self.admin)
+        url = reverse("notificaciones:registro_envios")
+        response = self.client.get(url, {"desde": "31/12/2025", "hasta": "2025-01-01"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["filtros"]["desde"], "31/12/2025")
+        # La fecha valida si aplica y la malformada no produce error.
+        response2 = self.client.get(url, {"desde": "2025-12-31"})
+        self.assertEqual(response2.status_code, 200)
+
+
+@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+class RecordatoriosCommandTests(TestCase):
+    """Regresion para los hallazgos NOT-01, NOT-02, NOT-04, NOT-05, NOT-06."""
+
+    def setUp(self):
+        self.hoy = timezone.localdate()
+        self.empresa = Usuario.objects.create_user(
+            username="empresa-rec", password="x", rol="EMPRESA", email="empresa@rec.co"
+        )
+        self.reto = Reto.objects.create(
+            empresa=self.empresa,
+            titulo="Reto recordatorios",
+            estado="abierto",
+            fecha_inicio_tentativa=self.hoy,
+            fecha_fin_tentativa=self.hoy + timedelta(days=30),
+            fecha_limite_postulacion=self.hoy + timedelta(days=7),
+        )
+        self.profesor_activo = Usuario.objects.create_user(
+            username="prof-activo", password="x", rol="PROFESOR",
+            email="prof-activo@universidadean.edu.co", is_active=True,
+        )
+        self.profesor_inactivo = Usuario.objects.create_user(
+            username="prof-inactivo", password="x", rol="PROFESOR",
+            email="prof-inactivo@universidadean.edu.co", is_active=False,
+        )
+        self.estudiante = Usuario.objects.create_user(
+            username="est-rec", password="x", rol="ESTUDIANTE", email="est@rec.co"
+        )
+
+    def _ejecutar(self, *args):
+        call_command("enviar_recordatorios", *args, stdout=StringIO())
+
+    def test_profesor_inactivo_no_recibe_recordatorio(self):
+        """NOT-01: los profesores inactivos se excluyen de los recordatorios."""
+        IntegracionAcademica.objects.create(reto=self.reto, profesor=self.profesor_activo)
+        IntegracionAcademica.objects.create(reto=self.reto, profesor=self.profesor_inactivo)
+        self.reto.estado = "en_curso"
+        self.reto.fecha_fin_tentativa = self.hoy + timedelta(days=7)
+        self.reto.save(update_fields=["estado", "fecha_fin_tentativa"])
+
+        self._ejecutar("--dias", "7")
+
+        notificaciones = Notificacion.objects.filter(
+            evento="RECORDATORIO_FECHA_LIMITE",
+            usuario__in=[self.profesor_activo, self.profesor_inactivo],
+        )
+        self.assertEqual(notificaciones.count(), 1)
+        self.assertEqual(notificaciones.get().usuario, self.profesor_activo)
+
+    def test_fecha_limite_reprogramada_genera_nuevo_recordatorio(self):
+        """NOT-02: reprogramar una fecha limite crea el recordatorio correspondiente."""
+        from apps.participaciones.models import Postulacion
+
+        Postulacion.objects.create(reto=self.reto, estudiante=self.estudiante, estado="PENDIENTE")
+        self._ejecutar("--dias", "7")
+        self.assertEqual(Notificacion.objects.filter(usuario=self.estudiante).count(), 1)
+
+        # Reprogramamos el cierre de postulaciones: debe llegar el aviso a 3 dias.
+        self.reto.fecha_limite_postulacion = self.hoy + timedelta(days=3)
+        self.reto.save(update_fields=["fecha_limite_postulacion"])
+        self._ejecutar("--dias", "3")
+        self.assertEqual(Notificacion.objects.filter(usuario=self.estudiante).count(), 2)
+
+    def test_dry_run_aplica_filtro_de_opt_out(self):
+        """NOT-04: --dry-run solo cuenta destinatarios que recibirian el correo."""
+        from apps.participaciones.models import Postulacion
+
+        Postulacion.objects.create(reto=self.reto, estudiante=self.estudiante, estado="PENDIENTE")
+        PreferenciaNotificacion.objects.create(
+            usuario=self.estudiante, recibir_recordatorios=False
+        )
+        out = StringIO()
+        call_command("enviar_recordatorios", "--dias", "7", "--dry-run", stdout=out)
+        self.assertIn("0 destinatario(s)", out.getvalue())
+        self.assertEqual(Notificacion.objects.filter(usuario=self.estudiante).count(), 0)
+
+    def test_umbral_entregables_sin_calificar_es_fijo(self):
+        """NOT-05: --dias no altera el umbral de entregables pendientes."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.utils import timezone
+
+        from apps.evaluacion.models import Entregable
+
+        IntegracionAcademica.objects.create(reto=self.reto, profesor=self.profesor_activo)
+        Entregable.objects.create(
+            reto=self.reto,
+            estudiante=self.estudiante,
+            titulo="Entrega",
+            archivo=SimpleUploadedFile("x.pdf", b"x"),
+        )
+        # Fecha de entrega hace 3 dias, menor al umbral fijo de 7.
+        Entregable.objects.update(fecha_entrega=timezone.now() - timedelta(days=3))
+
+        self._ejecutar("--dias", "1")
+        self.assertEqual(Notificacion.objects.filter(evento="RECORDATORIO_FECHA_LIMITE").count(), 0)
+
+        # Ahora si: hace 10 dias, supera el umbral fijo.
+        Entregable.objects.update(fecha_entrega=timezone.now() - timedelta(days=10))
+        self._ejecutar("--dias", "1")
+        self.assertEqual(Notificacion.objects.filter(evento="RECORDATORIO_FECHA_LIMITE").count(), 1)
+
+    def test_recordatorio_sin_calificar_no_se_duplica_misma_semana(self):
+        """NOT-06: un entregable pendiente genera un solo aviso por semana ISO."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.utils import timezone
+
+        from apps.evaluacion.models import Entregable
+
+        IntegracionAcademica.objects.create(reto=self.reto, profesor=self.profesor_activo)
+        Entregable.objects.create(
+            reto=self.reto,
+            estudiante=self.estudiante,
+            titulo="Entrega",
+            archivo=SimpleUploadedFile("x.pdf", b"x"),
+        )
+        Entregable.objects.update(fecha_entrega=timezone.now() - timedelta(days=10))
+
+        self._ejecutar("--dias", "7")
+        self._ejecutar("--dias", "7")
+        self.assertEqual(Notificacion.objects.filter(evento="RECORDATORIO_FECHA_LIMITE").count(), 1)

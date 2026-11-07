@@ -10,6 +10,10 @@ CLASE_SELECT = "form-select form-select-sm"
 
 
 class HackathonForm(forms.ModelForm):
+    # Un hackathon finalizado o cancelado ya no se mueve desde este formulario:
+    # reabrirlo permitia volver a votar y alterar resultados publicados (HCK-04).
+    ESTADOS_TERMINALES = ("finalizado", "cancelado")
+
     class Meta:
         model = Hackathon
         fields = ["reglas", "estado"]
@@ -18,6 +22,13 @@ class HackathonForm(forms.ModelForm):
             "reglas": forms.Textarea(attrs={"class": CLASE_INPUT, "rows": 6}),
             "estado": forms.Select(attrs={"class": CLASE_SELECT}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk and self.instance.estado in self.ESTADOS_TERMINALES:
+            self.fields["estado"].choices = [
+                (self.instance.estado, self.instance.get_estado_display())
+            ]
 
 
 class EtapaHackatonForm(forms.ModelForm):
@@ -68,11 +79,15 @@ class JuradoForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Un jurado suele ser un docente o un representante de la empresa.
+        # Un jurado suele ser un docente, un experto invitado o un
+        # representante de la empresa (HCK-12: EXPERTO tambien juzga).
         self.fields["usuario"].queryset = Usuario.objects.filter(
-            rol__in=["PROFESOR", "EMPRESA", "ADMIN"], is_active=True
+            rol__in=["PROFESOR", "EXPERTO", "EMPRESA", "ADMIN"], is_active=True
         ).order_by("first_name", "username")
         self.fields["usuario"].required = False
+        # clean() completa el nombre desde la cuenta seleccionada; sin esto el
+        # campo obligatorio rechazaria el envio antes de llegar al respaldo.
+        self.fields["nombre"].required = False
 
     def clean(self):
         datos = super().clean()
@@ -112,9 +127,14 @@ class InscripcionForm(forms.Form):
 
         ya_inscritos = hackathon.inscripciones.values_list("equipo_id", flat=True)
         # Solo equipos del mismo reto en los que el estudiante es miembro.
-        self.fields["equipo"].queryset = Equipo.objects.filter(
+        mis_equipos = Equipo.objects.filter(
             reto=hackathon.reto, miembros__estudiante=usuario
-        ).exclude(pk__in=ya_inscritos).distinct()
+        ).distinct()
+        # Se compite con un unico equipo por hackathon: si el estudiante ya
+        # tiene uno inscrito, no puede registrar otro (HCK-08).
+        if mis_equipos.filter(pk__in=ya_inscritos).exists():
+            mis_equipos = mis_equipos.none()
+        self.fields["equipo"].queryset = mis_equipos.exclude(pk__in=ya_inscritos)
 
 
 class LogisticaForm(forms.ModelForm):

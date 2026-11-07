@@ -2,6 +2,34 @@ from django import forms
 from django.utils import timezone
 from .models import DocumentoEmpresa, TipoDocumentoLegal
 
+# Extensiones aceptadas para la evidencia de listas restrictivas (PDF o imagen).
+EXTENSIONES_EVIDENCIA = ("pdf", "png", "jpg", "jpeg")
+TAMANO_MAXIMO_EVIDENCIA = 10 * 1024 * 1024
+
+
+def _cabecera_pdf_valida(archivo):
+    """Comprueba los bytes magicos `%PDF-` sin perder la posicion de lectura."""
+    archivo.seek(0)
+    try:
+        return archivo.read(5) == b"%PDF-"
+    finally:
+        archivo.seek(0)
+
+
+def validar_evidencia(archivo):
+    """Valida extension, tamanio y (para PDF) contenido de la evidencia de listas."""
+    if archivo is None:
+        return
+    if archivo.size > TAMANO_MAXIMO_EVIDENCIA:
+        raise forms.ValidationError("La evidencia supera el tamaño máximo permitido (10 MB).")
+    extension = archivo.name.rsplit(".", 1)[-1].lower() if "." in archivo.name else ""
+    if extension not in EXTENSIONES_EVIDENCIA:
+        raise forms.ValidationError(
+            "Formato no permitido para la evidencia. Usa PDF, PNG o JPG."
+        )
+    if extension == "pdf" and not _cabecera_pdf_valida(archivo):
+        raise forms.ValidationError("El archivo PDF de evidencia no es válido.")
+
 class CargarDocumentoForm(forms.Form):
     """Carga de un documento legal (HU00).
 
@@ -37,11 +65,20 @@ class CargarDocumentoForm(forms.Form):
         ]
 
     def clean_archivo(self):
-        archivo = self.cleaned_data["archivo"]
+        archivo = self.cleaned_data.get("archivo")
+        if archivo is None:
+            return archivo
         extension = archivo.name.rsplit(".", 1)[-1].lower() if "." in archivo.name else ""
         if extension not in DocumentoEmpresa.EXTENSIONES_PERMITIDAS:
             permitidas = ", ".join(DocumentoEmpresa.EXTENSIONES_PERMITIDAS).upper()
             raise forms.ValidationError(f"Formato no permitido. Solo se aceptan archivos {permitidas}.")
+        if archivo.size > DocumentoEmpresa.TAMANO_MAXIMO:
+            raise forms.ValidationError(
+                f"El archivo supera el tamaño máximo permitido de "
+                f"{DocumentoEmpresa.TAMANO_MAXIMO // (1024 * 1024)} MB."
+            )
+        if not _cabecera_pdf_valida(archivo):
+            raise forms.ValidationError("El archivo no es un PDF válido.")
         return archivo
 
     def clean(self):

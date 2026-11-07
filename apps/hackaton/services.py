@@ -1,5 +1,8 @@
 """Logica de negocio del hackathon (HU09): etapas, ranking y publicacion."""
 
+from decimal import Decimal
+
+from django.db import transaction
 from django.db.models import Avg, Count, Max, Sum
 from django.urls import reverse
 from django.utils import timezone
@@ -7,7 +10,7 @@ from django.utils import timezone
 from apps.notificaciones.services import notificar_muchos
 from apps.seguimiento.services import MaquinaEstados, registrar_cambio_estado
 
-from .models import EtapaHackaton, InscripcionHackaton, Jurado, VotacionHackaton
+from .models import EtapaHackaton, Hackathon, InscripcionHackaton, Jurado, VotacionHackaton
 
 
 # Inscripcion de un equipo al hackathon. El gestor puede corregir su decision
@@ -33,10 +36,17 @@ def inscripciones_abiertas(hackathon):
 
 
 def votacion_abierta(hackathon):
+    # Con los resultados ya publicados no se vuelve a votar, aunque el estado
+    # se reabriera por otra via (HCK-04).
+    if hackathon.resultados_publicados:
+        return False
     if hackathon.estado not in {"publicado", "en_curso"}:
         return False
     etapa = hackathon.etapas.filter(tipo="presentacion").first()
-    return etapa.vigente if etapa and (etapa.inicia_en or etapa.termina_en) else True
+    # Al reves que en inscripciones, aqui se falla cerrado: sin etapa de
+    # presentacion fechada y vigente no se vota (HCK-05), porque el ganador
+    # sale de esta ventana.
+    return bool(etapa) and etapa.vigente
 
 
 def es_jurado(hackathon, usuario):
@@ -46,30 +56,59 @@ def es_jurado(hackathon, usuario):
 def ranking(hackathon):
     """Clasificacion de equipos por promedio de puntaje.
 
+    Solo puntuan los equipos con inscripcion aceptada: uno rechazado despues de
+    votar sale de la tabla y no puede ganar (HCK-02). Los aceptados sin votos
+    cierran la tabla en cero para no desaparecer del ranking ni del informe
+    (HCK-10).
+
     Se usa el promedio y no la suma para no penalizar a un equipo al que
     votaron menos jurados. Desempate: mas votos primero, luego alfabetico.
     """
-    filas = (
-        VotacionHackaton.objects
-        .filter(hackathon=hackathon)
-        .values("equipo_id", "equipo__nombre")
-        .annotate(
-            promedio=Avg("puntaje"),
-            total=Sum("puntaje"),
-            votos=Count("id"),
+    votados = {
+        fila["equipo_id"]: fila
+        for fila in (
+            VotacionHackaton.objects
+            .filter(hackathon=hackathon)
+            .values("equipo_id")
+            .annotate(
+                promedio=Avg("puntaje"),
+                total=Sum("puntaje"),
+                votos=Count("id"),
+            )
         )
-        .order_by("-promedio", "-votos", "equipo__nombre")
+    }
+    filas = []
+    aceptadas = (
+        InscripcionHackaton.objects
+        .filter(hackathon=hackathon, estado="ACEPTADA")
+        .select_related("equipo")
     )
+    for inscripcion in aceptadas:
+        voto = votados.get(inscripcion.equipo_id)
+        filas.append({
+            "equipo_id": inscripcion.equipo_id,
+            "equipo": inscripcion.equipo.nombre,
+            "promedio": voto["promedio"] if voto else Decimal("0"),
+            "total": voto["total"] if voto else Decimal("0"),
+            "votos": voto["votos"] if voto else 0,
+        })
+    filas.sort(key=lambda fila: (-fila["promedio"], -fila["votos"], fila["equipo"]))
+    return [dict(fila, posicion=posicion) for posicion, fila in enumerate(filas, start=1)]
+
+
+def ganadores(tabla):
+    """Equipo(s) en el primer puesto del ranking.
+
+    Devuelve varios cuando hay empate total (mismo promedio y mismo numero de
+    votos); antes deshacia el empate por orden alfabetico y coronaba un unico
+    ganador arbitrario (HCK-06). Lista vacia si nadie ha votado.
+    """
+    if not tabla or not tabla[0]["votos"]:
+        return []
+    primero = tabla[0]
     return [
-        {
-            "posicion": posicion,
-            "equipo_id": fila["equipo_id"],
-            "equipo": fila["equipo__nombre"],
-            "promedio": fila["promedio"],
-            "total": fila["total"],
-            "votos": fila["votos"],
-        }
-        for posicion, fila in enumerate(filas, start=1)
+        fila for fila in tabla
+        if fila["promedio"] == primero["promedio"] and fila["votos"] == primero["votos"]
     ]
 
 
@@ -126,10 +165,13 @@ def publicar_resultados(hackathon, usuario, comentario="Resultados publicados.")
         registrar_cambio_estado(hackathon, anterior, hackathon.estado, usuario, comentario)
 
     tabla = ranking(hackathon)
-    ganador = tabla[0]["equipo"] if tabla else None
+    campeones = ganadores(tabla)
     mensaje = f"Ya estan publicados los resultados del hackathon '{hackathon.reto.titulo}'."
-    if ganador:
-        mensaje += f" Equipo ganador: {ganador}."
+    if len(campeones) == 1:
+        mensaje += f" Equipo ganador: {campeones[0]['equipo']}."
+    elif campeones:
+        nombres = " y ".join(fila["equipo"] for fila in campeones)
+        mensaje += f" Equipos ganadores en empate: {nombres}."
 
     notificar_muchos(
         _participantes(hackathon), "HACKATON_RESULTADOS",
@@ -154,25 +196,35 @@ def avanzar_por_calendario(hackathon, ahora=None):
 
     Publicado -> En curso al empezar la etapa de desarrollo; al llegar el
     cierre, finaliza y publica resultados y ganadores automaticamente. Es
-    idempotente: lo usan el comando programado y la vista de detalle.
+    idempotente: lo usan el comando programado y la vista de detalle. Corre en
+    una transaccion con la fila bloqueada (`select_for_update`) y decide sobre
+    el estado recien leido de la BD, para que dos llamadas simultaneas no
+    dupliquen transiciones ni sobrescriban un estado mas avanzado (HCK-01).
     """
     ahora = ahora or timezone.now()
     cambios = []
-    if hackathon.estado == "publicado" and hackathon.etapas.filter(
-        tipo="desarrollo", inicia_en__isnull=False, inicia_en__lte=ahora
-    ).exists():
-        hackathon.estado = "en_curso"
-        hackathon.save(update_fields=["estado", "actualizado_en"])
-        registrar_cambio_estado(
-            hackathon, "publicado", "en_curso", None, "Avance automatico: inicio de la etapa de desarrollo."
-        )
-        cambios.append("en_curso")
+    with transaction.atomic():
+        bloqueado = Hackathon.objects.select_for_update().get(pk=hackathon.pk)
+        # La instancia del llamador puede estar obsoleta (la cargo otra
+        # peticion antes): se trabaja con el estado leido bajo bloqueo y la
+        # instancia del llamador queda sincronizada para las vistas.
+        hackathon.estado = bloqueado.estado
+        hackathon.resultados_publicados = bloqueado.resultados_publicados
+        if hackathon.estado == "publicado" and hackathon.etapas.filter(
+            tipo="desarrollo", inicia_en__isnull=False, inicia_en__lte=ahora
+        ).exists():
+            hackathon.estado = "en_curso"
+            hackathon.save(update_fields=["estado", "actualizado_en"])
+            registrar_cambio_estado(
+                hackathon, "publicado", "en_curso", None, "Avance automatico: inicio de la etapa de desarrollo."
+            )
+            cambios.append("en_curso")
 
-    cierre = fecha_de_cierre(hackathon)
-    if (hackathon.estado in {"publicado", "en_curso"} and not hackathon.resultados_publicados
-            and cierre and cierre <= ahora):
-        publicar_resultados(hackathon, None, "Cierre automatico segun el calendario: resultados publicados.")
-        cambios.append("resultados_publicados")
+        cierre = fecha_de_cierre(hackathon)
+        if (hackathon.estado in {"publicado", "en_curso"} and not hackathon.resultados_publicados
+                and cierre and cierre <= ahora):
+            publicar_resultados(hackathon, None, "Cierre automatico segun el calendario: resultados publicados.")
+            cambios.append("resultados_publicados")
     return cambios
 
 

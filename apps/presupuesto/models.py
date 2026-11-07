@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.db import models
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.db.models.functions import Coalesce
 
 
@@ -28,6 +28,23 @@ class Presupuesto(models.Model):
             total=Coalesce(Sum("monto"), Decimal("0.00"))
         )["total"]
 
+    def totales(self):
+        """(comprometido, ejecutado, asignado, disponible) en UNA sola consulta.
+
+        Cada propiedad de abajo lanza su propio agregado; leerlas juntas
+        (p. ej. al revisar el umbral o al exportar) multiplicaba las consultas
+        con los mismos numeros. Esto las resuelve todas de una vez.
+        """
+        cero = Decimal("0.00")
+        fila = self.gastos.aggregate(
+            comprometido=Coalesce(Sum("monto", filter=Q(estado=Gasto.COMPROMETIDO)), cero),
+            ejecutado=Coalesce(Sum("monto", filter=Q(estado=Gasto.EJECUTADO)), cero),
+        )
+        comprometido, ejecutado = fila["comprometido"], fila["ejecutado"]
+        asignado = comprometido + ejecutado
+        disponible = self.monto_total - asignado
+        return comprometido, ejecutado, asignado, disponible
+
     @property
     def monto_ejecutado(self):
         return self._suma_gastos(Gasto.EJECUTADO)
@@ -39,7 +56,7 @@ class Presupuesto(models.Model):
     @property
     def monto_asignado(self):
         """Comprometido + ejecutado: lo que ya no esta libre, se haya pagado o no."""
-        return self.monto_comprometido + self.monto_ejecutado
+        return self.totales()[2]
 
     @property
     def porcentaje_ejecutado(self):
@@ -49,7 +66,7 @@ class Presupuesto(models.Model):
 
     @property
     def monto_disponible(self):
-        return self.monto_total - self.monto_asignado
+        return self.totales()[3]
 
 
 class Gasto(models.Model):

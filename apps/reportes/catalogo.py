@@ -250,6 +250,18 @@ def _gastos_por_estado_y_categoria(presupuesto):
     return comprometido, ejecutado, por_categoria
 
 
+def _gastos_resumen(presupuesto):
+    """(comprometido, ejecutado, por_categoria) calculado UNA vez por presupuesto.
+
+    PRE-06: varias columnas del reporte usan los mismos totales; recalcularlos
+    por columna recorria todos los gastos (prefetcheados) en cada celda. El
+    resultado se memoiza en el objeto y se comparte entre todas las columnas.
+    """
+    if not hasattr(presupuesto, "_gastos_resumen"):
+        presupuesto._gastos_resumen = _gastos_por_estado_y_categoria(presupuesto)
+    return presupuesto._gastos_resumen
+
+
 REPORTE_PRESUPUESTO = DefinicionReporte(
     clave="presupuesto",
     nombre="Ejecucion presupuestal",
@@ -260,27 +272,27 @@ REPORTE_PRESUPUESTO = DefinicionReporte(
         Columna("empresa", "Empresa", lambda p: _texto(p.reto.empresa), 26),
         Columna("monto_total", "Presupuesto", lambda p: _texto(p.monto_total), 16),
         Columna("comprometido", "Comprometido",
-                lambda p: _texto(_gastos_por_estado_y_categoria(p)[0]), 16),
+                lambda p: _texto(_gastos_resumen(p)[0]), 16),
         Columna("ejecutado", "Ejecutado",
-                lambda p: _texto(_gastos_por_estado_y_categoria(p)[1]), 16),
+                lambda p: _texto(_gastos_resumen(p)[1]), 16),
         Columna("disponible", "Disponible",
-                lambda p: _texto(p.monto_total - sum(_gastos_por_estado_y_categoria(p)[:2])), 16),
+                lambda p: _texto(p.monto_total - sum(_gastos_resumen(p)[:2])), 16),
         Columna("porcentaje", "% asignado",
                 lambda p: (
-                    f"{(sum(_gastos_por_estado_y_categoria(p)[:2]) / p.monto_total * 100):.1f}%"
+                    f"{(sum(_gastos_resumen(p)[:2]) / p.monto_total * 100):.1f}%"
                     if p.monto_total else "0.0%"
                 ), 14),
         Columna("gastos", "N.o de gastos", lambda p: len(p.gastos.all()), 14),
         Columna("gasto_refrigerios", "Refrigerios",
-                lambda p: _texto(_gastos_por_estado_y_categoria(p)[2]["REFRIGERIOS"]), 16),
+                lambda p: _texto(_gastos_resumen(p)[2]["REFRIGERIOS"]), 16),
         Columna("gasto_materiales", "Materiales",
-                lambda p: _texto(_gastos_por_estado_y_categoria(p)[2]["MATERIALES"]), 16),
+                lambda p: _texto(_gastos_resumen(p)[2]["MATERIALES"]), 16),
         Columna("gasto_impresiones", "Impresiones",
-                lambda p: _texto(_gastos_por_estado_y_categoria(p)[2]["IMPRESIONES"]), 16),
+                lambda p: _texto(_gastos_resumen(p)[2]["IMPRESIONES"]), 16),
         Columna("gasto_espacios", "Espacios",
-                lambda p: _texto(_gastos_por_estado_y_categoria(p)[2]["ESPACIOS"]), 16),
+                lambda p: _texto(_gastos_resumen(p)[2]["ESPACIOS"]), 16),
         Columna("gasto_otros", "Otros",
-                lambda p: _texto(_gastos_por_estado_y_categoria(p)[2]["OTROS"]), 16),
+                lambda p: _texto(_gastos_resumen(p)[2]["OTROS"]), 16),
         Columna("alerta_80", "Alerta 80% enviada",
                 lambda p: "Si" if p.alerta_80_enviada else "No", 18),
     ],
@@ -296,6 +308,19 @@ def _qs_empresas(filtros):
     )
     if filtros.get("estado_empresa"):
         qs = qs.filter(estado_validacion=filtros["estado_empresa"])
+    # PRE-07: el reporte ignoraba la fecha y demas filtros que el formulario
+    # ofrece. El periodo se aplica a la fecha de registro de la empresa y los
+    # filtros de facultad/programa/empresa se resuelven a traves de sus retos.
+    if filtros.get("desde"):
+        qs = qs.filter(fecha_creacion__gte=filtros["desde"])
+    if filtros.get("hasta"):
+        qs = qs.filter(fecha_creacion__lte=filtros["hasta"])
+    if filtros.get("empresa"):
+        qs = qs.filter(usuario_id=filtros["empresa"])
+    if filtros.get("facultad"):
+        qs = qs.filter(usuario__retos_empresa__facultad_id=filtros["facultad"]).distinct()
+    if filtros.get("programa"):
+        qs = qs.filter(usuario__retos_empresa__programa_id=filtros["programa"]).distinct()
     return qs.order_by("razon_social")
 
 

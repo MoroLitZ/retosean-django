@@ -7,6 +7,22 @@ from apps.usuarios.models import Usuario
 
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024
 MAX_UPLOAD_SIZE_MB = 50
+# Tipos de archivo permitidos para archivos de soporte y seguimiento (RET-08).
+CONTENT_TYPES_PERMITIDOS = {
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'text/plain',
+    'text/csv',
+}
 
 
 class MultipleFileInput(forms.ClearableFileInput):
@@ -30,8 +46,17 @@ class MultipleFileField(forms.FileField):
                         params={'name': uploaded_file.name, 'max_size': MAX_UPLOAD_SIZE_MB},
                     )
                 )
-            else:
-                cleaned_files.append(super().clean(uploaded_file, initial))
+                continue
+            content_type = getattr(uploaded_file, 'content_type', '')
+            if content_type not in CONTENT_TYPES_PERMITIDOS:
+                errors.append(
+                    forms.ValidationError(
+                        '%(name)s no tiene un formato permitido (%(tipo)s).',
+                        params={'name': uploaded_file.name, 'tipo': content_type or 'desconocido'},
+                    )
+                )
+                continue
+            cleaned_files.append(super().clean(uploaded_file, initial))
         if errors:
             raise forms.ValidationError(errors)
         return cleaned_files
@@ -98,11 +123,30 @@ class RetoForm(BootstrapModelForm):
             self.fields['facultad'].queryset = Facultad.objects.all().order_by('nombre')
         if 'programa' in self.fields:
             programas = Programa.objects.select_related('facultad').order_by('nombre')
-            if self.instance and self.instance.facultad_id:
-                programas = programas.filter(facultad_id=self.instance.facultad_id)
+            # Permite cambiar la facultad aprovechando el valor enviado en POST.
+            facultad_id = self.data.get('facultad') if self.data else None
+            if not facultad_id and self.instance and self.instance.facultad_id:
+                facultad_id = self.instance.facultad_id
+            if facultad_id:
+                programas = programas.filter(facultad_id=facultad_id)
             self.fields['programa'].queryset = programas
         if 'ecosistema' in self.fields:
             self.fields['ecosistema'].queryset = Ecosistema.objects.all().order_by('nombre')
+
+    def clean(self):
+        cleaned = super().clean()
+        fecha_inicio = cleaned.get('fecha_inicio_tentativa')
+        fecha_fin = cleaned.get('fecha_fin_tentativa')
+        fecha_limite = cleaned.get('fecha_limite_postulacion')
+        if fecha_inicio and fecha_fin and fecha_fin < fecha_inicio:
+            self.add_error('fecha_fin_tentativa', 'La fecha de fin no puede ser anterior a la de inicio.')
+        if fecha_limite and fecha_fin and fecha_limite > fecha_fin:
+            self.add_error('fecha_limite_postulacion', 'La fecha limite de postulacion no puede ser posterior a la fecha de fin.')
+        facultad = cleaned.get('facultad')
+        programa = cleaned.get('programa')
+        if programa and facultad and programa.facultad_id != facultad.pk:
+            self.add_error('programa', 'El programa seleccionado no pertenece a la facultad elegida.')
+        return cleaned
 
 
 class RevisionRetoForm(forms.Form):

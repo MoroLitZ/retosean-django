@@ -20,6 +20,7 @@ COLUMNAS = ["username", "email", "first_name", "last_name", "rol", "telefono", "
 COLUMNAS_OBLIGATORIAS = ["username", "email", "rol"]
 ROLES_VALIDOS = {codigo for codigo, _ in Usuario.ROL_CHOICES}
 MAX_FILAS = 1000
+MAX_BYTES_ARCHIVO = 5 * 1024 * 1024
 
 
 @dataclass
@@ -93,6 +94,14 @@ def leer_archivo(archivo):
     """Lee y valida el archivo sin escribir nada en la base de datos."""
     resultado = ResultadoLectura()
     nombre = (archivo.name or "").lower()
+
+    # Antes de leer todo el archivo en memoria, rechazamos los que exceden el
+    # tamano maximo para no agotar memoria con un CSV gigante.
+    if getattr(archivo, "size", 0) > MAX_BYTES_ARCHIVO:
+        resultado.error_global = (
+            f"El archivo excede el tamano maximo permitido ({MAX_BYTES_ARCHIVO // (1024 * 1024)} MB)."
+        )
+        return resultado
 
     try:
         if nombre.endswith((".xlsx", ".xlsm")):
@@ -188,8 +197,19 @@ def _validar_fila(registro, usernames_vistos, correos_vistos):
 
 @transaction.atomic
 def importar(filas_validas, realizado_por):
-    """Crea los usuarios de las filas validas. Devuelve los creados."""
+    """Crea los usuarios de las filas validas. Devuelve (creados, omitidos).
+
+    Tambien crea el perfil por rol (estudiante/profesor) para que la cuenta no
+    quede sin datos complementarios. Una carrera entre la previsualizacion y la
+    confirmacion puede hacer que otro proceso ya haya creado el mismo username;
+    esas filas se omiten capturando IntegrityError en vez de reventar.
+    """
+    from django.db import IntegrityError
+
+    from apps.academico.models import Estudiante, Profesor
+
     creados = []
+    omitidos = 0
     for registro in filas_validas:
         datos = registro.datos
         usuario = Usuario(
@@ -207,7 +227,16 @@ def importar(filas_validas, realizado_por):
             # Sin contrasena en el archivo la cuenta queda inutilizable hasta
             # que la persona use "olvide mi contrasena".
             usuario.set_unusable_password()
-        usuario.save()
+        try:
+            with transaction.atomic():
+                usuario.save()
+                if usuario.rol == "ESTUDIANTE":
+                    Estudiante.objects.get_or_create(usuario=usuario, defaults={"semestre": 1})
+                elif usuario.rol == "PROFESOR":
+                    Profesor.objects.get_or_create(usuario=usuario, defaults={"especialidad": ""})
+        except IntegrityError:
+            omitidos += 1
+            continue
         creados.append(usuario)
 
     if creados:
@@ -220,7 +249,7 @@ def importar(filas_validas, realizado_por):
                 + ("..." if len(creados) > 20 else "")
             ),
         )
-    return creados
+    return creados, omitidos
 
 
 def plantilla_csv():

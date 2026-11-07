@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.utils import timezone
 from .models import Usuario
 from apps.academico.models import Estudiante, Profesor, Programa, Facultad
@@ -20,6 +21,10 @@ class LoginForm(AuthenticationForm):
                 user_obj = User.objects.get(username__iexact=username)
                 return user_obj.username
             except User.DoesNotExist:
+                return username
+            except User.MultipleObjectsReturned:
+                # Dos cuentas que difieren solo por mayusculas: no podemos
+                # resolver cual es; se conserva el texto tal cual.
                 return username
         return username
 
@@ -82,27 +87,32 @@ class RegistroAcademicoForm(UserCreationForm):
     def save(self, commit=True):
         user = super().save(commit=False)
         user.rol = self.cleaned_data.get("rol")
+        if user.rol == "PROFESOR":
+            # Los profesores requieren aprobacion previa: se crean inactivos.
+            user.is_active = False
+            user.activo = False
         if commit:
-            user.save()
-            if user.rol == "ESTUDIANTE":
-                programa = self.cleaned_data.get("carrera")
-                semestre = self.cleaned_data.get("semestre") or 1
-                try:
-                    semestre_int = int(semestre)
-                except (TypeError, ValueError):
-                    semestre_int = 1
-                Estudiante.objects.create(
-                    usuario=user,
-                    programa=programa,
-                    semestre=semestre_int,
-                )
-            elif user.rol == "PROFESOR":
-                facultad = self.cleaned_data.get("facultad")
-                Profesor.objects.create(
-                    usuario=user,
-                    facultad=facultad,
-                    especialidad=self.cleaned_data.get("especialidad") or "",
-                )
+            with transaction.atomic():
+                user.save()
+                if user.rol == "ESTUDIANTE":
+                    programa = self.cleaned_data.get("carrera")
+                    semestre = self.cleaned_data.get("semestre") or 1
+                    try:
+                        semestre_int = int(semestre)
+                    except (TypeError, ValueError):
+                        semestre_int = 1
+                    Estudiante.objects.create(
+                        usuario=user,
+                        programa=programa,
+                        semestre=semestre_int,
+                    )
+                elif user.rol == "PROFESOR":
+                    facultad = self.cleaned_data.get("facultad")
+                    Profesor.objects.create(
+                        usuario=user,
+                        facultad=facultad,
+                        especialidad=self.cleaned_data.get("especialidad") or "",
+                    )
         return user
 
     def __init__(self, *args, **kwargs):
@@ -141,16 +151,17 @@ class RegistroEmpresaForm(UserCreationForm):
         user.rol = "EMPRESA"
         user.first_name = self.cleaned_data.get("razon_social")
         if commit:
-            user.save()
-            Empresa.objects.create(
-                usuario=user,
-                nit=self.cleaned_data.get("nit"),
-                razon_social=self.cleaned_data.get("razon_social"),
-                sector_industrial=self.cleaned_data.get("sector_industrial"),
-                tipo_convocatoria=self.cleaned_data.get("tipo_convocatoria") or "RETO",
-                area_responsable=self.cleaned_data.get("area_responsable", ""),
-                sitio_web=self.cleaned_data.get("sitio_web", ""),
-            )
+            with transaction.atomic():
+                user.save()
+                Empresa.objects.create(
+                    usuario=user,
+                    nit=self.cleaned_data.get("nit"),
+                    razon_social=self.cleaned_data.get("razon_social"),
+                    sector_industrial=self.cleaned_data.get("sector_industrial"),
+                    tipo_convocatoria=self.cleaned_data.get("tipo_convocatoria") or "RETO",
+                    area_responsable=self.cleaned_data.get("area_responsable", ""),
+                    sitio_web=self.cleaned_data.get("sitio_web", ""),
+                )
         return user
 
     def clean_nit(self):
@@ -285,37 +296,38 @@ class EditarPerfilForm(forms.ModelForm):
     def save(self, commit=True):
         user = super().save(commit=False)
         if commit:
-            user.save()
-            # Guardar datos específicos del perfil
-            if user.rol == "ESTUDIANTE":
-                perfil = getattr(user, "perfil_estudiante", None)
-                if not perfil:
-                    perfil = Estudiante.objects.create(usuario=user)
-                programa = self.cleaned_data.get("primera_carrera")
-                if programa:
-                    perfil.programa = programa
-                semestre = self.cleaned_data.get("semestre") or 1
-                try:
-                    perfil.semestre = int(semestre)
-                except (TypeError, ValueError):
-                    perfil.semestre = 1
-                perfil.save()
-            elif user.rol == "PROFESOR":
-                perfil = getattr(user, "perfil_profesor", None)
-                if not perfil:
-                    perfil = Profesor.objects.create(usuario=user)
-                facultad = self.cleaned_data.get("facultad")
-                if facultad:
-                    perfil.facultad = facultad
-                perfil.especialidad = self.cleaned_data.get("especialidad") or ""
-                perfil.save()
-            elif user.rol == "EMPRESA":
-                empresa = getattr(user, "empresa_perfil", None)
-                if empresa:
-                    empresa.razon_social = self.cleaned_data.get("razon_social") or empresa.razon_social
-                    empresa.sector_industrial = self.cleaned_data.get("sector_industrial") or empresa.sector_industrial
-                    empresa.tipo_convocatoria = self.cleaned_data.get("tipo_convocatoria") or empresa.tipo_convocatoria
-                    empresa.area_responsable = self.cleaned_data.get("area_responsable", "")
-                    empresa.sitio_web = self.cleaned_data.get("sitio_web", "")
-                    empresa.save()
+            with transaction.atomic():
+                user.save()
+                # Guardar datos específicos del perfil
+                if user.rol == "ESTUDIANTE":
+                    perfil = getattr(user, "perfil_estudiante", None)
+                    if not perfil:
+                        perfil = Estudiante.objects.create(usuario=user)
+                    programa = self.cleaned_data.get("primera_carrera")
+                    if programa:
+                        perfil.programa = programa
+                    semestre = self.cleaned_data.get("semestre") or 1
+                    try:
+                        perfil.semestre = int(semestre)
+                    except (TypeError, ValueError):
+                        perfil.semestre = 1
+                    perfil.save()
+                elif user.rol == "PROFESOR":
+                    perfil = getattr(user, "perfil_profesor", None)
+                    if not perfil:
+                        perfil = Profesor.objects.create(usuario=user)
+                    facultad = self.cleaned_data.get("facultad")
+                    if facultad:
+                        perfil.facultad = facultad
+                    perfil.especialidad = self.cleaned_data.get("especialidad") or ""
+                    perfil.save()
+                elif user.rol == "EMPRESA":
+                    empresa = getattr(user, "empresa_perfil", None)
+                    if empresa:
+                        empresa.razon_social = self.cleaned_data.get("razon_social") or empresa.razon_social
+                        empresa.sector_industrial = self.cleaned_data.get("sector_industrial") or empresa.sector_industrial
+                        empresa.tipo_convocatoria = self.cleaned_data.get("tipo_convocatoria") or empresa.tipo_convocatoria
+                        empresa.area_responsable = self.cleaned_data.get("area_responsable", "")
+                        empresa.sitio_web = self.cleaned_data.get("sitio_web", "")
+                        empresa.save()
         return user

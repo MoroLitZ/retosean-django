@@ -1,6 +1,9 @@
+import hashlib
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout, get_user_model
 from django.contrib import messages
+from django.core.cache import cache
 from django.utils.http import url_has_allowed_host_and_scheme
 from .forms import LoginForm, RegistroEmpresaForm, RegistroAcademicoForm, EditarPerfilForm
 from django.contrib.auth.decorators import login_required
@@ -16,6 +19,7 @@ from .decorators import solo_admin, solo_empresa, solo_estudiante, solo_profesor
 from .roles import es_admin, url_dashboard_para
 from .permisos import PERMISOS_MODULO
 from .services import asignar_permisos_modulo, cambiar_estado_cuenta, cambiar_rol, enviar_bienvenida
+from .signals import extraer_ip
 
 
 # ── Rutas de autenticación y perfil ──────────────────────────────
@@ -33,6 +37,10 @@ def _redirigir_despues_login(request, user):
     return redirect(_url_para_usuario(user))
 
 
+INTENTOS_MAXIMOS_LOGIN = 5
+VENTANA_BLOQUEO_SEGUNDOS = 300
+
+
 def _mensaje_cuenta_inactiva(usuario):
     """Texto para una cuenta desactivada.
 
@@ -44,7 +52,44 @@ def _mensaje_cuenta_inactiva(usuario):
     if usuario.rol == 'EMPRESA' and empresa is not None and empresa.estado_listas_restrictivas == 'RECHAZADO':
         return 'Tu cuenta se encuentra inhabilitada debido a que la empresa aparece en listas restrictivas (Clinton/OFAC).'
     return 'Tu cuenta se encuentra inhabilitada. Contacta con el administrador de la plataforma.'
-    
+
+
+def _clave_intentos_login(identificador, request):
+    """Clave de cache para el throttle de login, por usuario + IP."""
+    objetivo = f"{identificador.strip().lower()}@{extraer_ip(request) or 'sin-ip'}"
+    return "login_intentos:" + hashlib.sha256(objetivo.encode("utf-8")).hexdigest()
+
+
+def _registrar_intento_fallido(clave):
+    """Incrementa el contador de intentos fallidos, creandolo si no existe."""
+    if not cache.add(clave, 1, VENTANA_BLOQUEO_SEGUNDOS):
+        try:
+            cache.incr(clave)
+        except ValueError:
+            cache.set(clave, 1, VENTANA_BLOQUEO_SEGUNDOS)
+
+
+def _usuario_por_identificador(identificador):
+    """Resuelve la unica cuenta que coincide con el usuario o el correo.
+
+    Devuelve None si no hay coincidencia o si el identificador es ambiguo
+    (p. ej. un correo compartido por varias cuentas o dos nombres de usuario
+    que solo difieren en mayusculas).
+    """
+    if not identificador:
+        return None
+    usuario = Usuario.objects.filter(username__iexact=identificador).first()
+    if usuario is not None:
+        return usuario
+    if "@" in identificador:
+        cuentas = list(
+            Usuario.objects.filter(email__iexact=identificador).values_list("username", flat=True)[:2]
+        )
+        if len(cuentas) == 1:
+            return Usuario.objects.filter(username=cuentas[0]).first()
+    return None
+
+
 def vista_login(request):
     next_url = request.POST.get('next') or request.GET.get('next') or ''
 
@@ -52,25 +97,31 @@ def vista_login(request):
         return _redirigir_despues_login(request, request.user)
 
     if request.method == 'POST':
-        # Capturamos el identificador ingresado (suele llamarse 'username' o 'email' en el form)
-        username_ingresado = request.POST.get('username') or request.POST.get('email')
-        
-        # Verificamos si el usuario existe y está inactivo
-        if username_ingresado:
-            usuario_db = Usuario.objects.filter(username=username_ingresado).first() or Usuario.objects.filter(email=username_ingresado).first()
-            if usuario_db and not usuario_db.is_active:
-                messages.error(request, _mensaje_cuenta_inactiva(usuario_db))
-                form = LoginForm(request, data=request.POST)
-                return render(request, 'usuarios/login.html', {'form': form, 'next': next_url})
+        identificador = request.POST.get('username') or request.POST.get('email') or ''
+        clave = _clave_intentos_login(identificador, request)
 
-        # Flujo normal si la cuenta está activa o los datos son incorrectos
+        # Throttle por usuario + IP: demasiados fallos bloquean antes de validar.
+        if identificador and cache.get(clave, 0) >= INTENTOS_MAXIMOS_LOGIN:
+            messages.error(request, 'Demasiados intentos fallidos. Intenta de nuevo en unos minutos.')
+            form = LoginForm(request, data=request.POST)
+            return render(request, 'usuarios/login.html', {'form': form, 'next': next_url})
+
         form = LoginForm(request, data=request.POST)
         if form.is_valid():
             user = form.get_user()
             login(request, user)
+            cache.delete(clave)
             return _redirigir_despues_login(request, user)
+
+        # La contrasena ya se verifico (form invalido). Solo ahora revelamos si
+        # la cuenta esta inactiva; con datos incorrectos el mensaje es generico.
+        usuario = _usuario_por_identificador(identificador)
+        if usuario and not usuario.is_active and usuario.check_password(request.POST.get('password')):
+            messages.error(request, _mensaje_cuenta_inactiva(usuario))
         else:
             messages.error(request, 'Usuario o contraseña incorrectos.')
+        if identificador:
+            _registrar_intento_fallido(clave)
     else:
         form = LoginForm()
 
@@ -92,6 +143,11 @@ def vista_registro(request):
         form = RegistroAcademicoForm(request.POST or None)
         if request.method == 'POST' and form.is_valid():
             user = form.save()
+            if user.rol == 'PROFESOR':
+                # Los profesores requieren aprobacion de un administrador: la
+                # cuenta queda inactiva y no se inicia sesion.
+                messages.info(request, 'Tu cuenta queda pendiente de aprobación por un administrador.')
+                return render(request, 'usuarios/registro_pendiente.html')
             enviar_bienvenida(user)
             login(request, user)
             messages.success(request, f'¡Bienvenido a RetosEAN, {user.first_name or user.username}!')
@@ -236,10 +292,12 @@ def importar_usuarios(request):
         lectura = leer_archivo(request.FILES['archivo'])
 
         if not lectura.error_global and request.POST.get('accion') == 'confirmar':
-            creados = importar(lectura.validas, request.user)
+            creados, omitidos = importar(lectura.validas, request.user)
             for usuario in creados:
                 enviar_bienvenida(usuario)
             messages.success(request, f'{len(creados)} usuario(s) creado(s) correctamente.')
+            if omitidos:
+                messages.warning(request, f'{omitidos} fila(s) ya existian y se omitieron.')
             if lectura.invalidas:
                 messages.warning(
                     request,

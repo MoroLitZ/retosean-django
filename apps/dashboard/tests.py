@@ -184,3 +184,45 @@ class PanelExpertoTests(TestCase):
         self.assertNotIn("sin_rol", respuesta.context)
         self.assertEqual(respuesta.context["kpis"]["hackathones_asignados"], 1)
         self.assertEqual(respuesta.context["kpis"]["hackathones_en_curso"], 1)
+
+
+class FiltroDePanelInvalidoTests(TestCase):
+    """PRE-02: un identificador de filtro no numerico no debe reventar el panel."""
+
+    def test_facultad_no_numerica_se_ignora_sin_500(self):
+        from django.urls import reverse
+
+        from apps.usuarios.models import Usuario
+
+        admin = Usuario.objects.create_superuser(username="admin-fil-0", password="x", email="a@ean.edu.co")
+        self.client.force_login(admin)
+        respuesta = self.client.get(reverse("dashboard:panel"), {"facultad": "abc", "periodo": "todo"})
+        self.assertEqual(respuesta.status_code, 200)
+
+
+class RangoDeFechasDelPanelTests(TestCase):
+    """PRE-03: los KPI del estudiante respetan el periodo elegido."""
+
+    def test_kpis_estudiante_respetan_el_rango_de_fechas(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from apps.evaluacion.models import Entregable
+        from apps.retos.models import Reto
+        from apps.usuarios.models import Usuario
+
+        from .services import kpis_estudiante
+
+        estudiante = Usuario.objects.create_user(username="est-rango", password="x", rol="ESTUDIANTE")
+        empresa = Usuario.objects.create_user(username="emp-rango", password="x", rol="EMPRESA")
+        reto = Reto.objects.create(empresa=empresa, titulo="Reto rango", estado="abierto")
+
+        hoy = timezone.now()
+        viejo = Entregable.objects.create(reto=reto, estudiante=estudiante, titulo="Viejo")
+        reciente = Entregable.objects.create(reto=reto, estudiante=estudiante, titulo="Reciente")
+        Entregable.objects.filter(pk=viejo.pk).update(fecha_entrega=hoy - timedelta(days=400))
+        Entregable.objects.filter(pk=reciente.pk).update(fecha_entrega=hoy - timedelta(days=5))
+
+        kpis = kpis_estudiante(estudiante, (hoy - timedelta(days=30)).date(), hoy.date())
+        self.assertEqual(kpis["entregables_total"], 1)

@@ -85,24 +85,36 @@ def cambiar_estado_reto(reto, estado_nuevo, usuario, comentario='', notificar_em
     los efectos de cada estado (fecha de envio, consecutivo, comentario de
     revision), deja el cambio en el historial y avisa a la empresa.
     `notificar_empresa=False` es para los cambios que hace la propia empresa.
+
+    El reto se bloquea con `select_for_update()` para evitar que una instancia
+    obsoleta sobreescriba un estado terminal (p. ej., cancelar vs. publicar).
     """
-    estado_anterior = reto.estado
-    MAQUINA_RETO.validar(estado_anterior, estado_nuevo)
+    from .models import Reto
     with transaction.atomic():
-        reto.estado = estado_nuevo
+        reto_activo = Reto.todos.filter(pk=reto.pk).select_for_update().get()
+        estado_anterior = reto_activo.estado
+        MAQUINA_RETO.validar(estado_anterior, estado_nuevo)
+        reto_activo.estado = estado_nuevo
         if estado_nuevo == 'en_revision':
-            reto.fecha_envio_revision = timezone.now()
+            reto_activo.fecha_envio_revision = timezone.now()
         if estado_nuevo == 'aprobado':
-            reto.fecha_aprobacion = timezone.now()
-            reto.asignar_consecutivo_si_falta()
+            reto_activo.fecha_aprobacion = timezone.now()
+            reto_activo.asignar_consecutivo_si_falta()
         if estado_nuevo in {'aprobado', 'rechazado'}:
-            reto.comentarios_revision = comentario
+            reto_activo.comentarios_revision = comentario
         elif estado_nuevo == 'borrador':
-            reto.comentarios_revision = ''
-        reto.save()
-        registrar_cambio_estado(reto, estado_anterior, estado_nuevo, usuario, comentario)
+            reto_activo.comentarios_revision = ''
+        reto_activo.save()
+        registrar_cambio_estado(reto_activo, estado_anterior, estado_nuevo, usuario, comentario)
+        # Mantiene el objeto recibido sincronizado con la BD.
+        reto.estado = reto_activo.estado
+        reto.fecha_envio_revision = reto_activo.fecha_envio_revision
+        reto.fecha_aprobacion = reto_activo.fecha_aprobacion
+        reto.consecutivo = reto_activo.consecutivo
+        reto.anio_consecutivo = reto_activo.anio_consecutivo
+        reto.comentarios_revision = reto_activo.comentarios_revision
     if notificar_empresa:
-        _notificar_cambio_estado(reto, estado_anterior, estado_nuevo, comentario)
+        _notificar_cambio_estado(reto_activo, estado_anterior, estado_nuevo, comentario)
 
 
 def estados_manuales_disponibles(reto):

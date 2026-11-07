@@ -78,8 +78,7 @@ def gestionar(request, reto_id):
     agenda, _ = AgendaCierre.objects.get_or_create(reto=reto)
     cierre, _ = CierreReto.objects.get_or_create(reto=reto, defaults={"cerrado_por": request.user})
 
-    if reto.estado == "finalizado":
-        emitir_certificados_de_reto(reto, emitido_por=request.user)
+    # CIE-05: la emision de certificados ocurre solo al finalizar (POST), no en GET.
 
     agenda_form = AgendaCierreForm(request.POST or None, instance=agenda, prefix="agenda")
     cierre_form = CierreRetoForm(request.POST or None, request.FILES or None, instance=cierre, prefix="cierre")
@@ -112,6 +111,10 @@ def agregar_entregable(request, reto_id):
     reto = get_object_or_404(Reto, pk=reto_id)
     if not _usuario_puede_gestionar_cierre(request.user, reto):
         raise PermissionDenied("No tienes permiso para gestionar el cierre de este reto.")
+    # CIE-06: un reto finalizado no admite nuevos entregables finales.
+    if reto.estado == "finalizado":
+        messages.error(request, "El reto ya fue finalizado; no se pueden cargar nuevos entregables finales.")
+        return redirect("cierre:gestionar", reto_id=reto_id)
     cierre, _ = CierreReto.objects.get_or_create(reto=reto, defaults={"cerrado_por": request.user})
 
     form = EntregableFinalForm(request.POST, request.FILES)
@@ -190,6 +193,10 @@ def agregar_reconocimiento(request, reto_id):
     reto = get_object_or_404(Reto, pk=reto_id)
     if not _usuario_puede_gestionar_cierre(request.user, reto):
         raise PermissionDenied("No tienes permiso para gestionar el cierre de este reto.")
+    # CIE-06: un reto finalizado no admite nuevos reconocimientos.
+    if reto.estado == "finalizado":
+        messages.error(request, "El reto ya fue finalizado; no se pueden registrar nuevos reconocimientos.")
+        return redirect("cierre:gestionar", reto_id=reto_id)
     cierre, _ = CierreReto.objects.get_or_create(reto=reto, defaults={"cerrado_por": request.user})
 
     form = ReconocimientoForm(request.POST)
@@ -228,13 +235,23 @@ def finalizar(request, reto_id):
         )
         return redirect("cierre:gestionar", reto_id=reto.pk)
 
+    # CIE-02: no finalizar mientras existan entregables sin evaluar; de lo contrario
+    # se congela el expediente y se emiten certificados con evaluaciones pendientes.
+    from apps.evaluacion.models import Entregable
+
+    if Entregable.objects.filter(reto=reto, estado__in=["ENVIADO", "EN_REVISION"]).exists():
+        messages.error(
+            request,
+            "No se puede finalizar: hay entregables pendientes de evaluacion.",
+        )
+        return redirect("cierre:gestionar", reto_id=reto.pk)
+
     agenda, _ = AgendaCierre.objects.get_or_create(reto=reto)
     cierre, _ = CierreReto.objects.get_or_create(reto=reto, defaults={"cerrado_por": request.user})
 
     # Si no hay entregables finales del cierre, pero los estudiantes ya enviaron entregables,
     # auto-vincular los entregables de los estudiantes como entregables finales.
     if not cierre.entregables_finales.exists():
-        from apps.evaluacion.models import Entregable
         entregables_estudiante = Entregable.objects.filter(reto=reto)
         for e in entregables_estudiante:
             if e.archivo:
@@ -302,6 +319,10 @@ def mis_encuestas(request):
 @rol_requerido("EMPRESA", "PROFESOR", "ESTUDIANTE", raise_exception=True)
 def responder_encuesta(request, pk):
     encuesta = get_object_or_404(EncuestaSatisfaccion, pk=pk, participante=request.user)
+    # CIE-04: una vez respondida, la encuesta no se puede volver a modificar.
+    if encuesta.respondida:
+        messages.info(request, "Ya respondiste esta encuesta; no es posible modificarla.")
+        return redirect("cierre:mis_encuestas")
     form = EncuestaSatisfaccionForm(request.POST or None, instance=encuesta)
     if request.method == "POST" and form.is_valid():
         respuesta = form.save(commit=False)

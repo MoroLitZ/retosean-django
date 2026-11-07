@@ -11,8 +11,9 @@ from apps.empresas.models import Empresa
 from apps.notificaciones.models import Notificacion
 from .forms import IntegracionAcademicaForm, MAX_UPLOAD_SIZE, RetoForm, SeguimientoRetoForm
 from apps.seguimiento.models import IntegracionAcademica
+from apps.seguimiento.services import TransicionInvalida
 
-from .models import Reto
+from .models import EquipoRetoAcademico, Reto
 
 Usuario = get_user_model()
 
@@ -31,13 +32,21 @@ class MultipleFileUploadTests(SimpleTestCase):
         self.assertTrue(field.widget.allow_multiple_selected)
 
     def test_reto_form_rejects_a_file_larger_than_50_mb(self):
-        oversized_file = SimpleUploadedFile("demasiado-grande.zip", b"")
+        oversized_file = SimpleUploadedFile("demasiado-grande.pdf", b"")
         oversized_file.size = MAX_UPLOAD_SIZE + 1
 
         field = RetoForm.base_fields["archivos"]
 
         with self.assertRaisesMessage(ValidationError, "supera el limite de 50 MB"):
             field.clean([oversized_file])
+
+    def test_reto_form_rejects_arbitrary_content_type(self):
+        html_file = SimpleUploadedFile("exploit.html", b"<html></html>", content_type="text/html")
+
+        field = RetoForm.base_fields["archivos"]
+
+        with self.assertRaisesMessage(ValidationError, "no tiene un formato permitido"):
+            field.clean([html_file])
 
     def test_progress_form_has_optional_multiple_file_upload(self):
         field = SeguimientoRetoForm.base_fields["archivos"]
@@ -767,3 +776,208 @@ class BitacoraUnicaTests(TestCase):
         self.client.force_login(admin)
         detalle = self.client.get(reverse("retos:detalle", args=[reto.pk]))
         self.assertContains(detalle, dict(Reto.ESTADO_CHOICES)["aprobado"])
+
+
+class QARegresionRetosTests(TestCase):
+    """Regresiones de hallazgos RET-01 a RET-10."""
+
+    def setUp(self):
+        from apps.academico.models import Ecosistema, Facultad, Programa
+        from apps.unidades_estudio.models import UnidadEstudio
+
+        self.admin = Usuario.objects.create_user(username="admin-qa", password="x", rol="ADMIN")
+        self.empresa = Usuario.objects.create_user(username="empresa-qa", password="x", rol="EMPRESA")
+        self.profesor_a = Usuario.objects.create_user(username="profe-a-qa", password="x", rol="PROFESOR")
+        self.profesor_b = Usuario.objects.create_user(username="profe-b-qa", password="x", rol="PROFESOR")
+        self.estudiante = Usuario.objects.create_user(username="est-qa", password="x", rol="ESTUDIANTE")
+        self.reto = Reto.objects.create(
+            empresa=self.empresa, titulo="Reto QA", estado="aprobado",
+        )
+        self.facultad_ing = Facultad.objects.create(nombre="Ingenieria QA")
+        self.facultad_eco = Facultad.objects.create(nombre="Economia QA")
+        self.programa_ing = Programa.objects.create(nombre="Sistemas QA", facultad=self.facultad_ing)
+        self.programa_eco = Programa.objects.create(nombre="Economia QA", facultad=self.facultad_eco)
+        Ecosistema.objects.create(nombre="Eco QA")
+        self.unidad = UnidadEstudio.objects.create(
+            codigo="QA-101", nombre="Unidad QA", programa=self.programa_ing,
+            periodo="2026-1", ciclo="5", activo=True,
+        )
+
+    # --- RET-01 -------------------------------------------------------------
+    def test_cambiar_estado_reto_no_sobrescribe_estado_terminal(self):
+        """Un objeto obsoleto no puede resucitar un reto cancelado."""
+        from .services import cambiar_estado_reto
+
+        reto = Reto.objects.create(empresa=self.empresa, titulo="Reto terminal", estado="aprobado")
+        cambiar_estado_reto(reto, "cancelado", self.admin, "Cancelado")
+        # Simula instancia obsoleta que aun cree que esta abierto.
+        reto.estado = "abierto"
+        with self.assertRaises(TransicionInvalida):
+            cambiar_estado_reto(reto, "abierto", self.admin)
+        reto.refresh_from_db()
+        self.assertEqual(reto.estado, "cancelado")
+
+    # --- RET-02 / RET-05 ----------------------------------------------------
+    def test_profesor_con_integracion_borrador_no_ve_seguimiento(self):
+        integracion = IntegracionAcademica.objects.create(
+            reto=self.reto, profesor=self.profesor_a, estado="borrador",
+            facultad="F", programa_academico="P", nivel_formacion="Pregrado",
+            descripcion="d", alcance="a", entregable_esperado="e",
+        )
+        self.client.force_login(self.profesor_a)
+        self.assertEqual(self.client.get(reverse("retos:seguimientos", args=[self.reto.pk])).status_code, 403)
+        # Una vez aprobada, si puede verlo.
+        integracion.estado = "aprobada"
+        integracion.save()
+        self.assertEqual(self.client.get(reverse("retos:seguimientos", args=[self.reto.pk])).status_code, 200)
+
+    # --- RET-03 -------------------------------------------------------------
+    def _equipo_de(self, integracion, nombre="Equipo A"):
+        from apps.participaciones.models import Equipo
+
+        equipo = EquipoRetoAcademico.objects.create(
+            reto=self.reto, integracion=integracion, nombre_equipo=nombre,
+        )
+        # Espejo operativo requerido por sincronizacion; se crea manualmente.
+        espejo = Equipo.objects.create(reto=self.reto, nombre=equipo.nombre_equipo)
+        equipo.equipo_espejo = espejo
+        equipo.save()
+        return equipo
+
+    def _integracion_de(self, profesor, estado):
+        return IntegracionAcademica.objects.create(
+            reto=self.reto, profesor=profesor, estado=estado,
+            facultad="F", programa_academico="P", nivel_formacion="Pregrado",
+            descripcion="d", alcance="a", entregable_esperado="e",
+        )
+
+    def test_profesor_con_borrador_no_elimina_equipo_de_otro_profesor(self):
+        integracion_a = self._integracion_de(self.profesor_a, "aprobada")
+        equipo = self._equipo_de(integracion_a)
+
+        # Profesor B con borrador no puede eliminar el equipo de A.
+        self._integracion_de(self.profesor_b, "borrador")
+        self.client.force_login(self.profesor_b)
+        response = self.client.post(reverse("retos:eliminar_equipo_academico", args=[equipo.pk]))
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(EquipoRetoAcademico.objects.filter(pk=equipo.pk).exists())
+
+    def test_profesor_con_integracion_activa_no_edita_equipo_de_otro_profesor(self):
+        integracion_a = self._integracion_de(self.profesor_a, "aprobada")
+        equipo = self._equipo_de(integracion_a)
+
+        # Una integracion aprobada de B sobre el mismo reto sigue sin darle
+        # derechos sobre el equipo de A (RET-03: gap que hacia falta cerrar).
+        self._integracion_de(self.profesor_b, "aprobada")
+        self.client.force_login(self.profesor_b)
+        self.assertEqual(
+            self.client.get(reverse("retos:editar_equipo_academico", args=[equipo.pk])).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(reverse("retos:eliminar_equipo_academico", args=[equipo.pk])).status_code,
+            403,
+        )
+        self.assertTrue(EquipoRetoAcademico.objects.filter(pk=equipo.pk).exists())
+
+    def test_profesor_dueno_elimina_equipo_propio(self):
+        integracion_a = self._integracion_de(self.profesor_a, "aprobada")
+        equipo = self._equipo_de(integracion_a)
+
+        self.client.force_login(self.profesor_a)
+        response = self.client.post(reverse("retos:eliminar_equipo_academico", args=[equipo.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(EquipoRetoAcademico.objects.filter(pk=equipo.pk).exists())
+
+    # --- RET-04 -------------------------------------------------------------
+    def test_estudiante_en_equipo_no_ve_reto_no_publicado(self):
+        equipo = EquipoRetoAcademico.objects.create(reto=self.reto, nombre_equipo="Equipo no publicado")
+        equipo.estudiantes.add(self.estudiante)
+        self.reto.estado = "borrador"
+        self.reto.save()
+
+        self.client.force_login(self.estudiante)
+        response = self.client.get(reverse("retos:detalle", args=[self.reto.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    # --- RET-05 -------------------------------------------------------------
+    def test_publicar_integracion_sobre_reto_cancelado_falla(self):
+        integracion = IntegracionAcademica.objects.create(
+            reto=self.reto, profesor=self.profesor_a, estado="aprobada",
+            facultad="F", programa_academico="P", nivel_formacion="Pregrado",
+            descripcion="d", alcance="a", entregable_esperado="e",
+        )
+        self.reto.estado = "cancelado"
+        self.reto.save()
+        self.client.force_login(self.profesor_a)
+        response = self.client.post(reverse("retos:publicar_integracion", args=[integracion.pk]))
+        integracion.refresh_from_db()
+        self.assertNotEqual(integracion.estado, "publicada")
+        self.assertEqual(response.status_code, 302)
+
+    # --- RET-06 -------------------------------------------------------------
+    def test_crear_equipo_bloqueado_si_integracion_no_editable(self):
+        integracion = IntegracionAcademica.objects.create(
+            reto=self.reto, profesor=self.profesor_a, estado="en_revision",
+            facultad="F", programa_academico="P", nivel_formacion="Pregrado",
+            descripcion="d", alcance="a", entregable_esperado="e",
+        )
+        self.client.force_login(self.profesor_a)
+        response = self.client.get(reverse("retos:crear_equipo_academico", args=[integracion.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    # --- RET-07 -------------------------------------------------------------
+    def test_crear_reto_es_atomico_ante_error(self):
+        """RET-07: si falla el guardado de archivos, no queda un reto a medias."""
+        from unittest import mock
+
+        from apps.empresas.models import Empresa
+        from apps.empresas.testing import habilitar_empresa
+
+        habilitar_empresa(Empresa.objects.create(
+            usuario=self.empresa, nit="900777777", razon_social="Atomica QA",
+        ))
+        self.client.force_login(self.empresa)
+        data = {"tipo": "reto", "titulo": "Reto atomico"}
+        with mock.patch("apps.retos.views._guardar_archivos_reto", side_effect=RuntimeError("boom")):
+            with self.assertRaises(RuntimeError):
+                self.client.post(reverse("retos:crear"), data)
+        self.assertFalse(Reto.objects.filter(titulo="Reto atomico").exists())
+
+    # --- RET-09 -------------------------------------------------------------
+    def test_fechas_inconsistentes_rechazadas_en_formulario(self):
+        hoy = timezone.localdate()
+        form = RetoForm(data={
+            "tipo": "reto",
+            "titulo": "Fechas QA",
+            "fecha_inicio_tentativa": hoy + timedelta(days=10),
+            "fecha_fin_tentativa": hoy + timedelta(days=5),
+            "fecha_limite_postulacion": hoy + timedelta(days=20),
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn("fecha_fin_tentativa", form.errors)
+        self.assertIn("fecha_limite_postulacion", form.errors)
+
+    # --- RET-10 -------------------------------------------------------------
+    def test_cambio_valido_de_facultad_permitido(self):
+        reto = Reto.objects.create(
+            empresa=self.empresa, titulo="Cambio facultad",
+            facultad=self.facultad_ing, programa=self.programa_ing,
+        )
+        form = RetoForm(instance=reto, data={
+            "tipo": "reto",
+            "titulo": "Cambio facultad",
+            "facultad": self.facultad_eco.pk,
+            "programa": self.programa_eco.pk,
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_programa_inconsistente_con_facultad_rechazado(self):
+        form = RetoForm(data={
+            "tipo": "reto",
+            "titulo": "Inconsistencia",
+            "facultad": self.facultad_ing.pk,
+            "programa": self.programa_eco.pk,
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn("programa", form.errors)

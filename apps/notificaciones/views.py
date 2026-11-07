@@ -4,6 +4,7 @@ from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -124,9 +125,17 @@ def registro_envios(request):
     if usuario_q:
         registros = registros.filter(usuario__username__icontains=usuario_q)
     if desde:
-        registros = registros.filter(creada_en__date__gte=desde)
+        fecha_desde = parse_date(desde)
+        if fecha_desde:
+            registros = registros.filter(creada_en__date__gte=fecha_desde)
+        else:
+            messages.warning(request, "El formato de 'desde' no es valido (AAAA-MM-DD).")
     if hasta:
-        registros = registros.filter(creada_en__date__lte=hasta)
+        fecha_hasta = parse_date(hasta)
+        if fecha_hasta:
+            registros = registros.filter(creada_en__date__lte=fecha_hasta)
+        else:
+            messages.warning(request, "El formato de 'hasta' no es valido (AAAA-MM-DD).")
 
     resumen = Notificacion.objects.aggregate(
         total=Count('id'),

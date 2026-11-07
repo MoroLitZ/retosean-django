@@ -143,6 +143,40 @@ class ImportacionMasivaTests(TestCase):
         self.client.post(self.url, {"archivo": archivo, "accion": "confirmar"})
         self.assertTrue(LogActividad.objects.filter(accion="IMPORTACION").exists())
 
+    def test_confirmar_crea_perfil_por_rol(self):
+        from apps.academico.models import Estudiante, Profesor
+
+        archivo = self._csv([
+            "perfilest,perfilest@ean.edu.co,A,B,ESTUDIANTE,,",
+            "perfilpro,perfilpro@ean.edu.co,C,D,PROFESOR,,",
+        ])
+        self.client.post(self.url, {"archivo": archivo, "accion": "confirmar"})
+        self.assertTrue(hasattr(Usuario.objects.get(username="perfilest"), "perfil_estudiante"))
+        self.assertTrue(hasattr(Usuario.objects.get(username="perfilpro"), "perfil_profesor"))
+        self.assertTrue(Estudiante.objects.filter(usuario__username="perfilest").exists())
+        self.assertTrue(Profesor.objects.filter(usuario__username="perfilpro").exists())
+
+    def test_importar_omite_username_que_aparecio_despues_de_la_preview(self):
+        from .importacion import FilaImportacion, importar
+
+        Usuario.objects.create_user(username="yaexiste", password="x", rol="ESTUDIANTE")
+        fila = FilaImportacion(numero=2, datos={
+            "username": "yaexiste", "email": "yaexiste@ean.edu.co", "rol": "ESTUDIANTE",
+        })
+        creados, omitidos = importar([fila], self.admin)
+        self.assertEqual(creados, [])
+        self.assertEqual(omitidos, 1)
+
+    def test_archivo_demasiado_grande_se_rechaza(self):
+        from .importacion import leer_archivo
+
+        class ArchivoGrande:
+            name = "grande.csv"
+            size = 6 * 1024 * 1024
+
+        resultado = leer_archivo(ArchivoGrande())
+        self.assertIn("tamano maximo", resultado.error_global)
+
     def test_estudiante_no_accede_a_la_importacion(self):
         estudiante = Usuario.objects.create_user(
             username="est-import", password="x", rol="ESTUDIANTE"
@@ -315,6 +349,107 @@ class LoginConCorreoTests(TestCase):
         self._login("ana@example.com")
         self.assertNotIn("_auth_user_id", self.client.session)
 
-    def test_correo_con_clave_incorrecta_falla(self):
+def test_correo_con_clave_incorrecta_falla(self):
         self.client.post(reverse("usuarios:login"), {"username": "ana@example.com", "password": "otra"})
         self.assertNotIn("_auth_user_id", self.client.session)
+
+
+class RegistroAcademicoSeguridadTests(TestCase):
+    """USR-02: los profesores que se auto-registran quedan inactivos y sin sesion."""
+
+    def _datos(self, **extra):
+        datos = {
+            "username": "prof-nuevo", "first_name": "Ana", "last_name": "Perez",
+            "email": "ana@universidadean.edu.co", "rol": "PROFESOR",
+            "password1": "Clave-Segura-2026", "password2": "Clave-Segura-2026",
+            "carrera": "", "semestre": "", "facultad": "", "especialidad": "",
+        }
+        datos.update(extra)
+        return datos
+
+    def test_registro_profesor_no_inicia_sesion_hasta_aprobacion(self):
+        response = self.client.post(reverse("usuarios:registro") + "?tipo=academico", self._datos())
+        self.assertContains(response, "pendiente de aprobación")
+        usuario = Usuario.objects.get(username="prof-nuevo")
+        self.assertFalse(usuario.is_active)
+        self.assertFalse(usuario.activo)
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_registro_estudiante_sigue_activo_e_inicia_sesion(self):
+        response = self.client.post(reverse("usuarios:registro") + "?tipo=academico", self._datos(
+            username="est-nuevo", email="est@universidadean.edu.co", rol="ESTUDIANTE",
+        ))
+        self.assertEqual(response.status_code, 302)
+        usuario = Usuario.objects.get(username="est-nuevo")
+        self.assertTrue(usuario.is_active)
+        self.assertIn("_auth_user_id", self.client.session)
+
+    def test_registro_es_atomico_si_falla_el_perfil(self):
+        from unittest import mock
+
+        from django.db import IntegrityError
+
+        from apps.academico.models import Profesor
+
+        from .forms import RegistroAcademicoForm
+
+        with mock.patch.object(Profesor.objects, "create", side_effect=IntegrityError("perfil duplicado")):
+            form = RegistroAcademicoForm(self._datos())
+            self.assertTrue(form.is_valid())
+            with self.assertRaises(IntegrityError):
+                form.save()
+        # El usuario no debe quedar persistido si la creacion del perfil falla.
+        self.assertFalse(Usuario.objects.filter(username="prof-nuevo").exists())
+
+
+class LoginSeguridadTests(TestCase):
+    """USR-01/03/04/07: IP saneada, credenciales antes de revelar estado, throttle y mayusculas."""
+
+    def test_login_con_x_forwarded_for_invalido_no_revienta(self):
+        Usuario.objects.create_user(username="ipuser", password="clave-larga-123", rol="ESTUDIANTE")
+        response = self.client.post(
+            reverse("usuarios:login"),
+            {"username": "ipuser", "password": "clave-larga-123"},
+            HTTP_X_FORWARDED_FOR="esto-no-es-una-ip, otra",
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("_auth_user_id", self.client.session)
+        # La cabecera invalida se descarta y cae a REMOTE_ADDR en lugar de 500.
+        self.assertTrue(LogActividad.objects.filter(accion="LOGIN", identificador="ipuser", ip="127.0.0.1").exists())
+
+    def test_cuenta_inactiva_no_revela_estado_sin_contrasena(self):
+        Usuario.objects.create_user(username="inactivo-1", password="clave-larga-123", rol="ESTUDIANTE", is_active=False)
+        response = self.client.post(reverse("usuarios:login"), {
+            "username": "inactivo-1", "password": "clave-incorrecta",
+        })
+        self.assertContains(response, "Usuario o contraseña incorrectos.")
+        self.assertNotContains(response, "inhabilitada")
+
+    def test_cuenta_inactiva_revela_estado_solo_con_contrasena_correcta(self):
+        Usuario.objects.create_user(username="inactivo-2", password="clave-larga-123", rol="ESTUDIANTE", is_active=False)
+        response = self.client.post(reverse("usuarios:login"), {
+            "username": "inactivo-2", "password": "clave-larga-123",
+        })
+        self.assertContains(response, "inhabilitada")
+
+    def test_limite_de_intentos_de_login(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        Usuario.objects.create_user(username="bruto", password="clave-larga-123", rol="ESTUDIANTE")
+        url = reverse("usuarios:login")
+        for _ in range(5):
+            self.client.post(url, {"username": "bruto", "password": "mala"})
+        response = self.client.post(url, {"username": "bruto", "password": "clave-larga-123"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Demasiados intentos fallidos")
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_login_no_revienta_con_usuarios_que_difieren_por_mayusculas(self):
+        Usuario.objects.create_user(username="AnaCaso", password="clave-a-123", rol="ESTUDIANTE")
+        Usuario.objects.create_user(username="anacaso", password="clave-b-123", rol="ESTUDIANTE")
+        response = self.client.post(reverse("usuarios:login"), {
+            "username": "anacaso", "password": "clave-b-123",
+        })
+        self.assertNotEqual(response.status_code, 500)
+        self.assertIn("_auth_user_id", self.client.session)

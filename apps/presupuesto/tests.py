@@ -231,6 +231,27 @@ class ExportacionPresupuestoTests(TestCase):
         self.client.force_login(self.admin)
         self.assertEqual(self.client.get(reverse("presupuesto:exportar", args=[self.reto.pk, "doc"])).status_code, 404)
 
+    def test_excel_montos_son_decimal_con_formato_moneda(self):
+        import io
+
+        from openpyxl import load_workbook
+
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("presupuesto:exportar", args=[self.reto.pk, "xlsx"]))
+        self.assertEqual(response.status_code, 200)
+        hoja = load_workbook(io.BytesIO(response.content)).active
+        formato_moneda = '"$"#,##0.00'
+        montos = [
+            celda.value
+            for fila in hoja.iter_rows() for celda in fila
+            if celda.number_format == formato_moneda
+        ]
+        # Asignado (1000) y el gasto de materiales (250) se escriben como numero
+        # con formato de moneda; antes se convertian a float y perdian el formato.
+        self.assertIn(1000.0, montos)
+        self.assertIn(250.0, montos)
+        self.assertIn(750.0, montos)  # disponible
+
 
 class ExportacionConTextoHostilTests(TestCase):
     """Un texto libre con simbolos (descripciones, titulos) no debe tumbar ni alterar la descarga."""
@@ -264,3 +285,61 @@ class ExportacionConTextoHostilTests(TestCase):
         formula = next(c for c in celdas if c.value == "=1+1")
         self.assertNotEqual(formula.data_type, "f")  # es texto, no una formula que Excel evalue
         self.assertIn("concontrol", [c.value for c in celdas])  # el caracter de control se limpia
+
+
+class ReglaDeGastoContraDisponibleTests(TestCase):
+    """PRE-01: un gasto no puede dejar el disponible en negativo."""
+
+    def setUp(self):
+        self.admin = Usuario.objects.create_superuser(
+            username="admin-regla", password="x", email="admin@ean.edu.co"
+        )
+        self.empresa = Usuario.objects.create_user(
+            username="empresa-regla", password="x", rol="EMPRESA"
+        )
+        self.reto = Reto.objects.create(
+            empresa=self.empresa, titulo="Reto con tope", estado="aprobado"
+        )
+        self.presupuesto = Presupuesto.objects.create(reto=self.reto, monto_total=Decimal("100.00"))
+        self.client.force_login(self.admin)
+
+    def test_rechaza_gasto_mayor_a_disponible(self):
+        respuesta = self.client.post(
+            reverse("presupuesto:agregar_gasto", args=[self.reto.pk]),
+            {"categoria": "OTROS", "estado": Gasto.EJECUTADO, "monto": "150"},
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertEqual(Gasto.objects.count(), 0)
+        self.presupuesto.refresh_from_db()
+        self.assertEqual(self.presupuesto.monto_disponible, Decimal("100.00"))
+
+    def test_acepta_gasto_dentro_del_disponible(self):
+        respuesta = self.client.post(
+            reverse("presupuesto:agregar_gasto", args=[self.reto.pk]),
+            {"categoria": "OTROS", "estado": Gasto.EJECUTADO, "monto": "90"},
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertEqual(Gasto.objects.count(), 1)
+        self.presupuesto.refresh_from_db()
+        self.assertEqual(self.presupuesto.monto_disponible, Decimal("10.00"))
+
+
+class TotalesDelPresupuestoTests(TestCase):
+    """PRE-08: los montos agregados se resuelven en una sola consulta N+1."""
+
+    def setUp(self):
+        empresa = Usuario.objects.create_user(username="empresa-tot", password="x", rol="EMPRESA")
+        self.reto = Reto.objects.create(empresa=empresa, titulo="Reto totales", estado="aprobado")
+        self.presupuesto = Presupuesto.objects.create(reto=self.reto, monto_total=Decimal("1000.00"))
+        Gasto.objects.create(presupuesto=self.presupuesto, categoria="MATERIALES",
+                             monto=Decimal("300.00"), estado=Gasto.COMPROMETIDO)
+        Gasto.objects.create(presupuesto=self.presupuesto, categoria="REFRIGERIOS",
+                             monto=Decimal("200.00"), estado=Gasto.EJECUTADO)
+
+    def test_totales_resuelve_todo_en_una_consulta(self):
+        with self.assertNumQueries(1):
+            comprometido, ejecutado, asignado, disponible = self.presupuesto.totales()
+        self.assertEqual(
+            (comprometido, ejecutado, asignado, disponible),
+            (Decimal("300.00"), Decimal("200.00"), Decimal("500.00"), Decimal("500.00")),
+        )

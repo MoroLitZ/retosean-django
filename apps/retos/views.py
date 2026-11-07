@@ -70,25 +70,33 @@ def _puede_ver_reto(user, reto):
         or reto.integraciones_seguimiento.filter(profesor=user).exists()
     ):
         return True
-    # Estudiante: puede ver retos activos/aprobados (explorar y postularse)
-    # o retos donde forma parte de un equipo academico asignado
+    # Estudiante: solo puede ver retos en estados visibles; la pertenencia a
+    # un equipo no debe saltarse las reglas de publicacion (RET-04).
     if user.rol == 'ESTUDIANTE':
-        from .models import EquipoRetoAcademico
-        if reto.estado in Reto.ESTADOS_VISIBLES_ESTUDIANTE:
-            return True
-        return EquipoRetoAcademico.objects.filter(reto=reto, estudiantes=user).exists()
+        return reto.estado in Reto.ESTADOS_VISIBLES_ESTUDIANTE
     return False
 
 
 def _puede_ver_seguimiento(user, reto):
-    """Seguimiento: admin, la empresa duena del reto, o el profesor que lo integro."""
+    """Seguimiento: admin, la empresa duena del reto, o el profesor con una
+    integracion activa (aprobada o publicada) sobre el reto."""
     if es_admin(user):
         return True
     if user.rol == 'EMPRESA':
         return reto.empresa_id == user.pk
     if user.rol == 'PROFESOR':
-        return reto.integraciones_seguimiento.filter(profesor=user).exists()
+        return reto.integraciones_seguimiento.filter(
+            profesor=user, estado__in={'aprobada', 'publicada'}
+        ).exists()
     return False
+
+
+def _puede_gestionar_equipo(user, equipo):
+    """RET-03: solo el profesor de la integracion propietaria (o un admin)
+    puede editar o eliminar un equipo academico y su espejo operativo."""
+    if es_admin(user):
+        return True
+    return equipo.integracion_id is not None and equipo.integracion.profesor_id == user.pk
 
 
 def _guardar_archivos_reto(reto, archivos):
@@ -121,12 +129,14 @@ def mis_retos(request):
 def crear_reto(request):
     form = RetoForm(request.POST or None, request.FILES or None)
     if request.method == 'POST' and form.is_valid():
-        reto = form.save(commit=False)
-        reto.empresa = request.user
-        reto.estado = 'borrador'
-        reto.save()
-        registrar_cambio_estado(reto, '', 'borrador', request.user, 'Reto creado.')
-        _guardar_archivos_reto(reto, form.cleaned_data.get('archivos', []))
+        # Atomicidad: el reto, su historial y sus archivos se crean juntos (RET-07).
+        with transaction.atomic():
+            reto = form.save(commit=False)
+            reto.empresa = request.user
+            reto.estado = 'borrador'
+            reto.save()
+            registrar_cambio_estado(reto, '', 'borrador', request.user, 'Reto creado.')
+            _guardar_archivos_reto(reto, form.cleaned_data.get('archivos', []))
         messages.success(request, 'Reto guardado como borrador.')
         if request.POST.get('accion') == 'enviar':
             return _enviar_reto(request, reto)
@@ -515,7 +525,7 @@ def detalle_integracion(request, pk):
     )
     if request.user.rol == 'PROFESOR' and integracion.profesor_id != request.user.pk:
         raise PermissionDenied('No tienes acceso a esta integracion.')
-    equipos = integracion.reto.equipos_academicos.prefetch_related('estudiantes')
+    equipos = integracion.equipos.all().prefetch_related('estudiantes')
     return render(request, 'retos/detalle_integracion.html', {
         'integracion': integracion,
         'sesiones': integracion.sesiones.all(),
@@ -533,7 +543,16 @@ def publicar_integracion(request, pk):
     if integracion.estado != 'aprobada':
         messages.error(request, 'Solo puedes publicar integraciones aprobadas.')
         return redirect('retos:detalle_integracion', pk=integracion.pk)
+    # Bloquea el reto e integracion para evitar carreras con cancelacion u
+    # otra publicacion. No se publica sobre estados finales (RET-01/RET-05).
     with transaction.atomic():
+        reto = Reto.todos.filter(pk=integracion.reto_id).select_for_update().get()
+        integracion = IntegracionAcademica.objects.select_related('reto').filter(
+            pk=integracion.pk
+        ).select_for_update().get()
+        if reto.estado in {'finalizado', 'cancelado'}:
+            messages.error(request, 'No se puede publicar una integracion sobre un reto en estado final.')
+            return redirect('retos:detalle_integracion', pk=integracion.pk)
         cambiar_estado_entidad(
             integracion, MAQUINA_INTEGRACION, 'publicada', request.user,
             'Integracion publicada para los estudiantes.',
@@ -541,7 +560,6 @@ def publicar_integracion(request, pk):
         notificar_participantes_integracion(integracion)
         # Aprobado -> Abierto: con la configuracion academica aprobada y
         # publicada, el reto queda visible para los estudiantes (HU10).
-        reto = integracion.reto
         if reto.estado == 'aprobado':
             cambiar_estado_reto(
                 reto, 'abierto', request.user,
@@ -666,12 +684,15 @@ def empresa_revisar_integracion(request, pk):
 def crear_equipo_academico(request, pk):
     """Permite al profesor gestionar equipos, relacionar estudiantes y expertos, y notificarlos."""
     integracion = get_object_or_404(IntegracionAcademica, pk=pk, profesor=request.user)
-    
+    if not integracion.puede_editar_profesor:
+        raise PermissionDenied('No puedes gestionar equipos en esta integracion.')
+
     if request.method == 'POST':
         form = EquipoRetoAcademicoForm(request.POST, initial={'reto': integracion.reto})
         if form.is_valid():
             equipo = form.save(commit=False)
             equipo.reto = integracion.reto
+            equipo.integracion = integracion
             equipo.save()
             form.save_m2m()  # Guarda las relaciones de estudiantes y profesores
 
@@ -711,7 +732,9 @@ def crear_equipo_academico(request, pk):
 def registrar_sesion_academica(request, pk):
     """Permite registrar cronológicamente las sesiones (inicio, seguimiento, preselección, evaluación)."""
     integracion = get_object_or_404(IntegracionAcademica, pk=pk, profesor=request.user)
-    
+    if not integracion.puede_editar_profesor:
+        raise PermissionDenied('No puedes registrar sesiones en esta integracion.')
+
     if request.method == 'POST':
         form = SesionRetoAcademicoForm(request.POST, initial={'reto': integracion.reto})
         if form.is_valid():
@@ -727,24 +750,25 @@ def registrar_sesion_academica(request, pk):
     return render(request, 'retos/sesion_form.html', {'form': form, 'integracion': integracion})
 
 
-@solo_profesor
+@profesor_o_admin
 def editar_equipo_academico(request, pk):
     """Edita un equipo academico y vuelve a sincronizar su espejo operativo."""
     equipo = get_object_or_404(
-        EquipoRetoAcademico.objects.select_related('reto'),
+        EquipoRetoAcademico.objects.select_related('reto', 'integracion__profesor'),
         pk=pk,
-        reto__integraciones_seguimiento__profesor=request.user,
     )
-    integracion = get_object_or_404(
-        IntegracionAcademica, reto=equipo.reto, profesor=request.user
-    )
+    if not _puede_gestionar_equipo(request.user, equipo):
+        raise PermissionDenied('No puedes gestionar equipos de otra integracion.')
+    integracion = equipo.integracion
     if request.method == 'POST':
         form = EquipoRetoAcademicoForm(request.POST, instance=equipo, initial={'reto': equipo.reto})
         if form.is_valid():
             equipo = form.save()
             sincronizar_equipo_academico(equipo)
             messages.success(request, 'Equipo académico actualizado.')
-            return redirect('retos:detalle_integracion', pk=integracion.pk)
+            if integracion:
+                return redirect('retos:detalle_integracion', pk=integracion.pk)
+            return redirect('retos:mis_integraciones')
         messages.error(request, 'No se pudo actualizar el equipo. Revisa los datos del formulario.')
     else:
         form = EquipoRetoAcademicoForm(instance=equipo, initial={'reto': equipo.reto})
@@ -756,23 +780,23 @@ def editar_equipo_academico(request, pk):
     })
 
 
-@solo_profesor
+@profesor_o_admin
 @require_POST
 def eliminar_equipo_academico(request, pk):
     """Elimina un equipo academico y su espejo operativo."""
     equipo = get_object_or_404(
-        EquipoRetoAcademico.objects.select_related('reto'),
+        EquipoRetoAcademico.objects.select_related('reto', 'integracion__profesor'),
         pk=pk,
-        reto__integraciones_seguimiento__profesor=request.user,
     )
-    reto = equipo.reto
+    if not _puede_gestionar_equipo(request.user, equipo):
+        raise PermissionDenied('No puedes gestionar equipos de otra integracion.')
+    integracion = equipo.integracion
     nombre = equipo.nombre_equipo
     espejo = equipo.equipo_espejo
     equipo.delete()
     if espejo is not None:
         espejo.delete()
     messages.success(request, f'Equipo académico "{nombre}" eliminado.')
-    integracion = IntegracionAcademica.objects.filter(reto=reto, profesor=request.user).first()
     if integracion:
         return redirect('retos:detalle_integracion', pk=integracion.pk)
     return redirect('retos:mis_integraciones')

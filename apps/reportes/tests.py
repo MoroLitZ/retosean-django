@@ -329,3 +329,97 @@ class VistaPreviaYEnvioHU06Tests(TestCase):
         self.assertIn("SMTP caido", registro.filtros["error_envio"])
         historial = self.client.get(reverse("reportes:historial"))
         self.assertContains(historial, "Fallido")
+
+
+class LimiteDeFilasExcelTests(TestCase):
+    """PRE-05: el Excel se acota para no agotar memoria con reportes gigantes."""
+
+    def setUp(self):
+        self.admin = Usuario.objects.create_superuser(username="admin-limite", password="x", email="a@ean.edu.co")
+        empresa = Usuario.objects.create_user(username="empresa-limite", password="x", rol="EMPRESA")
+        for i in range(5):
+            Reto.objects.create(empresa=empresa, titulo=f"Reto {i}", estado="aprobado")
+        self.filtros = {"desde": None, "hasta": None}
+
+    def test_excel_trunca_y_avisa_cuando_supera_el_tope(self):
+        from io import BytesIO
+        from unittest import mock
+
+        from openpyxl import load_workbook
+
+        from .catalogo import obtener
+        from .services import generar_excel
+
+        definicion = obtener("retos")
+        queryset = definicion.construir_queryset(self.filtros)
+        with mock.patch("apps.reportes.services.MAX_FILAS_EXCEL", 3):
+            contenido, total = generar_excel(definicion, queryset, definicion.columnas, self.filtros)
+        self.assertEqual(total, 3)
+        texto = " ".join(
+            str(c) for fila in load_workbook(BytesIO(contenido)).active.iter_rows(values_only=True)
+            for c in fila if c is not None
+        )
+        self.assertIn("truncado a", texto)
+
+
+class RecalculoDeGastosEvitadoTests(TestCase):
+    """PRE-06: el reporte de presupuesto calcula los totales una vez por fila."""
+
+    def setUp(self):
+        self.admin = Usuario.objects.create_superuser(username="admin-tot-rep", password="x", email="a@ean.edu.co")
+        self.empresa = Usuario.objects.create_user(username="empresa-tot-rep", password="x", rol="EMPRESA")
+        self.filtros = {"desde": None, "hasta": None}
+
+    def test_totales_de_gastos_se_calculan_una_vez_por_presupuesto(self):
+        from unittest import mock
+
+        from .catalogo import _gastos_por_estado_y_categoria, obtener
+        from .services import vista_previa
+
+        for i in range(2):
+            reto = Reto.objects.create(empresa=self.empresa, titulo=f"Reto g{i}", estado="aprobado")
+            presupuesto = Presupuesto.objects.create(reto=reto, monto_total=Decimal("1000.00"))
+            Gasto.objects.create(presupuesto=presupuesto, categoria="MATERIALES", monto=Decimal("100.00"))
+            Gasto.objects.create(presupuesto=presupuesto, categoria="REFRIGERIOS", monto=Decimal("50.00"))
+
+        definicion = obtener("presupuesto")
+        with mock.patch(
+            "apps.reportes.catalogo._gastos_por_estado_y_categoria",
+            wraps=_gastos_por_estado_y_categoria,
+        ) as espia:
+            vista_previa(definicion, definicion.columnas, self.filtros)
+
+        # Una vez por presupuesto (no por columna): antes se recalculaba en cada celda.
+        self.assertEqual(espia.call_count, 2)
+
+
+class FiltrosDelReporteDeEmpresasTests(TestCase):
+    """PRE-07: el reporte de empresas respeta la fecha y los filtros que ofrece."""
+
+    def setUp(self):
+        self.admin = Usuario.objects.create_superuser(username="admin-empfilt", password="x", email="a@ean.edu.co")
+        usr = Usuario.objects.create_user(username="emp-filt", password="x", rol="EMPRESA")
+        self.e1 = Empresa.objects.create(usuario=usr, nit="9001", razon_social="Alfa", sector_industrial="TIC")
+        self.e2 = Empresa.objects.create(usuario=None, nit="9002", razon_social="Beta", sector_industrial="TIC")
+
+    def test_respeta_el_periodo_por_fecha_de_registro(self):
+        from datetime import date
+
+        from .catalogo import obtener
+
+        Empresa.objects.filter(pk=self.e1.pk).update(fecha_creacion=date(2020, 1, 1))
+        Empresa.objects.filter(pk=self.e2.pk).update(fecha_creacion=date(2026, 1, 1))
+
+        qs = obtener("empresas").construir_queryset({"desde": date(2025, 1, 1), "hasta": None})
+        self.assertEqual(list(qs), [self.e2])
+
+    def test_respeta_facultad_a_traves_de_sus_retos(self):
+        from apps.academico.models import Facultad
+
+        from .catalogo import obtener
+
+        facultad = Facultad.objects.create(nombre="Ingenieria Reportes")
+        Reto.objects.create(empresa=self.e1.usuario, titulo="Reto con facultad", estado="aprobado", facultad=facultad)
+
+        qs = obtener("empresas").construir_queryset({"facultad": facultad.pk})
+        self.assertEqual(list(qs), [self.e1])

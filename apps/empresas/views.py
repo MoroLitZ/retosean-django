@@ -1,13 +1,17 @@
 from django import forms
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
+from django.db.models import Q
+from django.http import FileResponse, Http404
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .models import DocumentoEmpresa, Empresa, TipoDocumentoLegal
-from .forms import CargarDocumentoForm
+from .forms import CargarDocumentoForm, validar_evidencia
 from apps.retos.models import Reto
 from apps.participaciones.models import Postulacion as PostulacionReto
 from apps.evaluacion.models import Entregable
@@ -35,20 +39,32 @@ from .services import (
 
 
 @login_required(login_url='usuarios:login')
+def descargar_documento(request, documento_id):
+    """Descarga autenticada de un documento legal (HU00): solo la empresa
+    propietaria o un administrador/staff puede abrir el archivo.
+    """
+    documento = get_object_or_404(DocumentoEmpresa, id=documento_id)
+    if not documento.archivo:
+        raise Http404("El documento no tiene archivo asociado.")
+
+    empresa = getattr(request.user, 'empresa_perfil', None)
+    es_dueno = empresa is not None and empresa.pk == documento.empresa_id
+    if not (es_dueno or request.user.is_staff or es_admin(request.user)):
+        raise PermissionDenied("No tienes permiso para descargar este documento.")
+
+    documento.archivo.open(mode="rb")
+    return FileResponse(documento.archivo, content_type="application/pdf")
+
+
+@login_required(login_url='usuarios:login')
 def panel_documentos_empresa(request):
     empresa = getattr(request.user, 'empresa_perfil', None)
 
-    if not empresa and not request.user.is_staff:
+    if not empresa:
         messages.error(request, "Acceso denegado.")
         return redirect('usuarios:login')
 
     if request.method == 'POST':
-        # Sin perfil de empresa no hay a quien asociar el documento:
-        # un staff que entre aqui solo puede consultar.
-        if not empresa:
-            messages.error(request, "No tienes un perfil de empresa al que asociar documentos.")
-            return redirect('empresas:documentos')
-
         form = CargarDocumentoForm(request.POST, request.FILES)
 
         if form.is_valid():
@@ -125,7 +141,10 @@ def _fila_documento(fila):
         'documento': documento,
         'fecha_expedicion': documento.fecha_expedicion if documento else None,
         'fecha_vencimiento': documento.fecha_vencimiento if documento else None,
-        'url_archivo': documento.archivo.url if documento and documento.archivo else None,
+        'url_archivo': (
+            reverse('empresas:descargar_documento', kwargs={'documento_id': documento.pk})
+            if documento and documento.archivo else None
+        ),
         'motivo_rechazo': documento.motivo_rechazo if documento else '',
     }
 
@@ -342,7 +361,18 @@ def mis_retos_empresa(request):
 def admin_revisar_documentacion(request, empresa_id):
     """Documentacion legal de una empresa (HU00): solo el administrador."""
     empresa = get_object_or_404(Empresa, id=empresa_id)
-    pendientes = DocumentoEmpresa.objects.filter(empresa=empresa).exclude(estado__in=['VERIFICADO', 'RECHAZADO'])
+    # Pendientes: todo salvo los rechazados y los verificados que aun estan
+    # vigentes. Un documento VERIFICADO ya vencido (aunque aun no lo haya
+    # marcado el comando de recordatorios) sigue apareciendo para que el admin
+    # actue sobre el.
+    pendientes = (
+        DocumentoEmpresa.objects.filter(empresa=empresa)
+        .exclude(estado='RECHAZADO')
+        .exclude(
+            Q(estado='VERIFICADO')
+            & (Q(fecha_vencimiento__isnull=True) | Q(fecha_vencimiento__gte=timezone.localdate()))
+        )
+    )
 
     puede_cargar_especiales = request.user.has_perm('empresas.cargar_listas_informa')
     return render(request, 'empresas/admin/revisar_documentos.html', {
@@ -521,59 +551,69 @@ def procesar_listas_restrictivas(request, empresa_id):
         estado_listas = request.POST.get('estado_listas_restrictivas')
         evidencia = request.FILES.get('evidencia_listas')
 
+        # La evidencia se valida antes de tocar nada: extension, tamanio y,
+        # para PDF, los bytes magicos.
+        if evidencia:
+            try:
+                validar_evidencia(evidencia)
+            except forms.ValidationError as error:
+                messages.error(request, "; ".join(error.messages))
+                return redirect('empresas:admin_revisar_documentacion', empresa_id=empresa.id)
+
         if estado_listas in ['APROBADO', 'RECHAZADO', 'PENDIENTE']:
-            empresa.estado_listas_restrictivas = estado_listas
-            
-            # Si se adjunta una nueva evidencia, la guardamos
-            if evidencia:
-                empresa.evidencia_listas = evidencia
-            
-            # REGLA DE NEGOCIO: Si aparece en listas, rechazo global y bloqueo de cuenta
-            if estado_listas == 'RECHAZADO':
-                empresa.estado_validacion = 'RECHAZADA'
-                
-                # Rechazar automáticamente todos los documentos pendientes
-                rechazar_documentos_por_listas(empresa, request.user)
+            with transaction.atomic():
+                empresa.estado_listas_restrictivas = estado_listas
 
-                # Inhabilitar la cuenta del usuario para que no pueda volver a iniciar sesión
-                if empresa.usuario and empresa.usuario.is_active:
-                    cambiar_estado_cuenta(
-                        empresa.usuario, False, request.user,
-                        'Cuenta inhabilitada: la empresa aparece en listas restrictivas.',
+                # Si se adjunta una nueva evidencia, la guardamos
+                if evidencia:
+                    empresa.evidencia_listas = evidencia
+
+                # REGLA DE NEGOCIO: Si aparece en listas, rechazo global y bloqueo de cuenta
+                if estado_listas == 'RECHAZADO':
+                    empresa.estado_validacion = 'RECHAZADA'
+
+                    # Rechazar automáticamente todos los documentos pendientes
+                    rechazar_documentos_por_listas(empresa, request.user)
+
+                    # Inhabilitar la cuenta del usuario para que no pueda volver a iniciar sesión
+                    if empresa.usuario and empresa.usuario.is_active:
+                        cambiar_estado_cuenta(
+                            empresa.usuario, False, request.user,
+                            'Cuenta inhabilitada: la empresa aparece en listas restrictivas.',
+                        )
+
+                    notificar(
+                        empresa.usuario, 'EMPRESA_LISTAS_RESTRICTIVAS',
+                        mensaje=(
+                            'Tu organizacion aparece en listas restrictivas (Clinton/OFAC). '
+                            'La cuenta quedo inhabilitada y la documentacion fue rechazada. '
+                            'Comunicate con la Universidad EAN para revisar el caso.'
+                        ),
+                        clave_dedupe=f'empresa:{empresa.pk}:listas:RECHAZADO',
                     )
-
-                notificar(
-                    empresa.usuario, 'EMPRESA_LISTAS_RESTRICTIVAS',
-                    mensaje=(
-                        'Tu organizacion aparece en listas restrictivas (Clinton/OFAC). '
-                        'La cuenta quedo inhabilitada y la documentacion fue rechazada. '
-                        'Comunicate con la Universidad EAN para revisar el caso.'
-                    ),
-                    clave_dedupe=f'empresa:{empresa.pk}:listas:RECHAZADO',
-                )
-                notificar_admins(
-                    'EMPRESA_LISTAS_RESTRICTIVAS',
-                    mensaje=f'La empresa {empresa.razon_social} fue rechazada por listas restrictivas.',
-                    excluir=request.user,
-                    clave_dedupe=f'empresa:{empresa.pk}:listas:RECHAZADO:admin',
-                )
-                messages.warning(request, f"La empresa {empresa.razon_social} fue rechazada por listas restrictivas y su cuenta ha sido inhabilitada.")
-            elif estado_listas == 'APROBADO':
-                messages.success(request, f"Verificación de listas restrictivas aprobada para {empresa.razon_social}.")
-                # Si por error estuvo rechazada antes y ahora se aprueba, reactivamos la cuenta.
-                if empresa.usuario and not empresa.usuario.is_active:
-                    cambiar_estado_cuenta(
-                        empresa.usuario, True, request.user,
-                        'Cuenta reactivada: verificacion en listas restrictivas aprobada.',
+                    notificar_admins(
+                        'EMPRESA_LISTAS_RESTRICTIVAS',
+                        mensaje=f'La empresa {empresa.razon_social} fue rechazada por listas restrictivas.',
+                        excluir=request.user,
+                        clave_dedupe=f'empresa:{empresa.pk}:listas:RECHAZADO:admin',
                     )
+                    messages.warning(request, f"La empresa {empresa.razon_social} fue rechazada por listas restrictivas y su cuenta ha sido inhabilitada.")
+                elif estado_listas == 'APROBADO':
+                    messages.success(request, f"Verificación de listas restrictivas aprobada para {empresa.razon_social}.")
+                    # Si por error estuvo rechazada antes y ahora se aprueba, reactivamos la cuenta.
+                    if empresa.usuario and not empresa.usuario.is_active:
+                        cambiar_estado_cuenta(
+                            empresa.usuario, True, request.user,
+                            'Cuenta reactivada: verificacion en listas restrictivas aprobada.',
+                        )
 
-            empresa.save()
+                empresa.save()
 
-            # El estado de validacion se quedaba congelado en 'RECHAZADA' para
-            # siempre al levantar el bloqueo: hay que recalcularlo desde los
-            # documentos, ya sin el corto circuito de listas restrictivas.
-            if estado_listas != 'RECHAZADO':
-                _actualizar_estado_validacion(empresa)
+                # El estado de validacion se quedaba congelado en 'RECHAZADA' para
+                # siempre al levantar el bloqueo: hay que recalcularlo desde los
+                # documentos, ya sin el corto circuito de listas restrictivas.
+                if estado_listas != 'RECHAZADO':
+                    _actualizar_estado_validacion(empresa)
         else:
             messages.error(request, "Estado de listas no válido.")
 
@@ -590,6 +630,10 @@ def elegir_modo_convenio(request):
     if request.method == 'POST':
         opcion = request.POST.get('opcion')
         if opcion == 'si_convenio':
+            # Si antes habia renunciado al convenio y ahora lo elige, se revierte
+            # la renuncia para que vuelvan a exigirse la minuta y el convenio.
+            empresa.renuncio_a_convenio = False
+            empresa.save(update_fields=['renuncio_a_convenio'])
             return redirect('empresas:documentos')
         if opcion == 'no_convenio':
             empresa.renuncio_a_convenio = True

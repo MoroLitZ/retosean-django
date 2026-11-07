@@ -16,8 +16,10 @@ from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from apps.notificaciones.services import notificar_muchos
+from apps.usuarios.models import Usuario
 
 DIAS_POR_DEFECTO = [7, 3, 1]
+DIAS_PENDIENTE_CALIFICAR = 7  # NOT-05: umbral fijo, no depende de --dias
 
 
 class Command(BaseCommand):
@@ -47,7 +49,7 @@ class Command(BaseCommand):
             total += self._documentos_por_vencer(objetivo, antelacion)
             total += self._etapas_de_hackaton(objetivo, antelacion)
 
-        total += self._entregables_sin_calificar(dias_espera=max(dias))
+        total += self._entregables_sin_calificar()
         total += self._retos_vencidos_sin_actualizar(hoy)
 
         prefijo = "[dry-run] " if self.dry_run else ""
@@ -87,18 +89,23 @@ class Command(BaseCommand):
             )
         return total
 
+    def _recibir_recordatorios(self, usuario):
+        """Devuelve True si el usuario acepta recordatorios; crea sin escribir."""
+        try:
+            return usuario.preferencias_notificacion.recibir_recordatorios
+        except (AttributeError, Usuario.DoesNotExist):
+            return True
+
     def _emitir(self, usuarios, evento, mensaje, link, clave):
         usuarios = [u for u in usuarios if u is not None]
         if not usuarios:
             return 0
+        # NOT-04: la simulacion debe reflejar los destinatarios reales, asi que
+        # aplicamos el mismo filtro de preferencias antes de contar.
+        destinatarios = [u for u in usuarios if self._recibir_recordatorios(u)]
         if self.dry_run:
-            self.stdout.write(f"  - {clave} -> {len(usuarios)} destinatario(s): {mensaje}")
-            return len(usuarios)
-        # Respetamos a quien desactivo los recordatorios en sus preferencias.
-        destinatarios = [
-            u for u in usuarios
-            if getattr(getattr(u, "preferencias_notificacion", None), "recibir_recordatorios", True)
-        ]
+            self.stdout.write(f"  - {clave} -> {len(destinatarios)} destinatario(s): {mensaje}")
+            return len(destinatarios)
         return len(notificar_muchos(
             destinatarios, evento, mensaje=mensaje, link=link, clave_dedupe=clave
         ))
@@ -123,7 +130,7 @@ class Command(BaseCommand):
                 interesados, "RECORDATORIO_FECHA_LIMITE",
                 f"Quedan {antelacion} dia(s) para postularte al reto '{reto.titulo}'.",
                 reverse("retos:detalle", kwargs={"pk": reto.pk}),
-                f"recordatorio:postulacion:{reto.pk}:{antelacion}",
+                f"recordatorio:postulacion:{reto.pk}:{objetivo}:{antelacion}",
             )
         return total
 
@@ -147,15 +154,17 @@ class Command(BaseCommand):
                 pendientes, "RECORDATORIO_FECHA_LIMITE",
                 f"Quedan {antelacion} dia(s) para la entrega final del reto '{reto.titulo}'.",
                 reverse("participaciones:mis_entregables_reto", kwargs={"reto_id": reto.pk}),
-                f"recordatorio:entrega-final:{reto.pk}:{antelacion}",
+                f"recordatorio:entrega-final:{reto.pk}:{objetivo}:{antelacion}",
             )
 
-            profesores = Usuario.objects.filter(integraciones__reto=reto).distinct()
+            profesores = Usuario.objects.filter(
+                integraciones__reto=reto, is_active=True
+            ).distinct()
             total += self._emitir(
                 profesores, "RECORDATORIO_FECHA_LIMITE",
                 f"El reto '{reto.titulo}' finaliza en {antelacion} dia(s).",
                 reverse("evaluacion:panel_profesor"),
-                f"recordatorio:fin-reto:{reto.pk}:{antelacion}:profesor",
+                f"recordatorio:fin-reto:{reto.pk}:{objetivo}:{antelacion}:profesor",
             )
         return total
 
@@ -201,7 +210,7 @@ class Command(BaseCommand):
                 f"Tu documento '{documento.get_tipo_documento_display()}' "
                 f"vence en {antelacion} dia(s).",
                 reverse("empresas:documentos"),
-                f"recordatorio:documento:{documento.pk}:{antelacion}",
+                f"recordatorio:documento:{documento.pk}:{objetivo}:{antelacion}",
             )
         return total
 
@@ -228,14 +237,16 @@ class Command(BaseCommand):
                 f"La etapa '{etapa.titulo}' del hackathon '{reto.titulo}' "
                 f"inicia en {antelacion} dia(s).",
                 link,
-                f"recordatorio:etapa:{etapa.pk}:{antelacion}",
+                f"recordatorio:etapa:{etapa.pk}:{objetivo}:{antelacion}",
             )
         return total
 
-    def _entregables_sin_calificar(self, dias_espera):
+    def _entregables_sin_calificar(self):
         from apps.evaluacion.models import Entregable
         from apps.usuarios.models import Usuario
 
+        # NOT-05: este umbral no debe verse afectado por el argumento --dias.
+        dias_espera = DIAS_PENDIENTE_CALIFICAR
         limite = timezone.now() - timedelta(days=dias_espera)
         pendientes = Entregable.objects.filter(
             estado__in=["ENVIADO", "EN_REVISION"], fecha_entrega__lt=limite
@@ -246,9 +257,13 @@ class Command(BaseCommand):
             por_reto[entregable.reto] = por_reto.get(entregable.reto, 0) + 1
 
         total = 0
-        semana = timezone.localdate().strftime("%Y-%W")
+        # NOT-06: usar año/semana ISO evita claves duplicadas alrededor de Año Nuevo.
+        hoy = timezone.localdate()
+        semana = "{:d}-{:02d}".format(*hoy.isocalendar()[:2])
         for reto, cantidad in por_reto.items():
-            profesores = Usuario.objects.filter(integraciones__reto=reto).distinct()
+            profesores = Usuario.objects.filter(
+                integraciones__reto=reto, is_active=True
+            ).distinct()
             total += self._emitir(
                 profesores, "RECORDATORIO_FECHA_LIMITE",
                 f"Tienes {cantidad} entregable(s) del reto '{reto.titulo}' sin calificar "

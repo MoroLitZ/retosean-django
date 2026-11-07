@@ -1,5 +1,5 @@
 from django.contrib import messages
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -42,15 +42,25 @@ def _jurado_de(hackathon, user):
 
 
 def _puede_ver(user, hackathon):
-    """Evita que un estudiante abra por URL un hackathon que aun no es publico.
+    """Mismo alcance que el listado al abrir un objeto directo por URL.
 
-    El resto de roles conserva el acceso que ya tenia; solo el estudiante queda
-    filtrado por estado, que es el agujero que cerraba C.5.4.
+    Antes solo el estudiante quedaba filtrado por estado (C.5.4) y cualquier
+    empresa o profesor abria por pk un hackathon ajeno, en borrador incluido
+    (HCK-09). Un jurado asignado ve el hackathon que juzga, sea cual sea su
+    rol, porque la vista de votacion ya lo exige.
     """
-    if user.rol == "EXPERTO" and not es_admin(user):
-        return _jurado_de(hackathon, user) is not None
-    if es_admin(user) or user.rol != "ESTUDIANTE":
+    if es_admin(user):
         return True
+    rol = user.rol
+    if rol == "EXPERTO":
+        return _jurado_de(hackathon, user) is not None
+    if rol == "EMPRESA":
+        return hackathon.reto.empresa_id == user.pk or _jurado_de(hackathon, user) is not None
+    if rol == "PROFESOR":
+        return (
+            hackathon.reto.integraciones_seguimiento.filter(profesor=user).exists()
+            or _jurado_de(hackathon, user) is not None
+        )
     return hackathon.estado in ("publicado", "en_curso", "finalizado")
 
 
@@ -111,6 +121,13 @@ def crear(request, reto_id):
     reto = get_object_or_404(Reto, pk=reto_id)
     if reto.tipo != "hackathon":
         messages.error(request, "Solo los retos de tipo Hackathon admiten esta modalidad.")
+        return redirect("retos:detalle", pk=reto.pk)
+    # Mismo criterio que _puede_gestionar: el admin o el profesor que integro
+    # el reto; otro profesor no crea el hackathon de un reto ajeno (HCK-07).
+    if not es_admin(request.user) and not reto.integraciones_seguimiento.filter(
+        profesor=request.user
+    ).exists():
+        messages.error(request, "No gestionas este reto; no puedes crear su hackathon.")
         return redirect("retos:detalle", pk=reto.pk)
     if hasattr(reto, "hackathon"):
         return redirect("hackaton:detalle", pk=reto.hackathon.pk)
@@ -209,6 +226,14 @@ def eliminar_jurado(request, pk):
         messages.error(request, "No gestionas este hackathon.")
         return redirect("hackaton:detalle", pk=jurado.hackathon_id)
     hackathon_id = jurado.hackathon_id
+    # Los votos y los resultados publicados dependen del jurado: borrarlo en
+    # cascada reescribiria silenciosamente un ganador ya notificado (HCK-03).
+    if jurado.votaciones.exists():
+        messages.error(request, "No se puede retirar al jurado: ya tiene votos registrados en los resultados.")
+        return redirect("hackaton:jurados", pk=hackathon_id)
+    if jurado.hackathon.resultados_publicados:
+        messages.error(request, "No se puede retirar al jurado: los resultados del hackathon ya estan publicados.")
+        return redirect("hackaton:jurados", pk=hackathon_id)
     jurado.delete()
     messages.success(request, "Jurado retirado.")
     return redirect("hackaton:jurados", pk=hackathon_id)
@@ -234,8 +259,11 @@ def publicar_resultados(request, pk):
         messages.error(request, "No gestionas este hackathon.")
         return redirect("hackaton:detalle", pk=hackathon.pk)
     tabla = services.publicar_resultados(hackathon, request.user)
-    if tabla:
-        messages.success(request, f"Resultados publicados. Ganador: {tabla[0]['equipo']}.")
+    campeones = services.ganadores(tabla)
+    if campeones:
+        nombres = " y ".join(fila["equipo"] for fila in campeones)
+        empate = " (empate)" if len(campeones) > 1 else ""
+        messages.success(request, f"Resultados publicados. Ganador: {nombres}{empate}.")
     else:
         messages.warning(request, "Resultados publicados, pero todavia no hay votaciones.")
     return redirect("hackaton:ranking", pk=hackathon.pk)
@@ -251,12 +279,19 @@ def inscribir_equipo(request, pk):
 
     form = InscripcionForm(request.POST or None, hackathon=hackathon, usuario=request.user)
     if request.method == "POST" and form.is_valid():
-        inscripcion = InscripcionHackaton.objects.create(
-            hackathon=hackathon,
-            equipo=form.cleaned_data["equipo"],
-            inscrito_por=request.user,
-        )
-        registrar_cambio_estado(inscripcion, "", inscripcion.estado, request.user, "Equipo inscrito.")
+        try:
+            with transaction.atomic():
+                inscripcion = InscripcionHackaton.objects.create(
+                    hackathon=hackathon,
+                    equipo=form.cleaned_data["equipo"],
+                    inscrito_por=request.user,
+                )
+                registrar_cambio_estado(inscripcion, "", inscripcion.estado, request.user, "Equipo inscrito.")
+        except IntegrityError:
+            # Doble envio simultaneo: el unique_together (hackathon, equipo)
+            # salto entre la validacion del formulario y el create (HCK-11).
+            messages.error(request, "Este equipo ya esta inscrito en el hackathon.")
+            return redirect("hackaton:detalle", pk=hackathon.pk)
         messages.success(request, "Equipo inscrito. Queda pendiente de aprobacion.")
         return redirect("hackaton:detalle", pk=hackathon.pk)
 
@@ -351,6 +386,10 @@ def votar(request, pk):
 @rol_requerido("ADMIN", "PROFESOR", "EMPRESA", "ESTUDIANTE", "EXPERTO")
 def ranking(request, pk):
     hackathon = get_object_or_404(Hackathon.objects.select_related("reto"), pk=pk)
+    # El ranking tambien queda bajo el alcance del listado (HCK-09).
+    if not _puede_ver(request.user, hackathon):
+        messages.error(request, "No tienes acceso a este hackathon.")
+        return redirect("hackaton:lista")
     services.avanzar_por_calendario(hackathon)
     puede_ver = (
         hackathon.resultados_publicados

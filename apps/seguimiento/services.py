@@ -7,6 +7,7 @@ de `cambiar_estado`, que rechaza las transiciones invalidas y deja el cambio en
 """
 
 from django.contrib.contenttypes.models import ContentType
+from django.db import transaction
 
 from .models import HistorialEstado
 
@@ -86,12 +87,13 @@ def cambiar_estado(objeto, maquina, estado_nuevo, usuario=None, comentario="",
     """
     estado_anterior = getattr(objeto, campo)
     maquina.validar(estado_anterior, estado_nuevo)
-    setattr(objeto, campo, estado_nuevo)
-    campos = {campo, *update_fields}
-    if any(f.name == "actualizado_en" for f in objeto._meta.fields):
-        campos.add("actualizado_en")
-    objeto.save(update_fields=sorted(campos))
-    registrar_cambio_estado(objeto, estado_anterior, estado_nuevo, usuario, comentario, campo)
+    with transaction.atomic():
+        setattr(objeto, campo, estado_nuevo)
+        campos = {campo, *update_fields}
+        if any(f.name == "actualizado_en" for f in objeto._meta.fields):
+            campos.add("actualizado_en")
+        objeto.save(update_fields=sorted(campos))
+        registrar_cambio_estado(objeto, estado_anterior, estado_nuevo, usuario, comentario, campo)
     return estado_anterior
 
 

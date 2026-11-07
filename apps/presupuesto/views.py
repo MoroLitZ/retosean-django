@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Case, DecimalField, Sum, When
 from django.db.models.functions import Coalesce
 from django.http import Http404, HttpResponse
@@ -122,16 +123,33 @@ def agregar_gasto(request, reto_id):
 
     form = GastoForm(request.POST, request.FILES)
     if form.is_valid():
-        registrar_gasto(presupuesto, form.save(commit=False), request.user)
-        presupuesto.refresh_from_db()
-        if presupuesto.porcentaje_ejecutado >= 80:
-            messages.warning(
+        monto = form.cleaned_data["monto"]
+        with transaction.atomic():
+            # PRE-01: un gasto no puede dejar el disponible en negativo. Se compara
+            # contra la fila bloqueada (el disponible ya descuenta comprometido y
+            # ejecutado) para que dos gastos concurrentes no quepan ambos en el
+            # mismo saldo.
+            presupuesto = Presupuesto.objects.select_for_update().get(pk=presupuesto.pk)
+            disponible = presupuesto.monto_disponible
+            aceptado = monto <= disponible
+            if aceptado:
+                registrar_gasto(presupuesto, form.save(commit=False), request.user)
+        if not aceptado:
+            messages.error(
                 request,
-                f"Gasto registrado. Atención: la ejecución va en "
-                f"{presupuesto.porcentaje_ejecutado:.1f}% del presupuesto.",
+                f"El monto (${monto}) excede el disponible del presupuesto (${disponible}). "
+                f"Reduce el gasto o amplía el presupuesto.",
             )
         else:
-            messages.success(request, "Gasto registrado.")
+            porcentaje = presupuesto.porcentaje_ejecutado
+            if porcentaje >= 80:
+                messages.warning(
+                    request,
+                    f"Gasto registrado. Atención: la ejecución va en "
+                    f"{porcentaje:.1f}% del presupuesto.",
+                )
+            else:
+                messages.success(request, "Gasto registrado.")
     else:
         messages.error(request, "Revisa los datos del gasto.")
     return redirect("presupuesto:detalle", reto_id=reto.pk)

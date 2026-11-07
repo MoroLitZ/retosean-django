@@ -8,6 +8,7 @@ codigo de dominio deberia entrar por `notificar()` / `notificar_muchos()`.
 import logging
 
 from django.conf import settings
+from django.core.exceptions import ObjectDoesNotExist
 from django.core.mail import send_mail
 from django.db import IntegrityError, transaction
 from django.template.loader import render_to_string
@@ -49,9 +50,13 @@ def notificar(usuario, evento, *, mensaje, titulo=None, link="", tipo=None,
                 link=link,
                 clave_dedupe=clave_dedupe,
             )
-    except IntegrityError:
+    except IntegrityError as exc:
         # Ya existia una notificacion con esta clave: es el caso normal de los
-        # recordatorios diarios, no un error.
+        # recordatorios diarios, no un error. Se registra para evitar silencios.
+        logger.warning(
+            "Notificacion duplicada omitida para usuario %s clave %r: %s",
+            usuario.pk, clave_dedupe, exc
+        )
         return None
 
     debe_enviar = enviar_email if enviar_email is not None else definicion.permite_email

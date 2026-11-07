@@ -1,5 +1,6 @@
 from datetime import timedelta
 from decimal import Decimal
+from unittest import mock
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -10,9 +11,11 @@ from apps.notificaciones.models import Notificacion
 from apps.participaciones.models import Equipo, MiembroEquipo, Postulacion
 from apps.retos.models import Reto
 from apps.seguimiento.models import IntegracionAcademica
+from apps.seguimiento.services import cambiar_estado
 from apps.usuarios.models import Usuario
 
 from . import services
+from .forms import InscripcionForm
 from .models import EtapaHackaton, Hackathon, InscripcionHackaton, Jurado, VotacionHackaton
 
 
@@ -53,6 +56,14 @@ class BaseHackathonTests(TestCase):
     def _inscribir(self, equipo, estado="ACEPTADA"):
         return InscripcionHackaton.objects.create(
             hackathon=self.hackathon, equipo=equipo, estado=estado
+        )
+
+    def _abrir_presentacion(self):
+        """Etapa de presentacion fechada y vigente; sin ella no se vota (HCK-05)."""
+        ahora = timezone.now()
+        return EtapaHackaton.objects.create(
+            hackathon=self.hackathon, tipo="presentacion", titulo="Presentacion",
+            inicia_en=ahora - timedelta(days=1), termina_en=ahora + timedelta(days=1),
         )
 
 
@@ -148,6 +159,7 @@ class VotacionTests(BaseHackathonTests):
             voto.full_clean()
 
     def test_jurado_registra_y_actualiza_su_voto(self):
+        self._abrir_presentacion()
         equipo = self._equipo("Equipo Zeta")
         self._inscribir(equipo)
         jurado = self._jurado("jurado-tres")
@@ -165,6 +177,30 @@ class VotacionTests(BaseHackathonTests):
         self.client.force_login(self.profesor)
         response = self.client.get(reverse("hackaton:votar", args=[self.hackathon.pk]))
         self.assertRedirects(response, reverse("hackaton:detalle", args=[self.hackathon.pk]))
+
+    # ---- HCK-05: la votacion falla cerrado sin etapa de presentacion fechada.
+    def test_sin_etapa_de_presentacion_no_se_vota(self):
+        equipo = self._equipo("Equipo Sin Etapa")
+        self._inscribir(equipo)
+        jurado = self._jurado("jurado-cerrado")
+        self.assertFalse(services.votacion_abierta(self.hackathon))
+        self.client.force_login(jurado.usuario)
+        response = self.client.post(
+            reverse("hackaton:votar", args=[self.hackathon.pk]),
+            {"equipo": equipo.pk, "puntaje": "5", "comentario": ""},
+        )
+        self.assertRedirects(response, reverse("hackaton:detalle", args=[self.hackathon.pk]))
+        self.assertEqual(VotacionHackaton.objects.count(), 0)
+
+    def test_etapa_de_presentacion_sin_fechas_no_abre_la_votacion(self):
+        EtapaHackaton.objects.create(
+            hackathon=self.hackathon, tipo="presentacion", titulo="Presentacion"
+        )
+        self.assertFalse(services.votacion_abierta(self.hackathon))
+
+    def test_etapa_de_presentacion_vigente_abre_la_votacion(self):
+        self._abrir_presentacion()
+        self.assertTrue(services.votacion_abierta(self.hackathon))
 
 
 class RankingTests(BaseHackathonTests):
@@ -231,6 +267,56 @@ class RankingTests(BaseHackathonTests):
         response = self.client.get(reverse("hackaton:ranking", args=[self.hackathon.pk]))
         self.assertTrue(response.context["puede_ver"])
 
+    def test_equipo_rechazado_sale_del_ranking_y_no_gana(self):
+        # HCK-02: dos equipos con votos; el mayor queda rechazado despues.
+        self._votar(self.jurado_1, self.equipo_a, "4.00")
+        self._votar(self.jurado_1, self.equipo_b, "5.00")
+        cambiar_estado(
+            InscripcionHackaton.objects.get(equipo=self.equipo_b),
+            services.MAQUINA_INSCRIPCION, "RECHAZADA", self.admin,
+        )
+
+        tabla = services.ranking(self.hackathon)
+        self.assertEqual([fila["equipo"] for fila in tabla], ["Equipo A"])
+        self.assertEqual(services.ganadores(tabla)[0]["equipo"], "Equipo A")
+
+    def test_equipo_aceptado_sin_votos_cierra_el_ranking(self):
+        # HCK-10: antes el equipo sin votos desaparecia de la tabla y del informe.
+        self._votar(self.jurado_1, self.equipo_a, "4.00")
+        tabla = services.ranking(self.hackathon)
+        self.assertEqual([fila["equipo"] for fila in tabla], ["Equipo A", "Equipo B"])
+        self.assertEqual(tabla[1]["posicion"], 2)
+        self.assertEqual(tabla[1]["votos"], 0)
+        self.assertEqual(tabla[1]["promedio"], Decimal("0"))
+
+    def test_sin_votos_no_se_declara_ganador(self):
+        estudiante = self._estudiante("est-sinvotos")
+        MiembroEquipo.objects.create(equipo=self.equipo_a, estudiante=estudiante)
+        tabla = services.ranking(self.hackathon)
+        self.assertEqual(services.ganadores(tabla), [])
+        services.publicar_resultados(self.hackathon, self.admin)
+        aviso = Notificacion.objects.get(usuario=estudiante, evento="HACKATON_RESULTADOS")
+        self.assertNotIn("ganador", aviso.mensaje.lower())
+
+    def test_empate_total_no_declara_un_unico_ganador(self):
+        # HCK-06: mismo promedio y mismos votos => empate; antes coronaba al
+        # primero por orden alfabetico.
+        estudiante = self._estudiante("est-empate")
+        MiembroEquipo.objects.create(equipo=self.equipo_a, estudiante=estudiante)
+        self._votar(self.jurado_1, self.equipo_a, "4.00")
+        self._votar(self.jurado_1, self.equipo_b, "4.00")
+
+        tabla = services.ranking(self.hackathon)
+        self.assertEqual(
+            {fila["equipo"] for fila in services.ganadores(tabla)},
+            {"Equipo A", "Equipo B"},
+        )
+        services.publicar_resultados(self.hackathon, self.admin)
+        aviso = Notificacion.objects.get(usuario=estudiante, evento="HACKATON_RESULTADOS")
+        self.assertIn("Equipo A", aviso.mensaje)
+        self.assertIn("Equipo B", aviso.mensaje)
+        self.assertIn("empate", aviso.mensaje)
+
 
 class PublicacionTests(BaseHackathonTests):
     def test_publicar_notifica_a_los_estudiantes_aceptados(self):
@@ -251,7 +337,15 @@ class PublicacionTests(BaseHackathonTests):
         ajeno = Usuario.objects.create_user(username="profe-ajeno", password="x", rol="PROFESOR")
         self.client.force_login(ajeno)
         response = self.client.post(reverse("hackaton:publicar", args=[self.hackathon.pk]))
-        self.assertRedirects(response, reverse("hackaton:detalle", args=[self.hackathon.pk]))
+        self.assertRedirects(
+            response, reverse("hackaton:detalle", args=[self.hackathon.pk]),
+            fetch_redirect_response=False,
+        )
+        # HCK-09: el detalle de un hackathon ajeno tampoco se abre por URL.
+        self.assertRedirects(
+            self.client.get(reverse("hackaton:detalle", args=[self.hackathon.pk])),
+            reverse("hackaton:lista"),
+        )
         self.hackathon.refresh_from_db()
         self.assertEqual(self.hackathon.estado, "publicado")
 
@@ -402,6 +496,7 @@ class ExpertoJuradoTests(BaseHackathonTests):
         Jurado.objects.create(hackathon=self.hackathon, usuario=self.experto, nombre="Experto")
         otro_reto = Reto.objects.create(empresa=self.empresa, titulo="Otro", estado="en_curso", tipo="hackathon")
         self.ajeno = Hackathon.objects.create(reto=otro_reto, estado="publicado")
+        self._abrir_presentacion()
         self.client.force_login(self.experto)
 
     def test_lista_solo_sus_hackathones(self):
@@ -422,3 +517,225 @@ class ExpertoJuradoTests(BaseHackathonTests):
             "equipo": equipo.pk, "puntaje": "4", "comentario": "Bien",
         })
         self.assertTrue(VotacionHackaton.objects.filter(jurado__usuario=self.experto, equipo=equipo).exists())
+
+    def test_el_formulario_de_jurados_ofrece_expertos(self):
+        # HCK-12 + MAN-HCK-08: EXPERTO asignable y nombre completado desde la cuenta.
+        experto = Usuario.objects.create_user(username="exp-asignable", password="x", rol="EXPERTO")
+        self.client.force_login(self.admin)
+        respuesta = self.client.post(reverse("hackaton:jurados", args=[self.hackathon.pk]), {
+            "usuario": experto.pk, "nombre": "", "email": "", "especialidad": "Innovacion",
+        })
+        self.assertRedirects(respuesta, reverse("hackaton:jurados", args=[self.hackathon.pk]))
+        jurado = Jurado.objects.get(usuario=experto)
+        self.assertEqual(jurado.nombre, "exp-asignable")
+
+
+class JuradoIntegridadTests(BaseHackathonTests):
+    """HCK-03: retirar un jurado no puede reescribir resultados publicados."""
+
+    def test_eliminar_jurado_no_altera_resultados_publicados(self):
+        jurado = self._jurado("jur-publicado")
+        equipo = self._equipo("Equipo Jurado")
+        self._inscribir(equipo)
+        VotacionHackaton.objects.create(
+            hackathon=self.hackathon, jurado=jurado, equipo=equipo, puntaje=Decimal("5")
+        )
+        services.publicar_resultados(self.hackathon, self.admin)
+
+        self.client.force_login(self.admin)
+        respuesta = self.client.post(reverse("hackaton:eliminar_jurado", args=[jurado.pk]))
+        self.assertRedirects(respuesta, reverse("hackaton:jurados", args=[self.hackathon.pk]))
+        self.assertTrue(Jurado.objects.filter(pk=jurado.pk).exists())
+        self.assertEqual(VotacionHackaton.objects.filter(jurado=jurado).count(), 1)
+        self.assertEqual(services.ranking(self.hackathon)[0]["equipo"], "Equipo Jurado")
+
+    def test_no_se_retira_un_jurado_con_resultados_publicados_aunque_no_votara(self):
+        jurado = self._jurado("jur-sinvotos")
+        services.publicar_resultados(self.hackathon, self.admin)
+        self.client.force_login(self.admin)
+        self.client.post(reverse("hackaton:eliminar_jurado", args=[jurado.pk]))
+        self.assertTrue(Jurado.objects.filter(pk=jurado.pk).exists())
+
+    def test_jurado_sin_votos_antes_de_publicar_si_se_puede_retirar(self):
+        jurado = self._jurado("jur-temporal")
+        self.client.force_login(self.admin)
+        respuesta = self.client.post(reverse("hackaton:eliminar_jurado", args=[jurado.pk]))
+        self.assertRedirects(respuesta, reverse("hackaton:jurados", args=[self.hackathon.pk]))
+        self.assertFalse(Jurado.objects.filter(pk=jurado.pk).exists())
+
+
+class ReaperturaHackathonTests(BaseHackathonTests):
+    """HCK-04: un hackathon finalizado no se reabre ni deja re-votar."""
+
+    def test_editar_no_puede_reabrir_un_hackathon_finalizado(self):
+        services.publicar_resultados(self.hackathon, self.admin)
+        self.client.force_login(self.admin)
+        respuesta = self.client.post(
+            reverse("hackaton:editar", args=[self.hackathon.pk]),
+            {"reglas": "Nuevas reglas", "estado": "en_curso"},
+        )
+        # El formulario rechaza la reapertura y la instancia no cambia.
+        self.assertEqual(respuesta.status_code, 200)
+        self.hackathon.refresh_from_db()
+        self.assertEqual(self.hackathon.estado, "finalizado")
+        self.assertTrue(self.hackathon.resultados_publicados)
+
+    def test_con_resultados_publicados_la_votacion_queda_cerrada(self):
+        # Aunque el estado volviera a abrirse por otra via, no se re-vota.
+        self._abrir_presentacion()
+        self.hackathon.resultados_publicados = True
+        self.hackathon.estado = "en_curso"
+        self.hackathon.save()
+        equipo = self._equipo("Equipo Reabierto")
+        self._inscribir(equipo)
+        jurado = self._jurado("jur-reabierto")
+        self.assertFalse(services.votacion_abierta(self.hackathon))
+        self.client.force_login(jurado.usuario)
+        respuesta = self.client.post(
+            reverse("hackaton:votar", args=[self.hackathon.pk]),
+            {"equipo": equipo.pk, "puntaje": "5", "comentario": ""},
+        )
+        self.assertRedirects(respuesta, reverse("hackaton:detalle", args=[self.hackathon.pk]))
+        self.assertEqual(VotacionHackaton.objects.count(), 0)
+
+
+class CalendarioConcurrenteTests(BaseHackathonTests):
+    """HCK-01: el avance por calendario decide sobre el estado bloqueado en BD."""
+
+    def _etapa(self, tipo, inicia, termina=None):
+        return EtapaHackaton.objects.create(
+            hackathon=self.hackathon, tipo=tipo, titulo=tipo, inicia_en=inicia, termina_en=termina
+        )
+
+    def test_instancia_obsoleta_no_duplica_la_transicion(self):
+        from apps.seguimiento.services import historial_de
+
+        ahora = timezone.now()
+        self._etapa("desarrollo", ahora - timedelta(hours=1))
+        obsoleta = Hackathon.objects.get(pk=self.hackathon.pk)  # copia "en vuelo"
+
+        self.assertEqual(services.avanzar_por_calendario(self.hackathon), ["en_curso"])
+        # La llamada simultanea decide con el estado fresco, no con su copia.
+        self.assertEqual(services.avanzar_por_calendario(obsoleta), [])
+        self.hackathon.refresh_from_db()
+        self.assertEqual(self.hackathon.estado, "en_curso")
+        self.assertEqual(historial_de(self.hackathon).filter(estado_nuevo="en_curso").count(), 1)
+
+    def test_no_sobrescribe_un_cierre_ya_publicado(self):
+        from apps.seguimiento.services import historial_de
+
+        ahora = timezone.now()
+        self._etapa("premiacion", ahora - timedelta(minutes=5))
+        obsoleta = Hackathon.objects.get(pk=self.hackathon.pk)
+        services.publicar_resultados(self.hackathon, self.admin)
+
+        self.assertEqual(services.avanzar_por_calendario(obsoleta), [])
+        obsoleta.refresh_from_db()
+        self.assertEqual(obsoleta.estado, "finalizado")
+        self.assertTrue(obsoleta.resultados_publicados)
+        self.assertEqual(historial_de(obsoleta).filter(estado_nuevo="finalizado").count(), 1)
+
+
+class CreacionHackathonTests(BaseHackathonTests):
+    """HCK-07: solo el admin o el profesor que integro el reto crean su hackathon."""
+
+    def test_profesor_ajeno_no_crea_hackathon(self):
+        otro_reto = Reto.objects.create(
+            empresa=self.empresa, titulo="Reto de otro profesor", estado="en_curso", tipo="hackathon"
+        )
+        ajeno = Usuario.objects.create_user(username="profe-sin-integracion", password="x", rol="PROFESOR")
+        self.client.force_login(ajeno)
+        respuesta = self.client.post(
+            reverse("hackaton:crear", args=[otro_reto.pk]),
+            {"reglas": "Reglas", "estado": "borrador"},
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertEqual(respuesta.url, reverse("retos:detalle", args=[otro_reto.pk]))
+        self.assertFalse(Hackathon.objects.filter(reto=otro_reto).exists())
+
+    def test_profesor_con_integracion_si_crea_el_hackathon(self):
+        otro_reto = Reto.objects.create(
+            empresa=self.empresa, titulo="Reto integrado", estado="en_curso", tipo="hackathon"
+        )
+        IntegracionAcademica.objects.create(reto=otro_reto, profesor=self.profesor, estado="aprobada")
+        self.client.force_login(self.profesor)
+        respuesta = self.client.post(
+            reverse("hackaton:crear", args=[otro_reto.pk]),
+            {"reglas": "Reglas", "estado": "borrador"},
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertTrue(Hackathon.objects.filter(reto=otro_reto).exists())
+
+
+class InscripcionDobleTests(BaseHackathonTests):
+    """HCK-08 y HCK-11: un equipo por estudiante y sin 500 en la carrera."""
+
+    def test_un_estudiante_no_inscribe_dos_equipos_distintos(self):
+        estudiante = self._estudiante("est-dos-equipos")
+        alfa = self._equipo("Alfa Doble", estudiante)
+        beta = self._equipo("Beta Doble", estudiante)
+        self.client.force_login(estudiante)
+        url = reverse("hackaton:inscribir_equipo", args=[self.hackathon.pk])
+        self.client.post(url, {"equipo": alfa.pk})
+        respuesta = self.client.post(url, {"equipo": beta.pk})
+        # El segundo equipo ya no esta disponible en el formulario.
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(InscripcionHackaton.objects.filter(hackathon=self.hackathon).count(), 1)
+
+    def test_inscripcion_duplicada_concurrente_no_devuelve_500(self):
+        estudiante = self._estudiante("est-carrera")
+        equipo = self._equipo("Equipo Carrera", estudiante)
+        self.client.force_login(estudiante)
+        url = reverse("hackaton:inscribir_equipo", args=[self.hackathon.pk])
+        hackathon = self.hackathon
+        original = InscripcionForm.is_valid
+
+        def is_valid_con_carrera(self, *args, **kwargs):
+            valido = original(self, *args, **kwargs)
+            if valido and "equipo" in self.cleaned_data:
+                # Otra peticion simultanea inscribe al equipo entre la
+                # validacion del formulario y el create de esta.
+                InscripcionHackaton.objects.create(
+                    hackathon=hackathon, equipo=self.cleaned_data["equipo"]
+                )
+            return valido
+
+        with mock.patch.object(InscripcionForm, "is_valid", is_valid_con_carrera):
+            respuesta = self.client.post(url, {"equipo": equipo.pk})
+        # Mensaje amigable y una sola inscripcion, no un error 500.
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertEqual(InscripcionHackaton.objects.filter(equipo=equipo).count(), 1)
+
+
+class AlcancePorRolTests(BaseHackathonTests):
+    """HCK-09: el acceso directo por URL respeta el alcance del listado."""
+
+    def setUp(self):
+        super().setUp()
+        reto_borrador = Reto.objects.create(
+            empresa=self.empresa, titulo="Reto en borrador", estado="aprobado", tipo="hackathon"
+        )
+        self.borrador = Hackathon.objects.create(reto=reto_borrador, estado="borrador")
+
+    def test_empresa_ajena_no_abre_el_detalle(self):
+        ajena = Usuario.objects.create_user(username="empresa-ajena", password="x", rol="EMPRESA")
+        self.client.force_login(ajena)
+        respuesta = self.client.get(reverse("hackaton:detalle", args=[self.hackathon.pk]))
+        self.assertRedirects(respuesta, reverse("hackaton:lista"))
+
+    def test_profesor_ajeno_no_abre_el_borrador(self):
+        ajeno = Usuario.objects.create_user(username="profe-lector", password="x", rol="PROFESOR")
+        self.client.force_login(ajeno)
+        respuesta = self.client.get(reverse("hackaton:detalle", args=[self.borrador.pk]))
+        self.assertRedirects(respuesta, reverse("hackaton:lista"))
+
+    def test_profesor_ajeno_no_abre_el_ranking(self):
+        ajeno = Usuario.objects.create_user(username="profe-ranking", password="x", rol="PROFESOR")
+        self.client.force_login(ajeno)
+        respuesta = self.client.get(reverse("hackaton:ranking", args=[self.hackathon.pk]))
+        self.assertRedirects(respuesta, reverse("hackaton:lista"))
+
+    def test_la_empresa_duena_del_reto_si_ve_el_detalle(self):
+        self.client.force_login(self.empresa)
+        respuesta = self.client.get(reverse("hackaton:detalle", args=[self.hackathon.pk]))
+        self.assertEqual(respuesta.status_code, 200)
