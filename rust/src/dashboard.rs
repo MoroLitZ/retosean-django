@@ -31,6 +31,12 @@ type Params = (
     Option<i64>,
     Option<i64>,
 );
+/// (serie key, SQL, choice labels from a table.field).
+type Serie = (
+    &'static str,
+    &'static str,
+    Option<(&'static str, &'static str)>,
+);
 
 #[derive(Deserialize, Default)]
 pub struct Filtro {
@@ -130,7 +136,7 @@ pub async fn panel(
     let por_estado = "SELECT estado, count(*)::float8 FROM r GROUP BY estado ORDER BY 2 DESC";
     let por_mes = "SELECT to_char(m, 'MM/YYYY'), n FROM (SELECT date_trunc('month', creado_en AT TIME ZONE 'America/Bogota') m, count(*)::float8 n FROM r GROUP BY 1) x ORDER BY m";
     // (cte, kpis, [(serie, query, choice labels from table.field)])
-    let (cte, kpis, series): (String, &str, Vec<(&str, &str, Option<(&str, &str)>)>) = match rol {
+    let (cte, kpis, series): (String, &str, Vec<Serie>) = match rol {
         "ADMIN" => (
             retos("TRUE"),
             "SELECT jsonb_build_object(
@@ -180,7 +186,7 @@ pub async fn panel(
         ),
         "PROFESOR" => (
             format!(
-                "{PARAMS}, i AS (SELECT t.* FROM integraciones_academicas t, p WHERE t.profesor_id = p.uid AND {}), e AS (SELECT t.* FROM entregables t WHERE t.reto_id IN (SELECT reto_id FROM i) AND {})",
+                "{PARAMS}, i AS (SELECT t.* FROM integraciones_academicas t, p WHERE t.profesor_id = p.uid AND {}), e AS (SELECT t.* FROM entregables t, p WHERE t.reto_id IN (SELECT reto_id FROM i) AND {})",
                 EN_RANGO.replace("{c}", "creado_en"),
                 EN_RANGO.replace("{c}", "fecha_entrega")
             ),

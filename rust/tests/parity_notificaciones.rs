@@ -18,8 +18,7 @@ async fn deliver(t: &Ctx) -> Vec<(String, String, String)> {
     retosean::mail::deliver_pending(&t.pool, &mailer, "http://test")
         .await
         .unwrap();
-    let mails = sent.lock().unwrap().clone();
-    mails
+    sent.lock().unwrap().clone()
 }
 async fn recipient(t: &Ctx) -> i64 {
     t.user("destinatario", "ESTUDIANTE").await

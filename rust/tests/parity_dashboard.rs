@@ -80,7 +80,10 @@ async fn urls(t: &Ctx, route: &str) -> Vec<String> {
         return out;
     }
     if route.contains("{file}") {
-        return vec![route.replace("{file}", "core.js"), route.replace("{file}", "tokens.css")];
+        return vec![
+            route.replace("{file}", "core.js"),
+            route.replace("{file}", "tokens.css"),
+        ];
     }
     if route.contains("{code}") {
         return t
@@ -271,7 +274,12 @@ parity!(test_panel_estudiante_solo_usa_notas_publicadas, |t| {
 parity!(test_kpis_estudiante_respetan_el_rango_de_fechas, |t| {
     let reto = t.reto(COMPANY_USER, "abierto", "reto").await;
     let student = t.user("est-rango", "ESTUDIANTE").await;
+    // (reto, estudiante, titulo) is unique, so each deliverable gets its own title.
     let old = t.deliverable(reto, student).await;
+    t.exec(&format!(
+        "UPDATE entregables SET titulo='Avance (anterior)' WHERE id={old}"
+    ))
+    .await;
     let recent = t.deliverable(reto, student).await;
     t.exec(&format!(
         "UPDATE entregables SET fecha_entrega=(now() AT TIME ZONE 'America/Bogota')::date - 400 WHERE id={old}"

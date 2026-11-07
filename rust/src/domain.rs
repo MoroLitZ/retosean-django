@@ -113,7 +113,7 @@ pub fn validate_password(
         let attribute = attribute.to_lowercase();
         attribute.chars().count() >= 4 && (lower.contains(&attribute) || attribute.contains(&lower))
     };
-    if username.is_some_and(|u| similar(u)) {
+    if username.is_some_and(similar) {
         return Err(AppError::bad(
             "La contraseña es demasiado parecida al nombre de usuario.",
         ));
