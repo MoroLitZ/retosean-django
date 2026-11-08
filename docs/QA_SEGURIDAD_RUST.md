@@ -17,7 +17,7 @@
 - Corregidos: **119** (incluye **23** corregidos en esquema)
 - Rechazados: **9**
 - Diferidos: **0**
-- Pruebas automáticas: **370 → 483** pruebas que pasan
+- Pruebas automáticas: **370 → 484** pruebas que pasan
 - Herramientas finales limpias: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `node --check` sobre todo `rust/web/js/*.js`
 
 Las decisiones del revisor principal están en `lead-notes.md` y son autoritativas; donde hay conflicto con un reporte de agente, prevalecen.
@@ -135,6 +135,8 @@ Para no depender del veredicto de un solo agente, se repitió la verificación c
   - Postulaciones concurrentes: además de la prueba de carrera, la BD tiene `UNIQUE (reto_id, estudiante_id)`, así que una segunda fila es imposible a cualquier concurrencia; en vivo, 20 peticiones simultáneas dejaron una sola fila (el endpoint actualiza la postulación pendiente).
 - **Flujo de verificación de correo en el navegador, de punta a punta** (binario release final): registro por el formulario real → mensaje "Revisa tu correo" y sin cookie de sesión; login → "Confirma tu correo antes de iniciar sesión"; enlace falso → "Enlace no válido"; enlace válido → "Cuenta verificada"; reutilizarlo → "Enlace no válido"; login posterior correcto.
   - Este recorrido encontró un **error real, corregido**: el arranque de la SPA enrutaba dos veces y enviaba el token dos veces; la primera llamada verificaba la cuenta y la segunda reemplazaba el éxito por "Enlace no válido". Ahora cada token se envía una sola vez por carga (comprobado: una llamada 200 y "Cuenta verificada").
+
+- **Flujo de escritura del profesor en el navegador** (binario release): el profesor creó una unidad de estudio desde el formulario real (POST 200 y visible en la lista). Este recorrido encontró y corrigió dos errores de interfaz: el formulario de unidad exigía un PDF aunque el servidor lo trata como opcional (una edición obligaba a volver a subirlo), y la SPA ofrecía gestionar unidades a cualquier profesor aunque el servidor exige facultad asignada; ahora `/api/me` expone `gestiona_unidades` y la interfaz lo respeta (`qa_academic::test_me_indica_si_gestiona_unidades`).
 
 ## 6. Tabla completa de los 128 hallazgos
 
@@ -283,7 +285,7 @@ Las siguientes decisiones de `lead-notes.md` son autoritativas:
 8. **Hallazgos #74/#117:** acciones de GitHub fijadas a SHA e imágenes Docker fijadas a digests.
 9. **Correo multi-instancia (cerrado):** los reclamos del buzón llevan marca de tiempo (`ENVIANDO:<epoch>`) y solo se recuperan los de más de 10 minutos, por lo que varias instancias nunca reenvían una notificación en curso (prueba `qa_ataques::test_dos_buzones_concurrentes_envian_una_vez`).
 10. **Verificación dinámica final:** todos los controles de caja negra PASS; recorrido Playwright sin errores de consola.
-11. **Cierre de calidad:** 483 pruebas pasan; `fmt`, `clippy -D warnings` y `node --check` limpios.
+11. **Cierre de calidad:** 484 pruebas pasan; `fmt`, `clippy -D warnings` y `node --check` limpios.
 
 ## 8. Riesgos residuales y trabajo diferido
 
