@@ -534,3 +534,31 @@ parity!(test_profesor_no_gestiona_equipos_de_reto_eliminado, |t| {
         .await;
     assert!(allowed.is_success(), "live reto control: {allowed}");
 });
+
+// GET /api/notificaciones/mias: each user (admins included) sees only their own
+// notifications, never another user's.
+parity!(test_mis_notificaciones_solo_propias, |t| {
+    let a = t.user("noti-a", "ESTUDIANTE").await;
+    let b = t.user("noti-b", "ESTUDIANTE").await;
+    for (user, title) in [(a, "aviso-alfa"), (b, "aviso-beta"), (ADMIN, "aviso-gamma")] {
+        t.exec(&format!("INSERT INTO notificaciones(usuario_id,tipo,evento,titulo,mensaje,leida,link,clave_dedupe,enviada_por_correo,error_envio,creada_en) VALUES({user},'INFO','','{title}','m',false,'','{title}',false,'',now())")).await;
+    }
+    let session_a = t.login("noti-a").await;
+    for (session, mine, others) in [
+        (&session_a, "aviso-alfa", ["aviso-beta", "aviso-gamma"]),
+        (&t.admin, "aviso-gamma", ["aviso-alfa", "aviso-beta"]),
+    ] {
+        let body = t
+            .ok(session, "GET", "/api/notificaciones/mias", None)
+            .await
+            .to_string();
+        assert!(body.contains(mine), "{body}");
+        for other in others {
+            assert!(!body.contains(other), "leaked {other}: {body}");
+        }
+    }
+    let (status, _) = t
+        .req(&t.anon, "GET", "/api/notificaciones/mias", None)
+        .await;
+    assert_eq!(status, 401);
+});

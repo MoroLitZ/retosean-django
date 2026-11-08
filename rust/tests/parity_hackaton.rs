@@ -1095,3 +1095,38 @@ parity!(
         );
     }
 );
+
+// Conflict of interest: a juror who mentors (or leads, or belongs to) a team
+// cannot score it, while scoring an unrelated team still works.
+parity!(test_jurado_no_vota_por_equipo_que_asesora, |t| {
+    let b = base(&t).await;
+    let (team, juror) = voting(&t, &b, "ACEPTADA").await;
+    let juror_user = t
+        .i64("SELECT id FROM usuarios WHERE username='jurado-uno'")
+        .await;
+    let academic = t.i64(&format!("INSERT INTO equipos_reto_academico(reto_id,nombre_equipo,equipo_espejo_id) VALUES({},'Equipo asesorado',{team}) RETURNING id", b.reto)).await;
+    t.exec(&format!("INSERT INTO equipos_reto_academico_expertos_invitados(equiporetoacademico_id,usuario_id) VALUES({academic},{juror_user})")).await;
+    assert_eq!(
+        t.status(
+            &juror,
+            "POST",
+            &format!("/api/hackathons/{}/votar", b.hack),
+            Some(json!({"equipo_id":team,"puntaje":"5.00"}))
+        )
+        .await,
+        403
+    );
+    let other = b.team(&t, "Equipo ajeno", &[]).await;
+    b.register(&t, other, "ACEPTADA").await;
+    assert_eq!(
+        t.status(
+            &juror,
+            "POST",
+            &format!("/api/hackathons/{}/votar", b.hack),
+            Some(json!({"equipo_id":other,"puntaje":"4.00"}))
+        )
+        .await,
+        200
+    );
+    assert_eq!(t.i64("SELECT count(*) FROM votaciones_hackaton").await, 1);
+});

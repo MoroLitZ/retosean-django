@@ -803,6 +803,26 @@ pub async fn vote(
     if !accepted {
         return Err(AppError::bad("El equipo no tiene inscripción aceptada"));
     }
+    // Conflict of interest: a juror never scores a team they lead, belong to or
+    // mentor (owning professor, co-professor, student, member, invited expert).
+    let involved: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM miembros_equipo m WHERE m.equipo_id=$1 AND m.estudiante_id=$2) \
+         OR EXISTS(SELECT 1 FROM equipos_reto_academico q WHERE q.equipo_espejo_id=$1 AND ( \
+            EXISTS(SELECT 1 FROM integraciones_academicas i WHERE i.id=q.integracion_id AND i.profesor_id=$2) \
+            OR EXISTS(SELECT 1 FROM equipos_reto_academico_profesores p WHERE p.equiporetoacademico_id=q.id AND p.usuario_id=$2) \
+            OR EXISTS(SELECT 1 FROM equipos_reto_academico_estudiantes s WHERE s.equiporetoacademico_id=q.id AND s.usuario_id=$2) \
+            OR EXISTS(SELECT 1 FROM equipos_reto_academico_expertos_invitados x WHERE x.equiporetoacademico_id=q.id AND x.usuario_id=$2)))",
+    )
+    .bind(input.equipo_id)
+    .bind(user.id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if involved {
+        return Err(AppError(
+            axum::http::StatusCode::FORBIDDEN,
+            "No puedes votar por un equipo que diriges, integras o asesoras.".into(),
+        ));
+    }
     let voted:i64=sqlx::query_scalar("INSERT INTO votaciones_hackaton(hackathon_id,jurado_id,equipo_id,puntaje,comentario,fecha) VALUES($1,$2,$3,$4,$5,now()) ON CONFLICT(jurado_id,equipo_id) DO UPDATE SET puntaje=excluded.puntaje,comentario=excluded.comentario,fecha=now() RETURNING id").bind(id).bind(juror).bind(input.equipo_id).bind(score).bind(&input.comentario).fetch_one(&mut *tx).await?;
     history(
         &mut tx,
