@@ -14,10 +14,10 @@
 **Cifras finales:**
 
 - Hallazgos consolidados: **128**
-- Corregidos: **105** (incluye **23** corregidos en esquema)
+- Corregidos: **118** (incluye **23** corregidos en esquema)
 - Rechazados: **10**
-- Diferidos: **13**
-- Pruebas automáticas: **370 → 447** pruebas que pasan
+- Diferidos: **0**
+- Pruebas automáticas: **370 → 478** pruebas que pasan
 - Herramientas finales limpias: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `node --check` sobre todo `rust/web/js/*.js`
 
 Las decisiones del revisor principal están en `lead-notes.md` y son autoritativas; donde hay conflicto con un reporte de agente, prevalecen.
@@ -85,11 +85,33 @@ Sondeo Python estándar contra build release con base demo nueva, antes y despu�
 | Estudiante/experto no puede descargar/ver/revisar documento de empresa | 403 |
 | Recorrido Playwright de rutas de navegación para admin, empresa, estudiante y experto | 0 errores de consola |
 
-## 5. Tabla completa de los 128 hallazgos
+## 5. Ronda 2: cierre de diferidos y pruebas adversariales
+
+La Ronda 2, autoritativa en `round2-notes.md`, cierra los 13 hallazgos que permanecían diferidos en el commit `194826f30`.
+
+- **Verificación de correo (#1):** el autorregistro de ESTUDIANTE/EMPRESA crea `correo_verificado=false` (migración 0006; cuentas existentes por defecto `true`). No se inicia sesión al registrar; el enlace de verificación es de un solo uso (`POST /api/registro/verificar`). El login rechaza cuentas sin verificar con «Confirma tu correo antes de iniciar sesión» solo tras contraseña correcta, para no permitir enumeración.
+- **CSRF y origen (#77):** el middleware `same_origin` en `lib.rs` rechaza con 403 antes del handler cualquier escritura POST/PUT/PATCH/DELETE con `Origin` de host distinto, `Origin: null` o `Sec-Fetch-Site` cross-site/same-site. Cubre login CSRF y aporta defensa en profundidad para todas las escrituras.
+- **Integridad cruzada (#20, #51, #58, #59):** triggers PL/pgSQL en la migración `0005_integridad_cruzada`, reflejados en `schema.sql` y relajados/restaurados por `import-django`. Las violaciones usan `SQLSTATE 23514` y se exponen como HTTP 400.
+- **Integridad de roles (#60, acotado):** triggers de rol sobre `estudiantes`, `profesores`, `postulaciones.estudiante_id`, `entregables.estudiante_id` y otras columnas estrictamente de estudiante/profesor. Las columnas de rol mixto (jurados, expertos invitados, certificados, autores de comentarios) están documentadas y excluidas. El trigger solo revisa referencias nuevas o modificadas, por lo que un cambio de rol posterior no bloquea filas existentes.
+- **Gastos (#98):** borrado lógico con `gastos.eliminado_en` y auditoría en `historial_estados`; todas las lecturas de gastos excluyen filas eliminadas.
+- **Decimales en Excel (#96):** las celdas monetarias XLSX se redondean a dos decimales con formato `"#,##0.00"`, manteniéndose numéricas.
+- **Correo robusto (#93):** `mail.rs` sin `expect`/`unwrap`; el fallo de catálogo se registra y degrada; el mutex envenenado se recupera.
+- **Importación por cursor (#126):** `import-django` copia con cursor server-side en lotes de 500, con memoria acotada.
+- **Secreto de BD (#119):** `DB_PASSWORD_FILE` (Docker secret) se lee en `config.rs`; `compose.yml` pasa el secreto a ambos contenedores mediante `POSTGRES_PASSWORD_FILE` / `DB_PASSWORD_FILE` y sigue rechazando arrancar sin `RUST_POSTGRES_PASSWORD`.
+- **Tokio/PBKDF2 (#125):** features de `tokio` reducidas de `full` a `rt-multi-thread, macros, net, fs, io-util, signal, sync, time`; PBKDF2-SHA256 con 1,000,000 iteraciones confirmado.
+
+### Suite adversarial y verificación en vivo
+
+- `tests/qa_ataques.rs` agrega 8 pruebas: barrido CSRF sobre las 68 rutas protegidas de escritura (token ausente o incorrecto nunca devuelve 2xx y los checksums de tablas no cambian; el parser exige al menos 65 rutas), endpoints públicos rechazados en cross-site y carreras de concurrencia con 20 peticiones paralelas.
+- Las carreras cubren: límite de login evaluado exactamente en 10, token de reset consumido una sola vez, votos concurrentes de un jurado producen una fila, postulaciones concurrentes una fila, gastos concurrentes nunca superan el presupuesto y aprobaciones concurrentes una fila de historial.
+- Verificación final: **478** pruebas pasan (0 fallos) en una única ejecución tras la última edición; `cargo fmt --check`, `clippy --all-targets -D warnings`, `node --check` sobre todo el JS y `cargo audit` limpios, salvo `rsa` RUSTSEC-2023-0071, que no se compila.
+- Release build en vivo de `194826f30` con BD demo nueva: comprobaciones de Origin/CSRF/verificación descritas arriba; recorrido Playwright por el formulario real de login para admin, empresa, profesor, estudiante, experto y un estudiante recién verificado. Cada ruta de navegación (51/11/10/10/3/10) cargó sin banners de error; solo se observó el 401 esperado en `/api/me` antes del login.
+
+## 6. Tabla completa de los 128 hallazgos
 
 | N | Severidad | Área | Hallazgo (breve) | Veredicto | Nota o prueba de regresión |
 |---:|---|---|---|---|---|
-| 1 | Alta | Autenticación/sesiones | El autorregistro activa la cuenta e inicia sesión sin verificar el correo | Diferido | Decisión de producto; el registro de profesores ya queda inactivo/pendiente |
+| 1 | Alta | Autenticación/sesiones | El autorregistro activa la cuenta e inicia sesión sin verificar el correo | Corregido | El autorregistro de ESTUDIANTE/EMPRESA crea `correo_verificado=false` (migración 0006; cuentas existentes por defecto `true`); no inicia sesión; enlace de verificación de un solo uso (`POST /api/registro/verificar`); el login rechaza cuentas no verificadas solo tras contraseña correcta; tests/qa_verificacion.rs (6) y verificación en vivo |
 | 2 | Alta | Importación/roles | Importación masiva permite crear `rol=ADMIN` si el actor es admin | Corregido | `test_import_admin_requiere_superusuario` |
 | 3 | Alta | Medios/finanzas | `download` y `resumen` confían en `visible_record` sin comprobación adicional | Rechazado | Falso positivo; delegación verificada con pruebas IDOR |
 | 4 | Alta | Reportes | El PDF no aplica `LIMIT` SQL y materializa todo el resultado | Corregido | `test_reporte_pdf_respeta_limite_de_filas` |
@@ -108,7 +130,7 @@ Sondeo Python estándar contra build release con base demo nueva, antes y despu�
 | 17 | Alta | Evaluaciones/BD | `nota` sin rango 0–5 | Corregido (esquema) | `CHECK (nota >= 0 AND nota <= 5)` |
 | 18 | Alta | Votaciones/BD | Voto de hackathon acepta puntajes negativos | Corregido (esquema) | Validación aplicativa 0–5 y `CHECK` en BD; `test_voto_negativo_es_invalido` |
 | 19 | Alta | Documentos/BD | `tipo_documento` no referencia `tipos_documento_legal` | Corregido (esquema) | FK a `tipos_documento_legal(codigo)` |
-| 20 | Alta | Votaciones/BD | Jurado y equipo no validados contra el mismo hackathon/reto | Diferido | Requiere trigger entre tablas; no implementado |
+| 20 | Alta | Votaciones/BD | Jurado y equipo no validados contra el mismo hackathon/reto | Corregido | Trigger PL/pgSQL de integridad cruzada en migración `0005_integridad_cruzada`; SQLSTATE 23514 → HTTP 400; test en `tests/qa_integridad.rs` |
 | 21 | Media | Configuración/sesiones | `RUST_SECURE_COOKIE` por defecto omitía `Secure` | Corregido | Ahora por defecto `true` con advertencia; `test_cookie_de_sesion_y_logout_llevan_secure` |
 | 22 | Media | Recuperación | Límite de solicitudes de reinicio sin candado atómico | Corregido | Candado consultivo y transacción |
 | 23 | Media | Recuperación | Token de reinicio reutilizable por carrera | Corregido | `DELETE ... RETURNING` en la transacción; `test_reset_confirm_solo_una_vez` |
@@ -139,16 +161,16 @@ Sondeo Python estándar contra build release con base demo nueva, antes y despu�
 | 48 | Media | Equipos/BD | Duplicidad de nombres de equipo por reto | Corregido (esquema) | `UNIQUE(reto_id, nombre)` |
 | 49 | Media | Equipos académicos/BD | Duplicidad de nombres de equipo académico | Corregido (esquema) | `UNIQUE(reto_id, nombre_equipo)` |
 | 50 | Media | Rúbricas/BD | `puntaje_maximo` negativo en criterios de rúbrica | Corregido (esquema) | `CHECK (puntaje_maximo >= 0)` |
-| 51 | Media | Evaluaciones/BD | Nota de criterio sin validación cruzada contra máximo | Diferido | Requiere validación entre tablas; no implementado |
+| 51 | Media | Evaluaciones/BD | Nota de criterio sin validación cruzada contra máximo | Corregido | Trigger PL/pgSQL de integridad cruzada valida la nota contra el `puntaje_maximo`; migración `0005_integridad_cruzada`; test en `tests/qa_integridad.rs` |
 | 52 | Media | Encuesta/BD | Calificación de satisfacción sin techo | Corregido (esquema) | `CHECK` 0–5 |
 | 53 | Media | Seguimientos/BD | Porcentaje de avance puede superar 100 | Corregido (esquema) | `CHECK (porcentaje_avance <= 100)` |
 | 54 | Media | Retos/BD | Fechas del reto sin orden cronológico | Corregido (esquema) | `CHECK` de orden de fechas |
 | 55 | Media | Etapas/BD | Etapa puede terminar antes de iniciar | Corregido (esquema) | `CHECK` de orden de fechas |
 | 56 | Media | Documentos/BD | `fecha_vencimiento` anterior a expedición | Corregido (esquema) | `CHECK`; pruebas de documentos vencidos ajustan `fecha_expedicion` |
 | 57 | Media | Estados/BD | Columnas de estado sin restricción de dominio | Corregido (esquema) | Restricciones de estado por columna |
-| 58 | Media | Inscripciones hackathon/BD | Equipo no validado contra el reto del hackathon | Diferido | Trigger entre tablas no implementado |
-| 59 | Media | Entregables/BD | `entregables.reto_id` puede diferir del reto del equipo | Diferido | Trigger entre tablas no implementado |
-| 60 | Media | Integridad de roles/BD | FKs a usuarios en vez de perfiles específicos | Diferido | Migración de FKs a tablas de perfil no implementada |
+| 58 | Media | Inscripciones hackathon/BD | Equipo no validado contra el reto del hackathon | Corregido | Trigger PL/pgSQL de integridad cruzada valida el equipo contra el reto del hackathon; migración `0005_integridad_cruzada`; test en `tests/qa_integridad.rs` |
+| 59 | Media | Entregables/BD | `entregables.reto_id` puede diferir del reto del equipo | Corregido | Trigger PL/pgSQL de integridad cruzada valida `entregables.reto_id` contra el reto del equipo; migración `0005_integridad_cruzada`; test en `tests/qa_integridad.rs` |
+| 60 | Media | Integridad de roles/BD | FKs a usuarios en vez de perfiles específicos | Corregido | Corregido de forma acotada: triggers de rol en `estudiantes`, `profesores`, `postulaciones.estudiante_id`, `entregables.estudiante_id` y otras columnas estrictamente de estudiante/profesor; columnas de rol mixto (jurados, expertos invitados, certificados, autores de comentarios) documentadas y excluidas; solo valida referencias nuevas o modificadas; test `qa_cambio_de_rol_no_bloquea_filas_existentes` |
 | 61 | Media | Equipos académicos/BD | `integracion_id` nullable | Corregido (esquema) | Backfill y `NOT NULL` |
 | 62 | Media | Auditoría/BD | Borrar usuario falla o pierde auditoría | Corregido (esquema) | `ON DELETE SET NULL` |
 | 63 | Media | Votaciones/BD | Unicidad de voto sin alcance por etapa | Corregido (esquema) | Índice con alcance por etapa |
@@ -165,7 +187,7 @@ Sondeo Python estándar contra build release con base demo nueva, antes y despu�
 | 74 | Media | CI | Actions con tags mutables | Corregido | Pinned a SHA |
 | 75 | Media | CI | Workflow sin `permissions` | Corregido | `permissions: contents: read` |
 | 76 | Baja | Autenticación | Logout no incluye `Secure` | Corregido | `test_cookie_de_sesion_y_logout_llevan_secure` |
-| 77 | Baja | Autenticación | Login CSRF | Diferido | Requiere doble token en SPA; no se implementó para no romper frontend |
+| 77 | Baja | Autenticación | Login CSRF | Corregido | Middleware `same_origin` en `lib.rs` rechaza con 403 escrituras POST/PUT/PATCH/DELETE con `Origin` de host distinto, `Origin: null` o `Sec-Fetch-Site` cross-site/same-site; cubre login CSRF y refuerza todas las escrituras; tests/qa_origen.rs (4) y qa_ataques |
 | 78 | Baja | Autenticación | Límite solo por cuenta, no por IP | Corregido | Pre-check por IP: >100 fallos/10 min → 429 |
 | 79 | Baja | Recuperación | Filas viejas de intentos sin limpiar en reset | Corregido | Purga en ruta de reset |
 | 80 | Baja | Autenticación | Login de cuenta inactiva filtra motivo | Corregido | `test_login_cuenta_inactiva_respuesta_generica` |
@@ -181,12 +203,12 @@ Sondeo Python estándar contra build release con base demo nueva, antes y despu�
 | 90 | Baja | Reportes | `LIMIT` dinámico con `format!` | Corregido | Parámetro bind |
 | 91 | Baja | Flujos | Deduplicación de notificaciones al ciclar estado | Corregido | Clave incluye ID de auditoría |
 | 92 | Baja | Recordatorios | Días sin validar pueden generar envío masivo | Corregido | Días descartados y barrido limitado |
-| 93 | Baja | Correo | `expect`/`unwrap` en `Mailer::Memory` | Diferido | Sin evidencia de cambio en el reporte del paquete; pendiente |
+| 93 | Baja | Correo | `expect`/`unwrap` en `Mailer::Memory` | Corregido | `mail.rs` sin `expect`/`unwrap`: el fallo de catálogo se registra y degrada; mutex envenenado recuperado; tests/qa_robustez.rs |
 | 94 | Baja | Hackathones | Logística sin bloqueo ni validación de estado | Corregido | `test_logistica_rechazada_en_hackathon_cerrado` |
 | 95 | Baja | Finanzas | Gasto permitido en retos cancelados/borrador | Corregido | `test_reto_cancelado_no_admite_gastos_ni_ejecucion` |
-| 96 | Baja | Finanzas | Export Excel convierte `Decimal` a `f64` | Diferido | Cosmético; cambiar a cadenas rompería prueba de paridad actual |
+| 96 | Baja | Finanzas | Export Excel convierte `Decimal` a `f64` | Corregido | Celdas monetarias XLSX redondeadas a 2 decimales con formato `"#,##0.00"`; se mantienen numéricas |
 | 97 | Baja | Calificación | Rúbrica mayor que escala impide nota completa | Corregido | `test_rubrica_que_supera_la_escala_se_rechaza` |
-| 98 | Baja | Finanzas | Gasto con borrado físico sin auditoría | Diferido | Requiere columna/ledger; no implementado |
+| 98 | Baja | Finanzas | Gasto con borrado físico sin auditoría | Corregido | Borrado lógico `gastos.eliminado_en` con `historial_estados` de auditoría; todas las lecturas de gastos excluyen filas eliminadas |
 | 99 | Baja | Ciclo de vida | Permiso de profesor no revalidado tras bloqueo | Corregido | Revalidación dentro de transacción |
 | 100 | Baja | Cierre | Acciones de cierre permitidas en retos cancelados | Corregido | Estados permitidos explícitos |
 | 101 | Baja | Unidades de estudio | Unidades inactivas listadas/editable indebidamente | Corregido | Decisión revisor: admin y profesores pueden listar `activo=0`; estudiantes solo activas |
@@ -207,18 +229,18 @@ Sondeo Python estándar contra build release con base demo nueva, antes y despu�
 | 116 | Baja | Frontend | Upload exitoso muestra error si falla refresco | Corregido | Separación de errores de subida y refresco |
 | 117 | Baja | CI/Contenedores | Tags de imágenes mutables en Docker/CI | Corregido | Imágenes fijadas a digest |
 | 118 | Baja | Contenedores | Servicio web sin restart/healthcheck | Corregido | Restart y healthcheck |
-| 119 | Baja | Contenedores | Clave de BD como variable de entorno visible | Diferido | Requiere Docker secrets/gestor de secretos |
+| 119 | Baja | Contenedores | Clave de BD como variable de entorno visible | Corregido | `DB_PASSWORD_FILE` (Docker secret) leído por `config.rs`; `compose.yml` pasa la contraseña como `db_password` a ambos contenedores (`POSTGRES_PASSWORD_FILE` / `DB_PASSWORD_FILE`) y sigue exigiendo `RUST_POSTGRES_PASSWORD`; test unitario `config::tests` |
 | 120 | Baja | Contenedores | Contenedor sin endurecimiento ni límites | Corregido | `cap_drop`, `read_only`, `security_opt`, límites |
 | 121 | Baja | CI | Supresión indefinida de `cargo audit` | Corregido | Verificación condicionada del `rsa` en CI |
 | 122 | Baja | Configuración | `.env.example` sin `RUST_POSTGRES_PASSWORD` | Corregido | Documentada/agregada |
 | 123 | Baja | Servidor | Apagado no espera `SIGTERM` | Corregido | `SIGTERM` incluido |
 | 124 | Baja | Migraciones/BD | Migraciones concurrentes sin candado previo | Corregido (esquema) | Candado consultivo previo |
-| 125 | Baja | Cargo/configuración | PBKDF2 no verificado y `tokio/full` amplio | Diferido | PBKDF2-SHA256 con 1,000,000 iteraciones ya es aceptable; recorte de `tokio` pendiente |
-| 126 | Baja | Migración | `import_django` usa `fetch_all` para tablas completas | Diferido | Debe migrar a COPY/cursor |
+| 125 | Baja | Cargo/configuración | PBKDF2 no verificado y `tokio/full` amplio | Corregido | PBKDF2-SHA256 con 1,000,000 iteraciones confirmado; features de `tokio` reducidas a `rt-multi-thread, macros, net, fs, io-util, signal, sync, time` |
+| 126 | Baja | Migración | `import_django` usa `fetch_all` para tablas completas | Corregido | `import-django` copia mediante cursor server-side en lotes de 500; test en `tests/qa_robustez.rs` |
 | 127 | Baja | Índices/BD | Faltan índices en filtros calientes | Corregido (esquema) | Índices compuestos agregados |
 | 128 | Baja | Notificaciones/BD | Inconsistencia `leida`/`leida_en` | Rechazado | Revertido por revisor principal; datos legacy y bajo valor |
 
-## 6. Decisiones del revisor principal
+## 7. Decisiones del revisor principal
 
 Las siguientes decisiones de `lead-notes.md` son autoritativas:
 
@@ -232,25 +254,16 @@ Las siguientes decisiones de `lead-notes.md` son autoritativas:
 8. **Hallazgos #74/#117:** acciones de GitHub fijadas a SHA e imágenes Docker fijadas a digests.
 9. **Riesgo residual de correo:** la recuperación por correo usa `creada_en` con centinela `ENVIANDO`; con múltiples instancias una notificación antigua podría reenviarse. El despliegue documentado es de instancia única.
 10. **Verificación dinámica final:** todos los controles de caja negra PASS; recorrido Playwright sin errores de consola.
-11. **Cierre de calidad:** 447 pruebas pasan; `fmt`, `clippy -D warnings` y `node --check` limpios.
+11. **Cierre de calidad:** 478 pruebas pasan; `fmt`, `clippy -D warnings` y `node --check` limpios.
 
-## 7. Riesgos residuales y trabajo diferido
+## 8. Riesgos residuales y trabajo diferido
 
 | Ítem | Justificación breve |
 |---|---|
-| Verificación de correo al registrarse (#1) | Requiere token de confirmación y decisión de producto; no es cambio trivial |
-| Triggers entre tablas (#20, #51, #58, #59, #60) | Validación de integridad entre filas/tablas; mitigación en capa de aplicación en algunos casos |
-| Login CSRF (#77) | Requiere token previo o doble submit en SPA; cambio backend+frontend |
-| Pánicos en `mail.rs` (#93) | `expect`/`unwrap` en `Mailer::Memory`; pendiente de convertir a errores controlados |
-| Decimal en Excel (#96) | La conversión a `f64` puede generar artefactos; requiere cadenas decimales y actualizar pruebas |
-| Borrado lógico de gastos (#98) | Requiere esquema/ledger nuevo; no se realizó |
-| Secretos Docker (#119) | Clave de BD visible por inspección/proc; migrar a Docker secrets o gestor |
-| PBKDF2/tokio (#125) | PBKDF2 actual es aceptable; queda el recorte de `tokio/full` |
-| `import_django` con `fetch_all` (#126) | Tablas grandes pueden agotar RAM; migrar a COPY/cursor |
-| Envío de correo multi-instancia | Centinela `ENVIANDO` basado en `creada_en`; despliegue documentado de instancia única |
-| `rsa` RUSTSEC-2023-0071 | Sin corrección; no está en el grafo compilado; la CI lo verifica |
+| `rsa` RUSTSEC-2023-0071 | Sin corrección upstream; no está compilado; la CI lo verifica |
+| Correo saliente multi-instancia | El buzón de salida asume una única instancia de aplicación; documentado en DEPLOY.md como despliegue de instancia única |
 
-## 8. Cómo reproducir
+## 9. Cómo reproducir
 
 Ejecutar desde `rust/`:
 
@@ -276,9 +289,15 @@ Archivos nuevos de regresión:
 - `tests/qa_business.rs`
 - `tests/qa_academic.rs`
 - `tests/qa_schema.rs`
+- `tests/qa_verificacion.rs`
+- `tests/qa_origen.rs`
+- `tests/qa_integridad.rs`
+- `tests/qa_ataques.rs`
+- `tests/qa_robustez.rs`
 
 Los archivos de referencia para futuros auditores son:
 
 - `lead-notes.md` — decisiones autoritativas del revisor principal.
+- `round2-notes.md` — cierre autoritativo de la Ronda 2.
 - `00-consolidated.md` — matriz original de los 128 hallazgos.
 - `report-*.md` — reportes por paquete con veredictos y evidencia.
