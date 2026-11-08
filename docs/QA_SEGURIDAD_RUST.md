@@ -14,10 +14,10 @@
 **Cifras finales:**
 
 - Hallazgos consolidados: **128**
-- Corregidos: **118** (incluye **23** corregidos en esquema)
-- Rechazados: **10**
+- Corregidos: **119** (incluye **23** corregidos en esquema)
+- Rechazados: **9**
 - Diferidos: **0**
-- Pruebas automáticas: **370 → 478** pruebas que pasan
+- Pruebas automáticas: **370 → 482** pruebas que pasan
 - Herramientas finales limpias: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `node --check` sobre todo `rust/web/js/*.js`
 
 Las decisiones del revisor principal están en `lead-notes.md` y son autoritativas; donde hay conflicto con un reporte de agente, prevalecen.
@@ -104,8 +104,25 @@ La Ronda 2, autoritativa en `round2-notes.md`, cierra los 13 hallazgos que perma
 
 - `tests/qa_ataques.rs` agrega 8 pruebas: barrido CSRF sobre las 68 rutas protegidas de escritura (token ausente o incorrecto nunca devuelve 2xx y los checksums de tablas no cambian; el parser exige al menos 65 rutas), endpoints públicos rechazados en cross-site y carreras de concurrencia con 20 peticiones paralelas.
 - Las carreras cubren: límite de login evaluado exactamente en 10, token de reset consumido una sola vez, votos concurrentes de un jurado producen una fila, postulaciones concurrentes una fila, gastos concurrentes nunca superan el presupuesto y aprobaciones concurrentes una fila de historial.
-- Verificación final: **478** pruebas pasan (0 fallos) en una única ejecución tras la última edición; `cargo fmt --check`, `clippy --all-targets -D warnings`, `node --check` sobre todo el JS y `cargo audit` limpios, salvo `rsa` RUSTSEC-2023-0071, que no se compila.
+- Verificación de la ronda 2: **478** pruebas pasaban (0 fallos) al cierre de esa ronda (482 tras la revisión independiente, ver 5b); `cargo fmt --check`, `clippy --all-targets -D warnings`, `node --check` sobre todo el JS y `cargo audit` limpios, salvo `rsa` RUSTSEC-2023-0071, que no se compila.
 - Release build en vivo de `194826f30` con BD demo nueva: comprobaciones de Origin/CSRF/verificación descritas arriba; recorrido Playwright por el formulario real de login para admin, empresa, profesor, estudiante, experto y un estudiante recién verificado. Cada ruta de navegación (51/11/10/10/3/10) cargó sin banners de error; solo se observó el 401 esperado en `/api/me` antes del login.
+
+## 5b. Revisión independiente y verificación final
+
+Para no depender del veredicto de un solo agente, se repitió la verificación con modelos distintos sobre el código final:
+
+- **Hallazgos rechazados re-verificados:** Qwen 3.8 Max (#3, #13, #37) y DeepSeek V4 Pro (#5, #25, #38, #47) revisaron de nuevo cada rechazo con evidencia del código. Coincidieron en todos salvo #25, que se revocó y se corrigió (bloqueo por cuenta e IP + tope global). #108 y #128 se rechazaron con evidencia directa (409/409 campos con `choices`; datos legados sin marca de lectura).
+- **Revisión del código de la ronda 2** (dos agentes de la ronda 2 terminaron antes de tiempo), por DeepSeek V4 Pro y Qwen 3.8 Max. Hallazgos nuevos corregidos:
+  - enlaces `#verificar/<token>` redactados en los logs de correo (como los de recuperación);
+  - `same_origin` solo confía en `X-Forwarded-Host` con `RUST_TRUST_PROXY=true`;
+  - bloqueo consultivo también por correo en el registro (carrera de correos duplicados);
+  - recuperación de reclamos del buzón robusta ante valores malformados (`CASE`) y reclamos con marca de tiempo (`ENVIANDO:<epoch>`), de modo que varias instancias nunca reenvían (`qa_ataques::test_dos_buzones_concurrentes_envian_una_vez`);
+  - listas restrictivas evaluadas antes que el estado de la cuenta en el login;
+  - el alcance de profesores en hackathones/equipos excluye retos eliminados (`qa_ataques::test_profesor_no_gestiona_equipos_de_reto_eliminado`).
+  - Se revisaron y se mantienen por diseño: `same-site` tratado como ajeno (protege contra subdominios), peticiones sin `Origin` ni `Sec-Fetch-Site` permitidas (clientes no navegador; siguen necesitando el token CSRF), y triggers de rol que solo validan referencias nuevas o cambiadas.
+- **Ataque en vivo completo** sobre el binario release del commit final con BD demo nueva (script Python independiente que lee la tabla de rutas de `lib.rs`): 15/15 PASS — cabeceras; cookie; 97 rutas no públicas sin sesión; CSRF y origen cruzado en las 72 rutas de escritura sin cambios de datos; CSRF de login; matriz de roles; IDOR en 10 tablas para 4 roles; path traversal; inyección; cuerpos malformados; sesión y fijación; asignación masiva; flujo de verificación de correo; carreras de login (exactamente 10 evaluados); fuerza bruta aislada por cuenta+IP. Carrera de 20 postulaciones simultáneas: una sola fila en la BD (el endpoint actualiza la postulación pendiente).
+- **Navegador (Playwright)** sobre el mismo binario, iniciando sesión por el formulario real (ejercita el control de origen): admin 51 rutas/18 detalles, empresa 11/6, profesor 10/3, estudiante 10/4, experto 3/0; sin banners de error; solo el 401 esperado de `/api/me` antes del login.
+- **Cierre:** 482 pruebas pasan en una ejecución completa del árbol final; `cargo fmt --check`, `clippy --all-targets -D warnings`, `node --check` limpios.
 
 ## 6. Tabla completa de los 128 hallazgos
 
@@ -135,7 +152,7 @@ La Ronda 2, autoritativa en `round2-notes.md`, cierra los 13 hallazgos que perma
 | 22 | Media | Recuperación | Límite de solicitudes de reinicio sin candado atómico | Corregido | Candado consultivo y transacción |
 | 23 | Media | Recuperación | Token de reinicio reutilizable por carrera | Corregido | `DELETE ... RETURNING` en la transacción; `test_reset_confirm_solo_una_vez` |
 | 24 | Media | Registro | Registro público sin límite por IP/CAPTCHA | Corregido | Límite por IP de 10/10 min; `test_registro_limitado_por_ip` |
-| 25 | Media | Autenticación | Los 10 fallos bloquean incluso credenciales válidas | Rechazado | Comportamiento intencional de paridad con Django; el límite por IP añade defensa |
+| 25 | Media | Autenticación | Los 10 fallos bloquean incluso credenciales válidas | Corregido | Revocado el rechazo tras la segunda opinión: el bloqueo de 10 fallos es por cuenta e IP y hay un tope global de 50 por cuenta; `qa_auth::test_bloqueo_por_cuenta_e_ip` |
 | 26 | Media | Autenticación | Nombres de usuario con `@` colisionan con correos | Corregido | `@` rechazado en registro y alta; `test_registro_rechaza_arroba_en_usuario` |
 | 27 | Media | Importación/medios | XLSX recogido completo antes de limitar filas | Corregido | Conteo temprano de filas; `test_import_xlsx_rechaza_exceso_de_filas` |
 | 28 | Media | Medios/carga | Multipart usa `bytes()` antes de validar 50 MB | Corregido | Lectura por chunks; `test_adjunto_reto_rechaza_archivo_muy_grande` |
@@ -252,16 +269,15 @@ Las siguientes decisiones de `lead-notes.md` son autoritativas:
 6. **Hallazgo #78 reforzado:** se añadió un pre-check por IP: más de 100 fallos/10 min devuelve 429 antes de verificar contraseña.
 7. **Corrección de compilación:** `Option<ConnectInfo<SocketAddr>>` no es extractor válido en axum 0.8; se usa `Option<Extension<ConnectInfo<SocketAddr>>>`.
 8. **Hallazgos #74/#117:** acciones de GitHub fijadas a SHA e imágenes Docker fijadas a digests.
-9. **Riesgo residual de correo:** la recuperación por correo usa `creada_en` con centinela `ENVIANDO`; con múltiples instancias una notificación antigua podría reenviarse. El despliegue documentado es de instancia única.
+9. **Correo multi-instancia (cerrado):** los reclamos del buzón llevan marca de tiempo (`ENVIANDO:<epoch>`) y solo se recuperan los de más de 10 minutos, por lo que varias instancias nunca reenvían una notificación en curso (prueba `qa_ataques::test_dos_buzones_concurrentes_envian_una_vez`).
 10. **Verificación dinámica final:** todos los controles de caja negra PASS; recorrido Playwright sin errores de consola.
-11. **Cierre de calidad:** 478 pruebas pasan; `fmt`, `clippy -D warnings` y `node --check` limpios.
+11. **Cierre de calidad:** 482 pruebas pasan; `fmt`, `clippy -D warnings` y `node --check` limpios.
 
 ## 8. Riesgos residuales y trabajo diferido
 
 | Ítem | Justificación breve |
 |---|---|
-| `rsa` RUSTSEC-2023-0071 | Sin corrección upstream; no está compilado; la CI lo verifica |
-| Correo saliente multi-instancia | El buzón de salida asume una única instancia de aplicación; documentado en DEPLOY.md como despliegue de instancia única |
+| `rsa` RUSTSEC-2023-0071 | Sin corrección upstream. Solo figura en `Cargo.lock` porque `sqlx` declara su controlador MySQL como dependencia opcional (Cargo registra las opcionales); `cargo tree` confirma que no se compila y la CI falla si llegara a compilarse. No es código que ejecute la aplicación. |
 
 ## 9. Cómo reproducir
 
