@@ -273,15 +273,16 @@ pub fn redact(text: &str) -> String {
         "secret",
         "authorization",
     ];
-    const LINK: &str = "#restablecer/";
+    // Recovery and email-verification links carry single-use tokens.
+    const LINKS: [&str; 2] = ["#restablecer/", "#verificar/"];
     let chars: Vec<char> = text.chars().collect();
     let mut out = String::with_capacity(text.len());
     let mut i = 0;
     while i < chars.len() {
-        // Recovery link: the token (64 hex characters) is replaced by ***.
-        if starts_with_ci(&chars, i, LINK) {
-            out.extend(&chars[i..i + LINK.chars().count()]);
-            i += LINK.chars().count();
+        // Token links: the token (64 hex characters) is replaced by ***.
+        if let Some(link) = LINKS.iter().find(|link| starts_with_ci(&chars, i, link)) {
+            out.extend(&chars[i..i + link.chars().count()]);
+            i += link.chars().count();
             let start = i;
             while i < chars.len() && chars[i].is_alphanumeric() {
                 i += 1;
@@ -358,7 +359,7 @@ pub async fn deliver_pending(pool: &PgPool, mailer: &Mailer, site_url: &str) -> 
     // (WF-6). Only claims older than 10 minutes (a crashed worker) are
     // recovered, so another instance can never re-send a row being sent now.
     sqlx::query(
-        "UPDATE notificaciones SET error_envio='' WHERE error_envio='ENVIANDO' OR (error_envio LIKE 'ENVIANDO:%' AND split_part(error_envio,':',2)::bigint < extract(epoch FROM now() - interval '10 minutes')::bigint)",
+        "UPDATE notificaciones SET error_envio='' WHERE (error_envio='ENVIANDO' AND creada_en<now()-interval '10 minutes') OR CASE WHEN error_envio ~ '^ENVIANDO:[0-9]{1,18}$' THEN split_part(error_envio,':',2)::bigint < extract(epoch FROM now() - interval '10 minutes')::bigint ELSE false END",
     )
     .execute(pool)
     .await?;
@@ -493,5 +494,7 @@ mod tests {
         assert!(!salida.contains(&token), "the token would leak into logs");
         assert!(salida.contains("#restablecer/***"));
         assert!(salida.contains("Hola Ana:"), "the body stays readable");
+        let verify = format!("Confirma: http://sitio/#verificar/{token}");
+        assert_eq!(redact(&verify), "Confirma: http://sitio/#verificar/***");
     }
 }

@@ -58,7 +58,9 @@ parity!(test_login_mismo_origen_llega_al_handler, |t| {
     }
 });
 
-parity!(test_proxy_con_x_forwarded_host, |t| {
+// Without RUST_TRUST_PROXY a client-supplied X-Forwarded-Host is ignored
+// (the trusted-proxy case lives in qa_auth.rs, which can override the config).
+parity!(test_x_forwarded_host_ignorado_sin_proxy_de_confianza, |t| {
     let status = login_from(
         &t,
         &[
@@ -67,7 +69,7 @@ parity!(test_proxy_con_x_forwarded_host, |t| {
         ],
     )
     .await;
-    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(status, StatusCode::FORBIDDEN);
 });
 
 parity!(test_get_de_otro_sitio_no_se_bloquea, |t| {

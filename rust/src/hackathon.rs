@@ -97,7 +97,7 @@ async fn manager(tx: &mut Transaction<'_, Postgres>, reto: i64, user: &User) -> 
         return Ok(());
     }
     let teacher: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2 AND estado IN ('aprobada','publicada'))",
+        "SELECT EXISTS(SELECT 1 FROM integraciones_academicas i JOIN retos r ON r.id=i.reto_id AND r.eliminado_en IS NULL WHERE i.reto_id=$1 AND i.profesor_id=$2 AND i.estado IN ('aprobada','publicada'))",
     )
     .bind(reto)
     .bind(user.id)
@@ -219,7 +219,7 @@ async fn academic_team(
         return Ok(team);
     }
     let owner: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM equipos_reto_academico q JOIN integraciones_academicas i ON i.id=q.integracion_id JOIN retos r ON r.id=q.reto_id WHERE q.id=$1 AND q.integracion_id IS NOT NULL AND i.profesor_id=$2 AND (i.estado IN ('borrador','rechazada') OR r.estado IN ('abierto','en_curso')))",
+        "SELECT EXISTS(SELECT 1 FROM equipos_reto_academico q JOIN integraciones_academicas i ON i.id=q.integracion_id JOIN retos r ON r.id=q.reto_id AND r.eliminado_en IS NULL WHERE q.id=$1 AND q.integracion_id IS NOT NULL AND i.profesor_id=$2 AND (i.estado IN ('borrador','rechazada') OR r.estado IN ('abierto','en_curso')))",
     )
     .bind(id)
     .bind(user.id)

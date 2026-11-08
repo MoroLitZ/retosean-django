@@ -268,7 +268,7 @@ pub fn router(state: AppState) -> Router {
             )
         })
         .layer(axum::extract::DefaultBodyLimit::max(65536))
-        .layer(middleware::from_fn(same_origin))
+        .layer(middleware::from_fn_with_state(state.clone(), same_origin))
         .layer(middleware::from_fn(security_headers))
         .with_state(state)
 }
@@ -340,7 +340,11 @@ async fn health(
 /// a browser request coming from another site is refused before any handler
 /// runs. Clients that send neither header (curl, tests) still need the session
 /// CSRF token on authenticated routes.
-async fn same_origin(request: Request, next: Next) -> Response {
+async fn same_origin(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    request: Request,
+    next: Next,
+) -> Response {
     use axum::http::Method;
     use axum::response::IntoResponse;
     let headers = request.headers();
@@ -349,10 +353,13 @@ async fn same_origin(request: Request, next: Next) -> Response {
         Method::GET | Method::HEAD | Method::OPTIONS
     );
     let fetch_site = headers.get("sec-fetch-site").and_then(|v| v.to_str().ok());
-    // Behind a reverse proxy the public host may arrive as X-Forwarded-Host; a
-    // cross-site page cannot set that header without a CORS preflight.
-    let host = headers
-        .get("x-forwarded-host")
+    // Behind a trusted reverse proxy (RUST_TRUST_PROXY) the public host arrives
+    // as X-Forwarded-Host; otherwise only the Host header counts.
+    let host = state
+        .config
+        .trust_proxy
+        .then(|| headers.get("x-forwarded-host"))
+        .flatten()
         .or_else(|| headers.get("host"))
         .and_then(|v| v.to_str().ok());
     let origin_host = headers

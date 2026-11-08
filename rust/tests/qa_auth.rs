@@ -457,3 +457,81 @@ where
         std::panic::resume_unwind(error.into_panic());
     }
 }
+
+// AUTH-3: behind a trusted proxy, an Origin matching X-Forwarded-Host is same-site.
+#[tokio::test]
+#[ignore = "requires local PostgreSQL; each test uses its own schema"]
+async fn test_origen_con_proxy_de_confianza() {
+    boot_with(
+        |c| c.trust_proxy = true,
+        |t| async move {
+            let response = t
+                .app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/api/login")
+                        .header("content-type", "application/json")
+                        .header("host", "127.0.0.1:8080")
+                        .header("origin", "https://publico.example.edu.co")
+                        .header("x-forwarded-host", "publico.example.edu.co")
+                        .body(Body::from(
+                            json!({"username":"admin","password":"mala"}).to_string(),
+                        ))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        },
+    )
+    .await;
+}
+
+// AUTHK-1 / #25: an attacker failing from one address cannot lock the owner out
+// from another, but failures spread over many addresses still hit the
+// account-wide cap.
+#[tokio::test]
+#[ignore = "requires local PostgreSQL; each test uses its own schema"]
+async fn test_bloqueo_por_cuenta_e_ip() {
+    boot_with(
+        |c| c.trust_proxy = true,
+        |t| async move {
+            t.user("victima.ip", "ESTUDIANTE").await;
+            for _ in 0..10 {
+                let (code, _) = ip_login(&t.app, "198.51.100.66", "victima.ip", "mala").await;
+                assert_eq!(code, StatusCode::UNAUTHORIZED);
+            }
+            let (code, _) = ip_login(&t.app, "198.51.100.66", "victima.ip", "RetosEAN2026").await;
+            assert_eq!(
+                code,
+                StatusCode::TOO_MANY_REQUESTS,
+                "the attacker's address is locked"
+            );
+            let (code, body) = ip_login(&t.app, "203.0.113.20", "victima.ip", "RetosEAN2026").await;
+            assert_eq!(
+                code,
+                StatusCode::OK,
+                "the owner elsewhere still signs in: {body}"
+            );
+            for i in 0..50 {
+                let (code, _) = ip_login(
+                    &t.app,
+                    &format!("10.9.{}.{}", i / 200, i % 200 + 1),
+                    "victima.ip",
+                    "mala",
+                )
+                .await;
+                assert_eq!(code, StatusCode::UNAUTHORIZED, "attempt {i}");
+            }
+            let (code, _) = ip_login(&t.app, "203.0.113.21", "victima.ip", "RetosEAN2026").await;
+            assert_eq!(
+                code,
+                StatusCode::TOO_MANY_REQUESTS,
+                "account-wide cap reached"
+            );
+        },
+    )
+    .await;
+}

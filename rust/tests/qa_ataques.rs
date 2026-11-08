@@ -457,7 +457,7 @@ parity!(test_dos_buzones_concurrentes_envian_una_vez, |t| {
     );
     ra.unwrap();
     rb.unwrap();
-    let ours = |sent: &std::sync::Arc<std::sync::Mutex<Vec<(String, String, String)>>>| {
+    let ours = || {
         let sent = sent.lock().unwrap();
         (0..5)
             .map(|i| {
@@ -467,11 +467,7 @@ parity!(test_dos_buzones_concurrentes_envian_una_vez, |t| {
             })
             .collect::<Vec<_>>()
     };
-    assert_eq!(
-        ours(&sent),
-        vec![1; 5],
-        "each notification sent exactly once"
-    );
+    assert_eq!(ours(), vec![1; 5], "each notification sent exactly once");
     let total = sent.lock().unwrap().len();
     // A claim taken just now on a 2-hour-old row survives another worker's recovery.
     t.exec(&format!("INSERT INTO notificaciones(usuario_id,tipo,evento,titulo,mensaje,leida,link,clave_dedupe,enviada_por_correo,error_envio,creada_en) VALUES({user},'INFO','{event}','r','m','f','','buzon-r',false,'ENVIANDO:'||extract(epoch FROM now())::bigint,now()-interval '2 hours')")).await;
@@ -489,4 +485,52 @@ parity!(test_dos_buzones_concurrentes_envian_una_vez, |t| {
         )
         .await
     );
+});
+
+// A professor cannot manage the academic teams of a soft-deleted reto (scope
+// checks exclude retos.eliminado_en), while the same action on a live reto works.
+parity!(test_profesor_no_gestiona_equipos_de_reto_eliminado, |t| {
+    let teacher = t.user("profe-eliminado", "PROFESOR").await;
+    let session = t.login("profe-eliminado").await;
+    let mut teams = Vec::new();
+    for name in ["vivo", "eliminado"] {
+        let reto = t.reto(COMPANY_USER, "abierto", name).await;
+        let integration = t.integrate(reto, teacher).await;
+        t.exec(&format!(
+            "UPDATE integraciones_academicas SET estado='borrador' WHERE id={integration}"
+        ))
+        .await;
+        let team = t.i64(&format!("INSERT INTO equipos_reto_academico(reto_id,nombre_equipo,integracion_id) VALUES({reto},'Equipo {name}',{integration}) RETURNING id")).await;
+        teams.push((reto, team));
+    }
+    let (deleted_reto, deleted_team) = teams[1];
+    t.exec(&format!(
+        "UPDATE retos SET eliminado_en=now() WHERE id={deleted_reto}"
+    ))
+    .await;
+    let blocked = t
+        .status(
+            &session,
+            "POST",
+            &format!("/api/equipos-academicos/{deleted_team}/eliminar"),
+            None,
+        )
+        .await;
+    assert!(!blocked.is_success(), "soft-deleted reto: {blocked}");
+    assert!(
+        t.bool(&format!(
+            "SELECT EXISTS(SELECT 1 FROM equipos_reto_academico WHERE id={deleted_team})"
+        ))
+        .await
+    );
+    let (_, live_team) = teams[0];
+    let allowed = t
+        .status(
+            &session,
+            "POST",
+            &format!("/api/equipos-academicos/{live_team}/eliminar"),
+            None,
+        )
+        .await;
+    assert!(allowed.is_success(), "live reto control: {allowed}");
 });

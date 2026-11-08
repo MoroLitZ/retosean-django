@@ -185,6 +185,8 @@ pub(crate) async fn check_subject(state: &AppState, subject: &str, limit: i64) -
 /// usernames from one address is still throttled (the per-account limiter alone
 /// would let an attacker walk the whole namespace).
 const IP_FAILURE_LIMIT: i64 = 100;
+/// Failures per account from all addresses together (distributed guessing).
+const ACCOUNT_FAILURE_LIMIT: i64 = 50;
 async fn record_ip_failure(state: &AppState, ip: Option<&str>) -> Result<()> {
     // Unknown client IP (e.g. a test harness without a peer) skips this limiter.
     let Some(ip) = ip else { return Ok(()) };
@@ -227,9 +229,9 @@ pub async fn login(
     let record: Option<(i64, String, String, Option<String>)> =
         sqlx::query_as::<_, (i64, String, String, Option<String>)>(
             "SELECT u.id,u.username,u.password,CASE \
+             WHEN u.rol='EMPRESA' AND EXISTS(SELECT 1 FROM empresas e WHERE e.usuario_id=u.id AND e.estado_listas_restrictivas='RECHAZADO') THEN 'LISTAS' \
              WHEN u.is_active AND u.activo AND u.correo_verificado THEN NULL \
              WHEN u.is_active AND u.activo AND NOT u.correo_verificado THEN 'SIN_VERIFICAR' \
-             WHEN u.rol='EMPRESA' AND EXISTS(SELECT 1 FROM empresas e WHERE e.usuario_id=u.id AND e.estado_listas_restrictivas='RECHAZADO') THEN 'LISTAS' \
              WHEN u.rol='PROFESOR' AND u.last_login IS NULL THEN 'PENDIENTE' ELSE 'INHABILITADA' END \
              FROM usuarios u WHERE u.username=$1 OR (strpos($1,'@')>0 AND lower(u.email)=lower($1) AND (SELECT count(*) FROM usuarios WHERE lower(email)=lower($1))=1) ORDER BY u.username=$1 DESC LIMIT 1",
         )
@@ -237,15 +239,23 @@ pub async fn login(
         .fetch_optional(&state.pool)
         .await?
         ;
-    let subject = match &record {
-        Some((id, ..)) => digest(&format!("cuenta:{id}")),
-        None => digest(&input.username.to_lowercase()),
+    let account_key = match &record {
+        Some((id, ..)) => format!("cuenta:{id}"),
+        None => input.username.to_lowercase(),
     };
     let ip = client_ip(
         &headers,
         state.config.trust_proxy,
         peer.map(|axum::Extension(ConnectInfo(addr))| addr),
     );
+    // AUTHK-1: the 10-failure lock is per account AND client address, so an
+    // attacker elsewhere cannot lock the owner out; an account-wide cap still
+    // stops distributed guessing. Without a known address it is per account.
+    let account = digest(&account_key);
+    let subject = match ip.as_deref() {
+        Some(ip) => digest(&format!("{account_key}|ip:{ip}")),
+        None => account.clone(),
+    };
     // A server too busy to hash rejects without recording an attempt; no DB
     // connection is held while waiting for a slot.
     let permit = hash_slot(&state.login_slots).await?;
@@ -254,7 +264,7 @@ pub async fn login(
         .await?;
     let mut tx = state.pool.begin().await?;
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
-        .bind(&subject)
+        .bind(&account)
         .execute(&mut *tx)
         .await?;
     let attempts: i64 =
@@ -262,6 +272,14 @@ pub async fn login(
             .bind(&subject)
             .fetch_one(&mut *tx)
             .await?;
+    let account_attempts: i64 = if subject == account {
+        attempts
+    } else {
+        sqlx::query_scalar("SELECT count(*) FROM rust_login_attempts WHERE subject=$1")
+            .bind(&account)
+            .fetch_one(&mut *tx)
+            .await?
+    };
     // AUTH-4: an address over its failure cap is refused before any password check.
     let ip_failures: i64 = match ip.as_deref() {
         Some(ip) => {
@@ -272,7 +290,10 @@ pub async fn login(
         }
         None => 0,
     };
-    if attempts >= 10 || ip_failures >= IP_FAILURE_LIMIT {
+    if attempts >= 10
+        || account_attempts >= ACCOUNT_FAILURE_LIMIT
+        || ip_failures >= IP_FAILURE_LIMIT
+    {
         return Err(AppError(
             StatusCode::TOO_MANY_REQUESTS,
             "Demasiados intentos. Espera 10 minutos".into(),
@@ -280,12 +301,13 @@ pub async fn login(
     }
     // Recorded before verifying, so parallel guesses cannot all pass the check
     // above; a successful login clears the counter, so only failures remain.
-    sqlx::query("INSERT INTO rust_login_attempts(subject) VALUES($1)")
+    sqlx::query("INSERT INTO rust_login_attempts(subject) SELECT DISTINCT unnest(ARRAY[$1,$2])")
         .bind(&subject)
+        .bind(&account)
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
-    let (id, account, hash, inactive) = record.unwrap_or((
+    let (id, account_name, hash, inactive) = record.unwrap_or((
         0,
         String::new(),
         "pbkdf2_sha256$1000000$dummy$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=".into(),
@@ -323,7 +345,14 @@ pub async fn login(
             reason = message,
             "login rejected: inactive account"
         );
-        log_access(&state, Some(id), &account, "LOGIN_FALLIDO", ip.as_deref()).await?;
+        log_access(
+            &state,
+            Some(id),
+            &account_name,
+            "LOGIN_FALLIDO",
+            ip.as_deref(),
+        )
+        .await?;
         // Only the email-verification reason is shown to the user (they must
         // know to check their inbox); every other inactive reason stays generic.
         let shown = if reason == "SIN_VERIFICAR" {
@@ -333,11 +362,12 @@ pub async fn login(
         };
         return Err(AppError(StatusCode::UNAUTHORIZED, shown.into()));
     }
-    sqlx::query("DELETE FROM rust_login_attempts WHERE subject=$1")
+    sqlx::query("DELETE FROM rust_login_attempts WHERE subject=$1 OR subject=$2")
         .bind(&subject)
+        .bind(&account)
         .execute(&state.pool)
         .await?;
-    log_access(&state, Some(id), &account, "LOGIN", ip.as_deref()).await?;
+    log_access(&state, Some(id), &account_name, "LOGIN", ip.as_deref()).await?;
     start_session(&state, id).await
 }
 /// Opens an 8-hour session for `id` and returns the cookie response (login, registration).

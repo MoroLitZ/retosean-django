@@ -189,6 +189,11 @@ pub async fn register(
         .bind(format!("usuario:{}", input.username.trim().to_lowercase()))
         .execute(&mut *tx)
         .await?;
+    // Same email, different username: serialized too (always username, then email).
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
+        .bind(format!("correo:{}", email.to_lowercase()))
+        .execute(&mut *tx)
+        .await?;
     let occupied: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM usuarios WHERE lower(username)=lower($1) OR lower(email)=lower($2))",
     )
