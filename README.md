@@ -23,7 +23,7 @@ administrador cierra el ciclo emitiendo certificados.
 
 ## Puesta en marcha
 
-La documentación completa está en [`rust/README.md`](rust/README.md). El arranque
+La documentación oficial para usuarios y desarrolladores está en [`docs/DOCUMENTACION.md`](docs/DOCUMENTACION.md); la referencia técnica breve está en [`rust/README.md`](rust/README.md). El arranque
 rápido desde la raíz del repositorio (PowerShell) es:
 
 ```powershell

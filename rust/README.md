@@ -8,8 +8,9 @@ embedded in the executable. There is no Node build or development server.
 The web application is a vanilla-JS single-page app in `web/`, built with an
 in-house design system (`web/DESIGN.md`). CSS and JavaScript are split per area
 in `web/css` and `web/js`, embedded in the executable, and served from
-`/assets/{file}`. It loads no external resources, so the browser needs no
-internet access.
+`/assets/{file}`. A vendored Chart.js bundle (`web/chart.umd.min.js`) is
+embedded and served as `/assets/chart.js`. It loads no external resources, so
+the browser needs no internet access.
 
 This is the migrated application; the former Django version has been removed
 from this repository. Coverage and verification sections below describe parity
@@ -27,19 +28,14 @@ prepared locally. From the repository root in PowerShell:
 ```
 
 Open http://127.0.0.1:8080. Stop with Ctrl+C. If PowerShell blocks local scripts,
-use the executable directly:
-
-```powershell
-cd rust
-& "$env:USERPROFILE\.cargo\bin\cargo.exe" run --locked -- serve
-```
+use Cargo directly: `cargo run --locked -- serve` (or run a built binary such as `target\debug\retosean.exe serve`).
 
 For an optimized build, use `Start-Retos.ps1 -Release` or
 `cargo run --locked --release -- serve`. Debug builds verify passwords more slowly.
 
 ## First setup on another computer
 
-Install a Rust toolchain and PostgreSQL. On Windows the MSVC toolchain also needs
+Install a Rust toolchain that supports edition 2024 and PostgreSQL. On Windows the MSVC toolchain also needs
 Visual Studio C++ Build Tools. Copy `.env.example` to `.env` inside `rust/` and
 set the PostgreSQL credentials, or reuse the repository's existing `.env`.
 
@@ -54,13 +50,15 @@ Equivalent commands from `rust/`:
 
 ```text
 cargo run --locked -- init-db
+cargo run --locked -- migrate
 cargo run --locked -- seed-demo
 cargo run --locked -- serve
 cargo run --locked -- advance-hackathons   # schedule hourly (HU09)
 cargo run --locked -- send-reminders       # schedule daily (HU15), like enviar_recordatorios
 ```
 
-`init-db` only initializes an empty database. `seed-demo` only runs when the user
+`init-db` creates the configured database if it does not exist and creates the
+schema only when the `public` schema has no tables. `seed-demo` only runs when the user
 table is empty. Both refuse to reset existing data. Use a new `RUST_DB_NAME` for
 a fresh demonstration. The legacy Django `DB_NAME` is never implicitly selected.
 
@@ -82,7 +80,7 @@ These are local demonstration credentials. Do not seed an internet-facing system
 
 | Area | Implemented in Rust |
 |---|---|
-| Data model | 49 typed domain records, PostgreSQL bootstrap schema with database defaults mirroring the former Django version's Python defaults, seven state-machine definitions, one audit table for every state change |
+| Data model | 49 typed domain records, PostgreSQL bootstrap schema with database defaults mirroring the former Django version's Python defaults, eight state-machine definitions, one audit table for every state change |
 | Users | Bulk import from CSV or Excel with row-by-row preview, unusable passwords plus a set-password email for rows without one (HU13); public self-registration (Comunidad EAN with institutional email, or company with its catalog documents) with welcome email, password recovery by single-use 3-day email link, Django PBKDF2-SHA256 compatible login, expiring sessions, CSRF, login throttling, admin account creation, login by username or email (as in the former Django version), contact editing, password changes and revocation, activation/deactivation, audited role changes and per-module permissions such as Cargar Listas Informa (HU13) |
 | Companies | Configurable legal-document catalog (HU00): PDF uploads, catalog validity (e.g. 30-day Cámara de Comercio), document decisions, status derived from the documents as in the former Django version, restrictive-list checks, agreement transitions and expiry dates, participation block with reason, the agreement-or-not choice, special documents uploaded only by permission holders, and the former Django version's operating gate (block, lists, every required document verified and in force) before publishing retos |
 | Challenges | Company draft creation/editing, required-field review submission, admin approval/rejection, serialized numbering, audited manual state transitions |
@@ -116,7 +114,8 @@ coverage does not imply every original form or command has been ported.
 
 ## Schema changes
 
-`init-db` creates the full schema once. Later changes go in
+`init-db` creates the configured database if it does not exist and creates the
+schema only when the `public` schema has no tables. Later changes go in
 `sql/migrations/NNNN_name.sql`, listed in `src/schema_migrations.rs`, and are
 applied with `retosean migrate` (each once, in order, recorded in
 `rust_schema_migrations`). Never run migrations from the former Django project
@@ -178,6 +177,7 @@ From `rust/`:
 ```text
 cargo fmt --check
 for f in web/js/*.js; do node --check "$f"; done
+Get-ChildItem web/js/*.js | ForEach-Object { node --check $_.FullName }
 cargo test --locked -- --include-ignored
 ```
 
@@ -186,14 +186,17 @@ That runs three layers:
 - **Unit tests** (`src/`): parsing, money, PDF text, state machines.
 - **End-to-end** (`tests/end_to_end.rs`): one long walk through the whole
   platform over real Axum handlers and PostgreSQL.
-- **Django parity** (`tests/parity_<app>.rs`): all 271 tests from the former
-  Django version are recreated against the Rust API, one Rust test per former
-  Django test with the same name, grouped by the former Django test class. A few
-  adapt where the two stacks differ by design (the API returns 404 instead of
-  redirecting, the single-page app replaces server-rendered pages); each such
-  test says so in a comment. The route walk in `parity_dashboard.rs` reads the
-  GET routes from `src/lib.rs`, so a new route is visited by every role
-  automatically.
+- **Django parity** (`tests/parity_<app>.rs`): the former Django version's tests
+  are recreated (339 parity tests today, including later regressions added to the
+  same files) against the Rust API, one Rust test per former Django test with the
+  same name, grouped by the former Django test class. A few adapt where the two
+  stacks differ by design (the API returns 404 instead of redirecting, the
+  single-page app replaces server-rendered pages); each such test says so in a
+  comment. The route walk in `parity_dashboard.rs` reads the GET routes from
+  `src/lib.rs`, so a new route is visited by every role automatically.
+- **QA and security** (`tests/qa_*.rs`, 136 tests): regression tests for every
+  security and robustness fix, including memory streaming (`qa_memoria.rs`,
+  `qa_memoria_export.rs`). The whole suite has 508 tests.
 
 Every database test creates its own schema in the configured Rust database
 with the demo data, and drops it afterwards; nothing touches demonstration
@@ -240,6 +243,13 @@ connections. Server memory stays under 250 MB. A login takes about 100 ms
 around 40 per second. A 40-connection pool raised high-concurrency throughput
 by about 25%, so the database round trips per request are the main cost.
 
+Three 4-permit semaphores bound expensive work: logins, password hashing for
+registration/reset/profile changes, and heavy generation (exports, portfolio,
+report builder, user import; a request waiting more than 30 s gets 503). The
+PostgreSQL pool has 10 connections. Release builds use fat LTO, one codegen unit
+and stripped debug info (`[profile.release]`). Memory measurements before and
+after the streaming work are in `../docs/MEMORIA_RUST.md`.
+
 ## Docker
 
 From `rust/`, using the separate Compose stack:
@@ -252,8 +262,7 @@ docker compose up -d web
 ```
 
 The stack binds the web port to localhost and keeps its own database/media volumes.
-Use `docker compose down` to stop it. The default database password is for local
-development; set `RUST_POSTGRES_PASSWORD` for another environment. The Docker
+Use `docker compose down` to stop it. `RUST_POSTGRES_PASSWORD` is required (there is no default); Compose passes it to both containers as a Docker secret. The Docker
 build must be validated in the target deployment environment.
 
 ## Implementation map
@@ -276,8 +285,15 @@ build must be validated in the target deployment environment.
 - `src/event.rs`: hackathon schedule advance, logistics and final report (HU09).
 - `src/media.rs`, `reports.rs`: private files, PDF and spreadsheet generation.
 - `src/models.rs`, `schema.json`, `states.json`, `sql/`: typed domain records and schema inputs; `models.rs` is maintained by hand.
+- `src/catalogs.rs`: faculties, programs and ecosystems.
+- `src/config.rs`: environment configuration and secrets.
+- `src/domain.rs`: state machines, validation, CSV neutralisation.
+- `src/error.rs`: error type and HTTP mapping.
+- `src/schema_migrations.rs`: versioned SQL migrations.
 - `web/`: browser UI compiled into the executable.
 
 Libraries: [Axum](https://docs.rs/axum/), [SQLx](https://docs.rs/sqlx/0.8.6/),
 [pdf-writer](https://docs.rs/pdf-writer/0.15.0/),
-[rust_xlsxwriter](https://docs.rs/rust_xlsxwriter/0.96.0/).
+[rust_xlsxwriter](https://docs.rs/rust_xlsxwriter/0.102.0/),
+[calamine](https://docs.rs/calamine/0.38.0/) (reading uploaded spreadsheets),
+[lettre](https://docs.rs/lettre/0.11.0/) (SMTP).

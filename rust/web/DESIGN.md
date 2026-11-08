@@ -20,6 +20,7 @@ this system; do not introduce an external CSS framework or inline styles.
 | `js/core.js` | `el`, `icon`, `toast`, `api`, router, nav, bell |
 | `js/{dashboard,records,detail,workflows,auth,evaluation,builder,forms,main}.js` | Per-view logic |
 | `css/{auth,dashboard,records,detail,forms,workflows,builder}.css` | Per-view styles |
+| `web/chart.umd.min.js` | vendored Chart.js bundle embedded in the binary and served as `/assets/chart.js` |
 
 ---
 
@@ -342,7 +343,7 @@ form.form-grid            // 2 columns, gap 16px
 
 ## 9. Global implementation rules
 
-- CSP is `style-src 'self'`. Never use inline `style="..."` attributes; use classes.
+- CSP is `default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`. Never use inline `style="..."` attributes; use classes.
 - The `[hidden]` attribute always hides: `base.css` applies a global
   `[hidden] { display: none !important; }` rule. Use `hidden` for conditional display.
 - Programmatic focus targets use `tabindex="-1"` and show no focus ring.
