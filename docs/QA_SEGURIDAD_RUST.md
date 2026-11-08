@@ -17,7 +17,7 @@
 - Corregidos: **119** (incluye **23** corregidos en esquema)
 - Rechazados: **9**
 - Diferidos: **0**
-- Pruebas automáticas: **370 → 482** pruebas que pasan
+- Pruebas automáticas: **370 → 483** pruebas que pasan
 - Herramientas finales limpias: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `node --check` sobre todo `rust/web/js/*.js`
 
 Las decisiones del revisor principal están en `lead-notes.md` y son autoritativas; donde hay conflicto con un reporte de agente, prevalecen.
@@ -122,7 +122,19 @@ Para no depender del veredicto de un solo agente, se repitió la verificación c
   - Se revisaron y se mantienen por diseño: `same-site` tratado como ajeno (protege contra subdominios), peticiones sin `Origin` ni `Sec-Fetch-Site` permitidas (clientes no navegador; siguen necesitando el token CSRF), y triggers de rol que solo validan referencias nuevas o cambiadas.
 - **Ataque en vivo completo** sobre el binario release del commit final con BD demo nueva (script Python independiente que lee la tabla de rutas de `lib.rs`): 15/15 PASS — cabeceras; cookie; 97 rutas no públicas sin sesión; CSRF y origen cruzado en las 72 rutas de escritura sin cambios de datos; CSRF de login; matriz de roles; IDOR en 10 tablas para 4 roles; path traversal; inyección; cuerpos malformados; sesión y fijación; asignación masiva; flujo de verificación de correo; carreras de login (exactamente 10 evaluados); fuerza bruta aislada por cuenta+IP. Carrera de 20 postulaciones simultáneas: una sola fila en la BD (el endpoint actualiza la postulación pendiente).
 - **Navegador (Playwright)** sobre el mismo binario, iniciando sesión por el formulario real (ejercita el control de origen): admin 51 rutas/18 detalles, empresa 11/6, profesor 10/3, estudiante 10/4, experto 3/0; sin banners de error; solo el 401 esperado de `/api/me` antes del login.
-- **Cierre:** 482 pruebas pasan en una ejecución completa del árbol final; `cargo fmt --check`, `clippy --all-targets -D warnings`, `node --check` limpios.
+- **Cierre:** 483 pruebas pasan en una ejecución completa del árbol final (482 antes de la prueba de auditoría de gastos); `cargo fmt --check`, `clippy --all-targets -D warnings`, `node --check` limpios.
+
+### Cierre de pendientes de la revisión
+
+- **Rechazos #108 y #128, re-verificados con datos:** `schema.json` tiene 409 campos y los 409 traen `choices` como arreglo (ninguno sin la clave), así que `field.choices.length` no puede fallar (#108). La única escritura que marca una notificación como leída fija `leida_en` en la misma sentencia (`workflows.rs`) y las inserciones nacen sin leer, por lo que la aplicación no crea filas inconsistentes; solo pueden venir de datos legados y ningún código decide nada con `leida_en` (#128).
+- **Puntos restantes de los revisores, resueltos uno a uno:**
+  - Triggers con `NULL`: `puntaje` y `criterio_id` son `NOT NULL` y `criterio_id` tiene FK, así que el caso no puede ocurrir.
+  - Tokens de verificación: se guardan como hash SHA-256, caducan a los 3 días y se consumen con `DELETE … RETURNING` (un solo uso).
+  - Actualizaciones de gastos sin predicado de borrado: `ejecutar` y `eliminar` bloquean antes la fila con `eliminado_en IS NULL FOR UPDATE`, así que un gasto eliminado no se puede tocar.
+  - Auditoría de gastos: **corregido**, ejecutar un gasto ahora deja la transición `COMPROMETIDO → EJECUTADO` en `historial_estados` (`qa_integridad::qa_ejecutar_gasto_queda_en_historial`).
+  - Postulaciones concurrentes: además de la prueba de carrera, la BD tiene `UNIQUE (reto_id, estudiante_id)`, así que una segunda fila es imposible a cualquier concurrencia; en vivo, 20 peticiones simultáneas dejaron una sola fila (el endpoint actualiza la postulación pendiente).
+- **Flujo de verificación de correo en el navegador, de punta a punta** (binario release final): registro por el formulario real → mensaje "Revisa tu correo" y sin cookie de sesión; login → "Confirma tu correo antes de iniciar sesión"; enlace falso → "Enlace no válido"; enlace válido → "Cuenta verificada"; reutilizarlo → "Enlace no válido"; login posterior correcto.
+  - Este recorrido encontró un **error real, corregido**: el arranque de la SPA enrutaba dos veces y enviaba el token dos veces; la primera llamada verificaba la cuenta y la segunda reemplazaba el éxito por "Enlace no válido". Ahora cada token se envía una sola vez por carga (comprobado: una llamada 200 y "Cuenta verificada").
 
 ## 6. Tabla completa de los 128 hallazgos
 
@@ -271,7 +283,7 @@ Las siguientes decisiones de `lead-notes.md` son autoritativas:
 8. **Hallazgos #74/#117:** acciones de GitHub fijadas a SHA e imágenes Docker fijadas a digests.
 9. **Correo multi-instancia (cerrado):** los reclamos del buzón llevan marca de tiempo (`ENVIANDO:<epoch>`) y solo se recuperan los de más de 10 minutos, por lo que varias instancias nunca reenvían una notificación en curso (prueba `qa_ataques::test_dos_buzones_concurrentes_envian_una_vez`).
 10. **Verificación dinámica final:** todos los controles de caja negra PASS; recorrido Playwright sin errores de consola.
-11. **Cierre de calidad:** 482 pruebas pasan; `fmt`, `clippy -D warnings` y `node --check` limpios.
+11. **Cierre de calidad:** 483 pruebas pasan; `fmt`, `clippy -D warnings` y `node --check` limpios.
 
 ## 8. Riesgos residuales y trabajo diferido
 
