@@ -140,7 +140,9 @@ async function unitForm(record = null) {
 async function sendUnit(e, form, url) {
   e.preventDefault();
   const button = e.submitter || form.querySelector('button[type="submit"]');
-  const fileInput = form.querySelector('input[type="file"]');
+  // Only the CSV upload requires a file; the unit PDF is optional and an edit
+  // keeps the stored one (study_units::edit uses COALESCE).
+  const fileInput = form.querySelector('input[type="file"][required]');
   if (fileInput && !fileInput.files[0]) {
     toast("Elige un archivo para continuar.");
     if (typeof fileInput.focus === "function") fileInput.focus();

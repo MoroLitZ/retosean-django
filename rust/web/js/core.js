@@ -285,7 +285,11 @@ function icon(name) {
 }
 async function start() {
   const session = await api("/api/me");
-  user = { ...session.user, permisos: session.permisos || [] };
+  user = {
+    ...session.user,
+    permisos: session.permisos || [],
+    gestionaUnidades: session.gestiona_unidades === true,
+  };
   csrf = session.csrf;
   resources = await api("/api/resources");
   $("login-view").hidden = true;
@@ -502,7 +506,7 @@ async function route() {
       "unidades_estudio",
     ].includes(selected) &&
       admin()) ||
-    (selected === "unidades_estudio" && user.rol === "PROFESOR")
+    (selected === "unidades_estudio" && user.gestionaUnidades)
   );
   $("new-label").textContent =
     selected === "usuarios"

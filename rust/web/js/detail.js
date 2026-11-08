@@ -483,7 +483,7 @@ async function openRecord(id) {
       parent.insertBefore(detail_loadError("No se pudo cargar el equipo académico."), actions);
     }
   }
-  if (selected === "unidades_estudio" && (admin() || user.rol === "PROFESOR")) {
+  if (selected === "unidades_estudio" && user.gestionaUnidades) {
     action(actions, "Editar unidad", () => unitForm(record));
     action(actions, record.activo ? "Desactivar unidad" : "Activar unidad", async () => {
       const data = await api(`/api/unidades/${id}/activo`, { activo: !record.activo });

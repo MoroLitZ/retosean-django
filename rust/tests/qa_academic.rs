@@ -271,3 +271,32 @@ parity!(test_estado_solicitud_comentario_demasiado_largo, |t| {
     assert_eq!(code, 400, "{body}");
     assert!(body["error"].as_str().unwrap().contains("máximo"), "{body}");
 });
+
+// CIE-03 in the UI: /api/me says whether the user may manage study units, so a
+// professor without a faculty is not offered actions the server would refuse.
+parity!(test_me_indica_si_gestiona_unidades, |t| {
+    let teacher = t.user("profe-sin-facultad", "PROFESOR").await;
+    let session = t.login("profe-sin-facultad").await;
+    assert_eq!(
+        t.ok(&session, "GET", "/api/me", None).await["gestiona_unidades"],
+        true
+    );
+    t.exec(&format!(
+        "UPDATE profesores SET facultad_id=NULL WHERE usuario_id={teacher}"
+    ))
+    .await;
+    assert_eq!(
+        t.ok(&session, "GET", "/api/me", None).await["gestiona_unidades"],
+        false
+    );
+    assert_eq!(
+        t.ok(&t.admin, "GET", "/api/me", None).await["gestiona_unidades"],
+        true
+    );
+    t.user("est-unidades", "ESTUDIANTE").await;
+    let student = t.login("est-unidades").await;
+    assert_eq!(
+        t.ok(&student, "GET", "/api/me", None).await["gestiona_unidades"],
+        false
+    );
+});

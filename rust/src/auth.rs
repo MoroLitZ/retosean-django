@@ -416,7 +416,19 @@ pub async fn me(
             permisos.push(*code);
         }
     }
-    Ok(Json(json!({"user":user,"csrf":csrf,"permisos":permisos})))
+    // CIE-03: only admins and professors with a faculty manage study units, so
+    // the SPA offers "Agregar registro" only when the server would accept it.
+    let gestiona_unidades = user.admin()
+        || (user.rol == "PROFESOR"
+            && sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM profesores WHERE usuario_id=$1 AND facultad_id IS NOT NULL)",
+            )
+            .bind(user.id)
+            .fetch_one(&state.pool)
+            .await?);
+    Ok(Json(
+        json!({"user":user,"csrf":csrf,"permisos":permisos,"gestiona_unidades":gestiona_unidades}),
+    ))
 }
 pub async fn logout(
     State(state): State<AppState>,
