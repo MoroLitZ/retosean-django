@@ -194,7 +194,7 @@ That runs three layers:
   single-page app replaces server-rendered pages); each such test says so in a
   comment. The route walk in `parity_dashboard.rs` reads the GET routes from
   `src/lib.rs`, so a new route is visited by every role automatically.
-- **QA and security** (`tests/qa_*.rs`, 136 tests): regression tests for every
+- **QA and security** (`tests/qa_*.rs`, 135 tests): regression tests for every
   security and robustness fix, including memory streaming (`qa_memoria.rs`,
   `qa_memoria_export.rs`). The whole suite has 508 tests.
 

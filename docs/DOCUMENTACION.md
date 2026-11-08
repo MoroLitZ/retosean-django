@@ -2355,9 +2355,9 @@ El proceso copia filas hacia una base Rust vacía y mueve archivos. Los campos d
 | Capa | Pruebas |
 |---|---:|
 | Paridad con Django (`tests/parity_*.rs`) | 339 |
-| QA y seguridad (`tests/qa_*.rs` y harness común) | 136 |
+| QA y seguridad (`tests/qa_*.rs`) | 135 |
 | Extremo a extremo (`tests/end_to_end.rs`) | 5 |
-| Unitarias en `src/` | 28 |
+| Unitarias en `src/` | 29 |
 | **Total** | **508** |
 
 ### 20.2 Suites de paridad
@@ -2398,8 +2398,7 @@ El proceso copia filas hacia una base Rust vacía y mueve archivos. Los campos d
 | `tests/qa_ronda3.rs` | 12 |
 | `tests/qa_schema.rs` | 20 |
 | `tests/qa_verificacion.rs` | 6 |
-| `tests/common/mod.rs` | 1 |
-| **Subtotal** | **136** |
+| **Subtotal** | **135** |
 
 ### 20.4 Extremo a extremo
 
