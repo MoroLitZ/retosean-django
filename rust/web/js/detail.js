@@ -10,7 +10,10 @@ function detail_loadError(message) {
   note.append(icon("exclamation-triangle-fill"), el("span", "", message));
   return note;
 }
+// Latest record requested in the detail dialog; older responses are dropped.
+let detailRequest = 0;
 async function openRecord(id) {
+  const request = ++detailRequest;
   const parent = modal("Cargando…");
   parent.setAttribute("aria-busy", "true");
   parent.replaceChildren(ui.skeleton(6, { kind: "row" }));
@@ -19,9 +22,12 @@ async function openRecord(id) {
     record = await api(`/api/records/${selected}/${id}`);
   } catch (error) {
     parent.removeAttribute("aria-busy");
-    $("detail-dialog").close();
+    if (request === detailRequest) $("detail-dialog").close();
     throw error;
   }
+  // Closed while loading, or another record was opened meanwhile: do not
+  // render (and keep in memory) a record nobody is looking at.
+  if (request !== detailRequest || !$("detail-dialog").open) return;
   const heading =
     record.titulo ||
     record.razon_social ||
