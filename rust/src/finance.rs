@@ -234,6 +234,16 @@ pub async fn execute(
         .bind(gasto)
         .execute(&mut *tx)
         .await?;
+    history(
+        &mut tx,
+        ("presupuesto", "gasto"),
+        gasto,
+        &estado,
+        "EJECUTADO",
+        user.id,
+        "Gasto ejecutado.",
+    )
+    .await?;
     check_threshold(&mut tx, budget).await?;
     tx.commit().await?;
     Ok(Json(

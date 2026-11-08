@@ -312,3 +312,32 @@ parity!(qa_cambio_de_rol_no_bloquea_filas_existentes, |t| {
         "RECHAZADA"
     );
 });
+
+// Executing a committed expense is audited like its deletion.
+parity!(qa_ejecutar_gasto_queda_en_historial, |t| {
+    let reto = t.reto(COMPANY_USER, "en_curso", "reto").await;
+    let budget = t
+        .i64(&format!(
+            "INSERT INTO presupuestos(reto_id,monto_total,alerta_80_enviada,creado_en,actualizado_en) VALUES({reto},1000,false,now(),now()) RETURNING id"
+        ))
+        .await;
+    let gasto = t
+        .i64(&format!(
+            "INSERT INTO gastos(presupuesto_id,categoria,monto,estado,descripcion,creado_en) VALUES({budget},'OTROS',100.00,'COMPROMETIDO','',now()) RETURNING id"
+        ))
+        .await;
+    t.ok(
+        &t.admin,
+        "POST",
+        &format!("/api/gastos/{gasto}/ejecutar"),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(
+        t.i64(&format!(
+            "SELECT count(*) FROM historial_estados WHERE object_id={gasto} AND estado_anterior='COMPROMETIDO' AND estado_nuevo='EJECUTADO'"
+        ))
+        .await,
+        1
+    );
+});
