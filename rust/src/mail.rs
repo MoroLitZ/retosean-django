@@ -353,14 +353,13 @@ pub fn bodies(name: &str, title: &str, message: &str, url: &str) -> (String, Str
 /// who did not opt out) and records enviada_por_correo / error_envio like Django.
 /// Rows stay locked while sending, so concurrent workers never send twice.
 pub async fn deliver_pending(pool: &PgPool, mailer: &Mailer, site_url: &str) -> Result<usize> {
-    // Sentinel used to claim rows while sending, without holding a transaction
-    // or row locks during SMTP I/O (WF-6). Abandoned claims from a crashed run
-    // are recovered on the next tick.
-    const CLAIM: &str = "ENVIANDO";
+    // Rows are claimed with a timestamped sentinel ("ENVIANDO:<epoch>") while
+    // sending, without holding a transaction or row locks during SMTP I/O
+    // (WF-6). Only claims older than 10 minutes (a crashed worker) are
+    // recovered, so another instance can never re-send a row being sent now.
     sqlx::query(
-        "UPDATE notificaciones SET error_envio='' WHERE error_envio=$1 AND creada_en<now()-interval '10 minutes'",
+        "UPDATE notificaciones SET error_envio='' WHERE error_envio='ENVIANDO' OR (error_envio LIKE 'ENVIANDO:%' AND split_part(error_envio,':',2)::bigint < extract(epoch FROM now() - interval '10 minutes')::bigint)",
     )
-    .bind(CLAIM)
     .execute(pool)
     .await?;
     let rows: Vec<(i64, String, String, String, String, String)> = {
@@ -372,9 +371,8 @@ pub async fn deliver_pending(pool: &PgPool, mailer: &Mailer, site_url: &str) -> 
         .fetch_all(&mut *tx)
         .await?;
         let ids: Vec<i64> = rows.iter().map(|(id, ..)| *id).collect();
-        sqlx::query("UPDATE notificaciones SET error_envio=$2 WHERE id=ANY($1)")
+        sqlx::query("UPDATE notificaciones SET error_envio='ENVIANDO:'||extract(epoch FROM now())::bigint WHERE id=ANY($1)")
             .bind(ids.as_slice())
-            .bind(CLAIM)
             .execute(&mut *tx)
             .await?;
         tx.commit().await?;

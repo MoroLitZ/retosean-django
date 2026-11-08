@@ -434,3 +434,59 @@ parity!(test_aprobacion_concurrente_una_fila_historial, |t| {
         .count();
     assert_eq!(transitions, 1, "one history row: {history:?}");
 });
+
+// WF-6 (multi-instance): two outbox workers running at once send each
+// notification exactly once, and a fresh claim on an old notification is
+// never released by the other worker's stale-claim recovery.
+parity!(test_dos_buzones_concurrentes_envian_una_vez, |t| {
+    let event = retosean::mail::email_events()
+        .into_iter()
+        .next()
+        .expect("at least one email event");
+    let user = t.user("buzon-doble", "ESTUDIANTE").await;
+    for i in 0..5 {
+        t.exec(&format!("INSERT INTO notificaciones(usuario_id,tipo,evento,titulo,mensaje,leida,link,clave_dedupe,enviada_por_correo,error_envio,creada_en) VALUES({user},'INFO','{event}','t{i}','m','f','','buzon-{i}',false,'',now()-interval '2 hours')")).await;
+    }
+    let sent = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let a = retosean::mail::Mailer::Memory(sent.clone());
+    let b = retosean::mail::Mailer::Memory(sent.clone());
+    let (pool_a, pool_b) = (t.pool.clone(), t.pool.clone());
+    let (ra, rb) = tokio::join!(
+        retosean::mail::deliver_pending(&pool_a, &a, "http://x"),
+        retosean::mail::deliver_pending(&pool_b, &b, "http://x"),
+    );
+    ra.unwrap();
+    rb.unwrap();
+    let ours = |sent: &std::sync::Arc<std::sync::Mutex<Vec<(String, String, String)>>>| {
+        let sent = sent.lock().unwrap();
+        (0..5)
+            .map(|i| {
+                sent.iter()
+                    .filter(|m| m.1.contains(&format!("t{i}")))
+                    .count()
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        ours(&sent),
+        vec![1; 5],
+        "each notification sent exactly once"
+    );
+    let total = sent.lock().unwrap().len();
+    // A claim taken just now on a 2-hour-old row survives another worker's recovery.
+    t.exec(&format!("INSERT INTO notificaciones(usuario_id,tipo,evento,titulo,mensaje,leida,link,clave_dedupe,enviada_por_correo,error_envio,creada_en) VALUES({user},'INFO','{event}','r','m','f','','buzon-r',false,'ENVIANDO:'||extract(epoch FROM now())::bigint,now()-interval '2 hours')")).await;
+    retosean::mail::deliver_pending(&t.pool, &a, "http://x")
+        .await
+        .unwrap();
+    assert_eq!(
+        sent.lock().unwrap().len(),
+        total,
+        "the in-flight claim is not re-sent"
+    );
+    assert!(
+        t.bool(
+            "SELECT error_envio LIKE 'ENVIANDO:%' FROM notificaciones WHERE clave_dedupe='buzon-r'"
+        )
+        .await
+    );
+});
