@@ -62,6 +62,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/logout", post(auth::logout))
         .route("/api/registro", post(registration::register))
         .route("/api/registro/opciones", get(registration::options))
+        .route("/api/registro/verificar", post(registration::verify))
         .route("/api/password/reset", post(registration::reset_request))
         .route(
             "/api/password/reset/confirm",
@@ -267,6 +268,7 @@ pub fn router(state: AppState) -> Router {
             )
         })
         .layer(axum::extract::DefaultBodyLimit::max(65536))
+        .layer(middleware::from_fn(same_origin))
         .layer(middleware::from_fn(security_headers))
         .with_state(state)
 }
@@ -334,6 +336,41 @@ async fn health(
         json!({"status":"ok", "runtime":"rust", "database":"postgresql"}),
     ))
 }
+/// AUTH-3 (login CSRF) and defence in depth for every state-changing request:
+/// a browser request coming from another site is refused before any handler
+/// runs. Clients that send neither header (curl, tests) still need the session
+/// CSRF token on authenticated routes.
+async fn same_origin(request: Request, next: Next) -> Response {
+    use axum::http::Method;
+    use axum::response::IntoResponse;
+    let headers = request.headers();
+    let unsafe_method = !matches!(
+        *request.method(),
+        Method::GET | Method::HEAD | Method::OPTIONS
+    );
+    let fetch_site = headers.get("sec-fetch-site").and_then(|v| v.to_str().ok());
+    // Behind a reverse proxy the public host may arrive as X-Forwarded-Host; a
+    // cross-site page cannot set that header without a CORS preflight.
+    let host = headers
+        .get("x-forwarded-host")
+        .or_else(|| headers.get("host"))
+        .and_then(|v| v.to_str().ok());
+    let origin_host = headers
+        .get("origin")
+        .and_then(|v| v.to_str().ok())
+        .map(|o| o.split_once("://").map_or(o, |(_, rest)| rest));
+    let foreign = matches!(fetch_site, Some("cross-site" | "same-site"))
+        || matches!((origin_host, host), (Some(o), Some(h)) if !o.eq_ignore_ascii_case(h))
+        || (origin_host.is_some() && host.is_none());
+    if unsafe_method && foreign {
+        return (
+            axum::http::StatusCode::FORBIDDEN,
+            Json(json!({"error":"Solicitud de otro sitio rechazada"})),
+        )
+            .into_response();
+    }
+    next.run(request).await
+}
 async fn security_headers(request: Request, next: Next) -> Response {
     let mut response = next.run(request).await;
     let headers: &mut HeaderMap = response.headers_mut();
@@ -344,7 +381,7 @@ async fn security_headers(request: Request, next: Next) -> Response {
         ("cache-control", "no-store"),
         (
             "content-security-policy",
-            // Styles and fonts only from the same CDNs the Django templates use; scripts stay local.
+            // Everything is served by the app itself: no CDNs.
             "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
         ),
     ] {

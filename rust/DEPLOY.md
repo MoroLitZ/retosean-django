@@ -13,7 +13,9 @@ Set these as environment variables. The binary also reads `.env` and `../.env`.
 | `RUST_DB_NAME` | Database name, e.g. `retosean_rust` | `retosean_rust` |
 | `RUST_BIND` | `127.0.0.1:8080` behind a proxy; `0.0.0.0:8080` in Docker | `127.0.0.1:8080` |
 | `RUST_SITE_URL` | Public address, e.g. `https://retos.example.edu.co`; used in email links | `http://<RUST_BIND>` |
-| `RUST_SECURE_COOKIE` | `true`, required on HTTPS | `false` |
+| `DB_PASSWORD_FILE` | Path to a file holding the password (Docker secret); wins over `DB_PASSWORD` | unset |
+| `RUST_SECURE_COOKIE` | `true`, required on HTTPS | `true` (set `false` only for local HTTP) |
+| `RUST_TRUST_PROXY` | `true` only behind a reverse proxy that sets `X-Forwarded-For`; the proxy must also keep `Host` or send `X-Forwarded-Host`, because cross-site POSTs are refused by Origin | `false` |
 | `RUST_MEDIA_DIR` | A persistent folder, e.g. `/data/media` | `.rust-media` |
 | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, `DEFAULT_FROM_EMAIL` | Your SMTP account | Without `EMAIL_HOST`, emails are only written to the log |
 

@@ -152,7 +152,8 @@ async function authRoute() {
   const alt =
     hash.startsWith("registro") ||
     hash === "recuperar" ||
-    hash.startsWith("restablecer/");
+    hash.startsWith("restablecer/") ||
+    hash.startsWith("verificar/");
   $("auth-login").hidden = alt;
   $("auth-alt").hidden = !alt;
   if (!alt) return;
@@ -209,9 +210,16 @@ async function authRoute() {
       );
       return;
     }
-    csrf = session.csrf;
-    location.hash = "dashboard";
-    await start();
+    if (session.correo_pendiente) {
+      // Estudiante/empresa: hay que confirmar el correo antes de poder entrar.
+      authResult(
+        "Revisa tu correo",
+        session.mensaje,
+        "envelope",
+        backToLogin(""),
+      );
+      return;
+    }
   };
   const emailOk = (v) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? "" : "Ingresa un correo válido.";
@@ -357,6 +365,26 @@ async function authRoute() {
       },
       backToLogin("¿Recordaste tu contraseña?"),
     );
+    return;
+  }
+  if (hash.startsWith("verificar/")) {
+    const token = hash.slice("verificar/".length);
+    try {
+      await api("/api/registro/verificar", { token });
+      authResult(
+        "Cuenta verificada",
+        "Tu correo fue confirmado. Ya puedes iniciar sesión en RetosEAN.",
+        "check-circle-fill",
+        backToLogin(""),
+      );
+    } catch (error) {
+      authResult(
+        "Enlace no válido",
+        error.message || "El enlace de verificación no es válido o ya fue usado.",
+        "exclamation-triangle-fill",
+        backToLogin(""),
+      );
+    }
     return;
   }
   const token = hash.slice("restablecer/".length);

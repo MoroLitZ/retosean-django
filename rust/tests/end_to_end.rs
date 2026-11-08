@@ -1653,6 +1653,50 @@ async fn native_http_lifecycle_and_permissions() {
         let (status, body, cookie) =
             request(&app, &public, "POST", "/api/registro", Some(academic)).await;
         assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["correo_pendiente"], true, "{body}");
+        assert!(
+            cookie.is_none(),
+            "self-registration no longer opens a session"
+        );
+        // Confirm the email through the emailed single-use link, then log in.
+        let verify_token: String = {
+            let mut found = None;
+            for _ in 0..50 {
+                found = inbox.lock().unwrap().iter().find_map(
+                    |(to, _, text): &(String, String, String)| {
+                        (to == "nueva@universidadean.edu.co" && text.contains("#verificar/"))
+                            .then(|| {
+                                text.split("#verificar/")
+                                    .nth(1)
+                                    .map(|t| t[..64].to_string())
+                            })
+                            .flatten()
+                    },
+                );
+                if found.is_some() {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+            found.expect("verification email sent")
+        };
+        ok(
+            &app,
+            &public,
+            "POST",
+            "/api/registro/verificar",
+            Some(json!({"token": verify_token})),
+        )
+        .await;
+        let (status, body, cookie) = request(
+            &app,
+            &public,
+            "POST",
+            "/api/login",
+            Some(json!({"username":"nueva.estudiante","password":"ClaveSegura2026!"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
         let registered = Session {
             cookie: cookie.unwrap(),
             csrf: body["csrf"].as_str().unwrap().into(),
@@ -2076,8 +2120,16 @@ z,ESTUDIANTE
 fn test_compose_exige_contrasena_de_base_de_datos() {
     let compose = include_str!("../compose.yml");
     assert!(
-        compose.matches("${RUST_POSTGRES_PASSWORD:?").count() == 2,
-        "db y web deben exigir la variable: {compose}"
+        compose.contains("${RUST_POSTGRES_PASSWORD:?"),
+        "compose debe exigir la variable: {compose}"
+    );
+    // OPS-6: la contraseña llega como Docker secret, no como variable visible.
+    assert_eq!(compose.matches("secrets: [db_password]").count(), 2);
+    assert!(compose.contains("POSTGRES_PASSWORD_FILE: /run/secrets/db_password"));
+    assert!(compose.contains("DB_PASSWORD_FILE: /run/secrets/db_password"));
+    assert!(
+        !compose.contains("DB_PASSWORD: "),
+        "sin contraseña en el entorno"
     );
     assert!(
         !compose.contains("rust-local-dev"),

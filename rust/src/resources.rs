@@ -74,7 +74,7 @@ pub fn display_value(table: &str, field: &str, value: &Value) -> String {
 pub fn scope(table: &str, user: &User) -> Option<String> {
     if user.admin() {
         return Some(
-            if table == "retos" {
+            if table == "retos" || table == "gastos" {
                 "t.eliminado_en IS NULL"
             } else {
                 "TRUE"
@@ -143,7 +143,7 @@ pub fn scope(table: &str, user: &User) -> Option<String> {
         "cierre_solicitudlogistica" => via_challenge("reto_id"),
         "invitados_hackaton" => format!("EXISTS(SELECT 1 FROM hackathons h JOIN retos r ON r.id=h.reto_id WHERE h.id=t.hackathon_id AND (({challenge}) OR h.estado IN ('publicado','en_curso','finalizado') OR EXISTS(SELECT 1 FROM jurados_hackaton j WHERE j.hackathon_id=h.id AND j.usuario_id={actor})))"),
         "presupuestos" if user.rol == "EMPRESA" => via_challenge("reto_id"),
-        "gastos" if user.rol == "EMPRESA" => format!("EXISTS(SELECT 1 FROM presupuestos b JOIN retos r ON r.id=b.reto_id WHERE b.id=t.presupuesto_id AND ({challenge}))"),
+        "gastos" if user.rol == "EMPRESA" => format!("t.eliminado_en IS NULL AND EXISTS(SELECT 1 FROM presupuestos b JOIN retos r ON r.id=b.reto_id WHERE b.id=t.presupuesto_id AND ({challenge}))"),
         "cierres_reto" => via_challenge("reto_id"),
         "hackathons" if user.rol=="ESTUDIANTE" => "t.estado IN ('publicado','en_curso','finalizado')".into(),
         "hackathons" => format!("({}) OR EXISTS(SELECT 1 FROM jurados_hackaton j WHERE j.hackathon_id=t.id AND j.usuario_id={actor})",via_challenge("reto_id")),

@@ -217,8 +217,11 @@ pub async fn register(
             ));
         }
     }
-    let id: i64 = sqlx::query_scalar("INSERT INTO usuarios(username,password,email,first_name,last_name,rol,telefono,is_active,activo,is_staff,is_superuser,date_joined,fecha_creacion) VALUES($1,$2,$3,$4,$5,$6,'',$7,$7,false,false,now(),now()) RETURNING id")
-        .bind(&input.username).bind(password).bind(&email).bind(&first_name).bind(input.last_name.trim()).bind(&rol).bind(!pending)
+    // Self-registered students/companies stay unverified until they open the link
+    // sent to their email (finding #1); pending professors are verified once an
+    // administrator approves them, so `correo_verificado` mirrors `pending`.
+    let id: i64 = sqlx::query_scalar("INSERT INTO usuarios(username,password,email,first_name,last_name,rol,telefono,is_active,activo,correo_verificado,is_staff,is_superuser,date_joined,fecha_creacion) VALUES($1,$2,$3,$4,$5,$6,'',$7,$7,$8,false,false,now(),now()) RETURNING id")
+        .bind(&input.username).bind(password).bind(&email).bind(&first_name).bind(input.last_name.trim()).bind(&rol).bind(!pending).bind(pending)
         .fetch_one(&mut *tx).await?;
     match rol.as_str() {
         "ESTUDIANTE" => {
@@ -253,7 +256,6 @@ pub async fn register(
     sqlx::query("INSERT INTO log_actividad(usuario_id,identificador,accion,detalle,realizado_por_id,creado_en) VALUES($1,$2,'CREACION','Registro desde la plataforma',$1,now())")
         .bind(id).bind(&input.username).execute(&mut *tx).await?;
     tx.commit().await?;
-    // enviar_bienvenida
     let name = if first_name.is_empty() {
         input.username.clone()
     } else {
@@ -261,24 +263,39 @@ pub async fn register(
             .trim()
             .to_string()
     };
-    let body = if pending {
-        format!(
-            "Hola {name}:\n\nRecibimos tu registro como profesor en RetosEAN. Tu cuenta está pendiente de aprobación por un administrador; te avisaremos cuando puedas ingresar.\n\nUsuario: {}\n\nEquipo RetosEAN",
-            input.username
-        )
-    } else {
-        format!(
-            "Hola {name}:\n\nTe damos la bienvenida a RetosEAN, la plataforma de retos Universidad-Empresa de la Universidad EAN.\n\nUsuario: {}\nIngresa en: {}/\n\nEquipo RetosEAN",
-            input.username,
-            site_url(&state.config)
-        )
-    };
-    mail::send_later(email, "Bienvenido a RetosEAN".into(), body);
     if pending {
         // No session: an administrator must approve the account first.
+        mail::send_later(
+            email,
+            "Bienvenido a RetosEAN".into(),
+            format!(
+                "Hola {name}:\n\nRecibimos tu registro como profesor en RetosEAN. Tu cuenta está pendiente de aprobación por un administrador; te avisaremos cuando puedas ingresar.\n\nUsuario: {}\n\nEquipo RetosEAN",
+                input.username
+            ),
+        );
         return Ok(Json(json!({"ok":true,"pendiente_aprobacion":true,"mensaje":"Tu cuenta de profesor fue creada y está pendiente de aprobación por un administrador."})).into_response());
     }
-    auth::start_session(&state, id).await
+    // ESTUDIANTE / EMPRESA (finding #1): no session until the email is proven.
+    // Reuse the reset-token mechanism (digested, expiring, single-use link).
+    let token = format!(
+        "{}{}",
+        uuid::Uuid::new_v4().simple(),
+        uuid::Uuid::new_v4().simple()
+    );
+    sqlx::query("INSERT INTO rust_email_verifications(token_hash,user_id,expires_at) VALUES($1,$2,now()+interval '3 days')")
+        .bind(auth::digest(&token))
+        .bind(id)
+        .execute(&state.pool)
+        .await?;
+    mail::send_later(
+        email,
+        "Confirma tu correo de RetosEAN".into(),
+        format!(
+            "Hola {name}:\n\nGracias por registrarte en RetosEAN.\n\nPara activar tu cuenta, confirma tu correo abriendo este enlace:\n\n{}/#verificar/{token}\n\nSi no creaste esta cuenta, ignora este mensaje.\n\n— Equipo RetosEAN",
+            site_url(&state.config)
+        ),
+    );
+    Ok(Json(json!({"ok":true,"correo_pendiente":true,"mensaje":"Revisa tu correo para confirmar tu cuenta antes de iniciar sesión."})).into_response())
 }
 
 #[derive(Deserialize)]
@@ -418,6 +435,44 @@ pub async fn reset_confirm(
         .execute(&mut *tx)
         .await?;
     sqlx::query("DELETE FROM rust_sessions WHERE user_id=$1")
+        .bind(user)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(Json(json!({"ok": true})))
+}
+
+#[derive(Deserialize)]
+pub struct VerifyConfirm {
+    token: String,
+}
+
+/// POST (public): confirms the email of a self-registered account and consumes
+/// the single-use link (finding #1). No session is opened here; the user logs in
+/// afterwards.
+pub async fn verify(
+    State(state): State<AppState>,
+    Json(input): Json<VerifyConfirm>,
+) -> Result<Json<Value>> {
+    if input.token.len() != 64 {
+        return Err(AppError::bad(
+            "El enlace de verificación no es válido o ya fue usado.",
+        ));
+    }
+    let mut tx = state.pool.begin().await?;
+    // Consume the token atomically so a concurrent/next attempt loses the race.
+    let consumed: Option<i64> = sqlx::query_scalar(
+        "DELETE FROM rust_email_verifications WHERE token_hash=$1 AND expires_at>now() RETURNING user_id",
+    )
+    .bind(auth::digest(&input.token))
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some(user) = consumed else {
+        return Err(AppError::bad(
+            "El enlace de verificación no es válido o ya fue usado.",
+        ));
+    };
+    sqlx::query("UPDATE usuarios SET correo_verificado=true WHERE id=$1 AND is_active AND activo")
         .bind(user)
         .execute(&mut *tx)
         .await?;

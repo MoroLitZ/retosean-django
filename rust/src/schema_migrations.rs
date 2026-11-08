@@ -19,6 +19,14 @@ pub const MIGRATIONS: &[(&str, &str)] = &[
         "0004_hot_indexes",
         include_str!("../sql/migrations/0004_hot_indexes.sql"),
     ),
+    (
+        "0005_integridad_cruzada",
+        include_str!("../sql/migrations/0005_integridad_cruzada.sql"),
+    ),
+    (
+        "0006_verificacion_correo",
+        include_str!("../sql/migrations/0006_verificacion_correo.sql"),
+    ),
 ];
 
 const TABLE: &str = "CREATE TABLE IF NOT EXISTS rust_schema_migrations(name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())";

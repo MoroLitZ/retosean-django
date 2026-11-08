@@ -1,8 +1,10 @@
 # CFG-07: sin secretos por defecto débiles; RUST_POSTGRES_PASSWORD se toma del
 # .env y es obligatorio definirlo (compose falla al arrancar si falta).
-# OPS-6: la contraseña viaja en variables de entorno de ambos servicios; pasar
-# a Docker secrets requiere que la app lea DB_PASSWORD de un fichero (config.rs),
-# cambio que no pertenece a este paquete.
+# OPS-6: la contraseña llega a ambos servicios como Docker secret (fichero en
+# /run/secrets), no como variable de entorno visible en `docker inspect`.
+# CFG-07: compose se niega a arrancar si falta la variable (la interpolación
+# de este campo de extensión falla antes de crear nada).
+x-db-password-required: ${RUST_POSTGRES_PASSWORD:?Definir RUST_POSTGRES_PASSWORD en el .env}
 services:
   db:
     image: postgres:18@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42
@@ -10,7 +12,8 @@ services:
     environment:
       POSTGRES_DB: retosean_rust
       POSTGRES_USER: retosean
-      POSTGRES_PASSWORD: ${RUST_POSTGRES_PASSWORD:?Definir RUST_POSTGRES_PASSWORD en el .env}
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets: [db_password]
     volumes:
       - rust_pgdata:/var/lib/postgresql
     healthcheck:
@@ -39,8 +42,9 @@ services:
       DB_HOST: db
       DB_PORT: "5432"
       DB_USER: retosean
-      DB_PASSWORD: ${RUST_POSTGRES_PASSWORD:?Definir RUST_POSTGRES_PASSWORD en el .env}
+      DB_PASSWORD_FILE: /run/secrets/db_password
       RUST_DB_NAME: retosean_rust
+    secrets: [db_password]
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
@@ -48,6 +52,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
+secrets:
+  db_password:
+    environment: RUST_POSTGRES_PASSWORD
 volumes:
   rust_pgdata:
   rust_media:

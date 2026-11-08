@@ -34,12 +34,18 @@ impl Config {
                 "RUST_SECURE_COOKIE is false; session cookies will not carry the Secure attribute"
             );
         }
+        // OPS-6: DB_PASSWORD_FILE (a Docker/Kubernetes secret) wins over the
+        // DB_PASSWORD variable, so the password never shows in the environment.
+        let password = match std::env::var("DB_PASSWORD_FILE") {
+            Ok(path) => read_secret(std::path::Path::new(&path))?,
+            Err(_) => get("DB_PASSWORD", ""),
+        };
         Ok(Self {
             database: PgConnectOptions::new()
                 .host(&get("DB_HOST", "localhost"))
                 .port(get("DB_PORT", "5432").parse()?)
                 .username(&get("DB_USER", "retosean"))
-                .password(&get("DB_PASSWORD", ""))
+                .password(&password)
                 .database(&database_name),
             database_name,
             bind: get("RUST_BIND", "127.0.0.1:8080").parse()?,
@@ -47,5 +53,26 @@ impl Config {
             trust_proxy: get("RUST_TRUST_PROXY", "false") == "true",
             media_root: get("RUST_MEDIA_DIR", ".rust-media").into(),
         })
+    }
+}
+/// A secret file's contents without the trailing newline editors and
+/// `docker secret` tooling usually add.
+fn read_secret(path: &std::path::Path) -> Result<String, String> {
+    std::fs::read_to_string(path)
+        .map(|text| text.trim_end_matches(['\r', '\n']).to_string())
+        .map_err(|e| format!("DB_PASSWORD_FILE ({}): {e}", path.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn read_secret_quita_el_salto_final() {
+        let path = std::env::temp_dir().join(format!("retosean-secret-{}", std::process::id()));
+        std::fs::write(&path, "s3creta \r\n").unwrap();
+        assert_eq!(super::read_secret(&path).unwrap(), "s3creta ");
+        std::fs::write(&path, "s3creta").unwrap();
+        assert_eq!(super::read_secret(&path).unwrap(), "s3creta");
+        std::fs::remove_file(&path).unwrap();
+        assert!(super::read_secret(&path).is_err());
     }
 }

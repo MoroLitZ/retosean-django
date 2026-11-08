@@ -1,7 +1,7 @@
 use crate::{
     AppState, auth,
     error::{AppError, Result},
-    workflows::notify,
+    workflows::{history, notify},
 };
 use axum::{
     Json,
@@ -130,7 +130,7 @@ async fn amounts(
     tx: &mut Transaction<'_, Postgres>,
     id: i64,
 ) -> Result<(Decimal, Decimal, Decimal)> {
-    Ok(sqlx::query_as("SELECT b.monto_total,COALESCE(sum(g.monto) FILTER (WHERE g.estado='COMPROMETIDO'),0),COALESCE(sum(g.monto) FILTER (WHERE g.estado<>'COMPROMETIDO'),0) FROM presupuestos b LEFT JOIN gastos g ON g.presupuesto_id=b.id WHERE b.id=$1 GROUP BY b.id")
+    Ok(sqlx::query_as("SELECT b.monto_total,COALESCE(sum(g.monto) FILTER (WHERE g.estado='COMPROMETIDO'),0),COALESCE(sum(g.monto) FILTER (WHERE g.estado<>'COMPROMETIDO'),0) FROM presupuestos b LEFT JOIN gastos g ON g.presupuesto_id=b.id AND g.eliminado_en IS NULL WHERE b.id=$1 GROUP BY b.id")
         .bind(id).fetch_one(&mut **tx).await?)
 }
 /// BIZ-4: whether a budget's reto still admits money movements. set_budget only
@@ -214,11 +214,12 @@ pub async fn execute(
         return Err(AppError::forbidden());
     }
     let mut tx = state.pool.begin().await?;
-    let row: Option<(i64, String)> =
-        sqlx::query_as("SELECT presupuesto_id,estado FROM gastos WHERE id=$1 FOR UPDATE")
-            .bind(gasto)
-            .fetch_optional(&mut *tx)
-            .await?;
+    let row: Option<(i64, String)> = sqlx::query_as(
+        "SELECT presupuesto_id,estado FROM gastos WHERE id=$1 AND eliminado_en IS NULL FOR UPDATE",
+    )
+    .bind(gasto)
+    .fetch_optional(&mut *tx)
+    .await?;
     let (budget, estado) = row.ok_or_else(AppError::not_found)?;
     if estado != "COMPROMETIDO" {
         return Ok(Json(
@@ -239,7 +240,8 @@ pub async fn execute(
         json!({"estado":"EJECUTADO","mensaje":"Gasto marcado como ejecutado."}),
     ))
 }
-/// eliminar_gasto: removing an expense can drop below the threshold again.
+/// eliminar_gasto: logical delete (N98); the expense stays auditable and no
+/// longer counts against the budget, so the threshold can re-arm.
 pub async fn delete(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -250,12 +252,28 @@ pub async fn delete(
         return Err(AppError::forbidden());
     }
     let mut tx = state.pool.begin().await?;
-    let budget: Option<i64> =
-        sqlx::query_scalar("DELETE FROM gastos WHERE id=$1 RETURNING presupuesto_id")
-            .bind(gasto)
-            .fetch_optional(&mut *tx)
-            .await?;
-    check_threshold(&mut tx, budget.ok_or_else(AppError::not_found)?).await?;
+    let row: Option<(i64, String)> = sqlx::query_as(
+        "SELECT presupuesto_id,estado FROM gastos WHERE id=$1 AND eliminado_en IS NULL FOR UPDATE",
+    )
+    .bind(gasto)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let (budget, estado) = row.ok_or_else(AppError::not_found)?;
+    sqlx::query("UPDATE gastos SET eliminado_en=now() WHERE id=$1")
+        .bind(gasto)
+        .execute(&mut *tx)
+        .await?;
+    history(
+        &mut tx,
+        ("presupuesto", "gasto"),
+        gasto,
+        &estado,
+        "eliminado",
+        user.id,
+        "Gasto eliminado.",
+    )
+    .await?;
+    check_threshold(&mut tx, budget).await?;
     tx.commit().await?;
     Ok(Json(json!({"ok":true,"mensaje":"Gasto eliminado."})))
 }
@@ -269,7 +287,7 @@ pub async fn summary(
     let mut tx = state.pool.begin().await?;
     let (total, committed, executed) = amounts(&mut tx, id).await?;
     let pct = percent(total, committed + executed);
-    let expenses: Value = sqlx::query_scalar("SELECT COALESCE(jsonb_agg(jsonb_build_object('id',id,'categoria',categoria,'estado',estado,'monto',monto::text,'descripcion',descripcion,'creado_en',creado_en) ORDER BY creado_en,id),'[]') FROM gastos WHERE presupuesto_id=$1")
+    let expenses: Value = sqlx::query_scalar("SELECT COALESCE(jsonb_agg(jsonb_build_object('id',id,'categoria',categoria,'estado',estado,'monto',monto::text,'descripcion',descripcion,'creado_en',creado_en) ORDER BY creado_en,id),'[]') FROM gastos WHERE presupuesto_id=$1 AND eliminado_en IS NULL")
         .bind(id).fetch_one(&mut *tx).await?;
     let reto: i64 = sqlx::query_scalar("SELECT reto_id FROM presupuestos WHERE id=$1")
         .bind(id)
@@ -313,9 +331,9 @@ pub async fn export(
     let mut tx = state.pool.begin().await?;
     let (total, committed, executed) = amounts(&mut tx, id).await?;
     let pct = percent(total, committed + executed).round_dp(2);
-    let by_category: Vec<(String, Decimal, Decimal)> = sqlx::query_as("SELECT c,COALESCE(sum(g.monto) FILTER (WHERE g.estado='COMPROMETIDO'),0),COALESCE(sum(g.monto) FILTER (WHERE g.estado<>'COMPROMETIDO'),0) FROM unnest(ARRAY['REFRIGERIOS','MATERIALES','IMPRESIONES','ESPACIOS','OTROS']) WITH ORDINALITY k(c,n) LEFT JOIN gastos g ON g.presupuesto_id=$1 AND g.categoria=k.c GROUP BY k.c,k.n ORDER BY k.n")
+    let by_category: Vec<(String, Decimal, Decimal)> = sqlx::query_as("SELECT c,COALESCE(sum(g.monto) FILTER (WHERE g.estado='COMPROMETIDO'),0),COALESCE(sum(g.monto) FILTER (WHERE g.estado<>'COMPROMETIDO'),0) FROM unnest(ARRAY['REFRIGERIOS','MATERIALES','IMPRESIONES','ESPACIOS','OTROS']) WITH ORDINALITY k(c,n) LEFT JOIN gastos g ON g.presupuesto_id=$1 AND g.categoria=k.c AND g.eliminado_en IS NULL GROUP BY k.c,k.n ORDER BY k.n")
         .bind(id).fetch_all(&mut *tx).await?;
-    let expenses: Vec<(String, String, String, String, Decimal, String, bool)> = sqlx::query_as("SELECT to_char(g.creado_en AT TIME ZONE 'America/Bogota','DD/MM/YYYY'),g.categoria,g.estado,COALESCE(g.descripcion,''),g.monto,COALESCE(u.username,''),COALESCE(g.comprobante,'')<>'' FROM gastos g LEFT JOIN usuarios u ON u.id=g.registrado_por_id WHERE g.presupuesto_id=$1 ORDER BY g.creado_en,g.id")
+    let expenses: Vec<(String, String, String, String, Decimal, String, bool)> = sqlx::query_as("SELECT to_char(g.creado_en AT TIME ZONE 'America/Bogota','DD/MM/YYYY'),g.categoria,g.estado,COALESCE(g.descripcion,''),g.monto,COALESCE(u.username,''),COALESCE(g.comprobante,'')<>'' FROM gastos g LEFT JOIN usuarios u ON u.id=g.registrado_por_id WHERE g.presupuesto_id=$1 AND g.eliminado_en IS NULL ORDER BY g.creado_en,g.id")
         .bind(id).fetch_all(&mut *tx).await?;
     let label = |field: &str, value: &str| crate::dashboard::etiqueta("gastos", field, value);
     // agregar_fila: control characters never reach the file.
@@ -343,7 +361,8 @@ pub async fn export(
                 "No se pudo generar el archivo Excel".into(),
             )
         };
-        let number = |d: Decimal| d.to_string().parse::<f64>().unwrap_or(0.);
+        let number = |d: Decimal| d.round_dp(2).to_string().parse::<f64>().unwrap_or(0.);
+        let money = rust_xlsxwriter::Format::new().set_num_format("#,##0.00");
         let mut book = rust_xlsxwriter::Workbook::new();
         let head = rust_xlsxwriter::Format::new()
             .set_bold()
@@ -377,7 +396,9 @@ pub async fn export(
             sheet
                 .write_string_with_format(row, 0, name, &bold)
                 .map_err(fail)?;
-            sheet.write_number(row, 1, number(value)).map_err(fail)?;
+            sheet
+                .write_number_with_format(row, 1, number(value), &money)
+                .map_err(fail)?;
             row += 1;
         }
         row += 1;
@@ -394,9 +415,15 @@ pub async fn export(
             sheet
                 .write_string(row, 0, label("categoria", category))
                 .map_err(fail)?;
-            sheet.write_number(row, 1, number(*c)).map_err(fail)?;
-            sheet.write_number(row, 2, number(*e)).map_err(fail)?;
-            sheet.write_number(row, 3, number(*c + *e)).map_err(fail)?;
+            sheet
+                .write_number_with_format(row, 1, number(*c), &money)
+                .map_err(fail)?;
+            sheet
+                .write_number_with_format(row, 2, number(*e), &money)
+                .map_err(fail)?;
+            sheet
+                .write_number_with_format(row, 3, number(*c + *e), &money)
+                .map_err(fail)?;
         }
         row += 2;
         for (c, name) in [
@@ -428,7 +455,9 @@ pub async fn export(
             sheet
                 .write_string(row, 3, clean(description))
                 .map_err(fail)?;
-            sheet.write_number(row, 4, number(*amount)).map_err(fail)?;
+            sheet
+                .write_number_with_format(row, 4, number(*amount), &money)
+                .map_err(fail)?;
             sheet.write_string(row, 5, by).map_err(fail)?;
             sheet
                 .write_string(row, 6, if *receipt { "Sí" } else { "No" })

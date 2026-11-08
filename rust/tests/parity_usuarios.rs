@@ -469,6 +469,27 @@ parity!(test_sitio_web_invalido_se_rechaza, |t| {
 parity!(test_la_empresa_edita_sus_datos_despues, |t| {
     t.ok(&t.anon, "POST", "/api/registro", Some(company(json!({}))))
         .await;
+    // The company account must confirm its email before logging in (#1).
+    let mut token = None;
+    for _ in 0..50 {
+        let mails = mails_to("contacto@andinas.co");
+        if let Some((_, _, text)) = mails.iter().find(|m| m.1.contains("Confirma tu correo")) {
+            token = text
+                .split("#verificar/")
+                .nth(1)
+                .map(|r| r[..64].to_string());
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    let token = token.expect("verification email sent");
+    t.ok(
+        &t.anon,
+        "POST",
+        "/api/registro/verificar",
+        Some(json!({"token": token})),
+    )
+    .await;
     let (code, session) = login_with(&t.app, "andinas", "Clave-Segura-2026").await;
     assert_eq!(code, 200);
     t.ok(&session, "POST", "/api/perfil", Some(json!({"first_name":"Soluciones Andinas","last_name":"","email":"contacto@andinas.co","telefono":"","razon_social":"Soluciones Andinas","sector_industrial":"Tecnologia","tipo_convocatoria":"RETO","area_responsable":"Transformacion digital","sitio_web":""}))).await;
@@ -580,14 +601,17 @@ parity!(
         );
     }
 );
-parity!(test_registro_estudiante_sigue_activo_y_con_sesion, |t| {
+parity!(test_registro_estudiante_requiere_verificar_correo, |t| {
     let data = json!({"tipo":"academico","rol":"ESTUDIANTE","username":"est.nueva","email":"est.nueva@universidadean.edu.co","password":"Clave-Segura-2026","password2":"Clave-Segura-2026","programa_id":PROGRAM,"semestre":3});
     let (code, body, cookie) = request(&t.app, &t.anon, "POST", "/api/registro", Some(data)).await;
     assert_eq!(code, 200, "{body}");
-    assert!(body["csrf"].as_str().is_some(), "{body}");
-    assert!(cookie.is_some(), "students still open a session");
     assert!(
-        t.bool("SELECT activo AND is_active FROM usuarios WHERE username='est.nueva'")
+        cookie.is_none(),
+        "students no longer open a session at registration"
+    );
+    assert_eq!(body["correo_pendiente"], true, "{body}");
+    assert!(
+        t.bool("SELECT activo AND is_active AND NOT correo_verificado FROM usuarios WHERE username='est.nueva'")
             .await
     );
 });

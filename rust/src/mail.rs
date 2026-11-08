@@ -12,9 +12,21 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 fn catalog() -> &'static Value {
     static EVENTS: OnceLock<Value> = OnceLock::new();
-    EVENTS.get_or_init(|| {
-        serde_json::from_str(include_str!("../events.json")).expect("bundled events")
-    })
+    EVENTS.get_or_init(|| parse_catalog(include_str!("../events.json")))
+}
+
+/// #93: parsing the bundled catalog cannot panic the server at runtime. A
+/// broken events.json is logged and degrades to an empty catalog: every event
+/// then uses Django's generic title (see `event`) and no email goes out until
+/// the file is fixed (`email_events` returns nothing).
+pub fn parse_catalog(text: &str) -> Value {
+    match serde_json::from_str(text) {
+        Ok(catalog) => catalog,
+        Err(error) => {
+            tracing::error!(%error, "invalid events.json; falling back to an empty catalog");
+            Value::Object(serde_json::Map::new())
+        }
+    }
 }
 
 /// (tipo, titulo, permite_email) of an event, with Django's generic fallback.
@@ -128,8 +140,10 @@ impl Mailer {
                 Ok(())
             }
             Mailer::Memory(sent) => {
+                // #93: a poisoned mutex (a panic while holding the lock) must
+                // not take down the caller; the buffer is still usable.
                 sent.lock()
-                    .unwrap()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
                     .push((to.into(), subject.into(), text.into()));
                 Ok(())
             }
@@ -186,14 +200,17 @@ impl Mailer {
                     return Err(format!("SMTP caido: {bad}"));
                 }
                 for address in to {
-                    sent.lock().unwrap().push((
-                        address.clone(),
-                        subject.into(),
-                        format!(
-                            "{text}
+                    // #93: same poisoned-mutex recovery as send().
+                    sent.lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .push((
+                            address.clone(),
+                            subject.into(),
+                            format!(
+                                "{text}
 [adjunto: {filename}]"
-                        ),
-                    ));
+                            ),
+                        ));
                 }
                 Ok(())
             }

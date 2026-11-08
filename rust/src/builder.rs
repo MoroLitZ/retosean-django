@@ -275,7 +275,7 @@ const REPORTS: [Report; 5] = [
             "coalesce(sum(monto) FILTER (WHERE estado='COMPROMETIDO'),0.00) comp,coalesce(sum(monto) FILTER (WHERE estado IN ('','EJECUTADO')),0.00) ejec,count(*) FILTER (WHERE estado NOT IN ('ANULADO','RECHAZADO','PENDIENTE')) n,",
             "coalesce(sum(monto) FILTER (WHERE categoria='REFRIGERIOS'),0.00) refr,coalesce(sum(monto) FILTER (WHERE categoria='MATERIALES'),0.00) mat,",
             "coalesce(sum(monto) FILTER (WHERE categoria='IMPRESIONES'),0.00) imp,coalesce(sum(monto) FILTER (WHERE categoria='ESPACIOS'),0.00) esp,",
-            "coalesce(sum(monto) FILTER (WHERE categoria='OTROS'),0.00) otr FROM gastos WHERE presupuesto_id=b.id) g WHERE TRUE {where}"
+            "coalesce(sum(monto) FILTER (WHERE categoria='OTROS'),0.00) otr FROM gastos WHERE presupuesto_id=b.id AND eliminado_en IS NULL) g WHERE TRUE {where}"
         ),
         order: "b.creado_en DESC, b.id DESC",
         filters: &[

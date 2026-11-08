@@ -40,7 +40,7 @@ impl User {
 }
 
 pub async fn init(pool: &PgPool) -> std::result::Result<(), sqlx::Error> {
-    sqlx::raw_sql("CREATE TABLE IF NOT EXISTS rust_sessions (token_hash TEXT PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE, csrf TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL); CREATE INDEX IF NOT EXISTS rust_sessions_expiry ON rust_sessions(expires_at); CREATE TABLE IF NOT EXISTS rust_login_attempts (subject TEXT NOT NULL, attempted_at TIMESTAMPTZ NOT NULL DEFAULT now()); CREATE INDEX IF NOT EXISTS rust_login_attempts_subject ON rust_login_attempts(subject, attempted_at); CREATE TABLE IF NOT EXISTS rust_password_resets (token_hash TEXT PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE, expires_at TIMESTAMPTZ NOT NULL);").execute(pool).await?;
+    sqlx::raw_sql("CREATE TABLE IF NOT EXISTS rust_sessions (token_hash TEXT PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE, csrf TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL); CREATE INDEX IF NOT EXISTS rust_sessions_expiry ON rust_sessions(expires_at); CREATE TABLE IF NOT EXISTS rust_login_attempts (subject TEXT NOT NULL, attempted_at TIMESTAMPTZ NOT NULL DEFAULT now()); CREATE INDEX IF NOT EXISTS rust_login_attempts_subject ON rust_login_attempts(subject, attempted_at); CREATE TABLE IF NOT EXISTS rust_password_resets (token_hash TEXT PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE, expires_at TIMESTAMPTZ NOT NULL); CREATE TABLE IF NOT EXISTS rust_email_verifications (token_hash TEXT PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE, expires_at TIMESTAMPTZ NOT NULL);").execute(pool).await?;
     Ok(())
 }
 pub fn digest(value: &str) -> String {
@@ -224,9 +224,11 @@ pub async fn login(
     // Resolve the account first: username and email then share one counter.
     // Inactive accounts are resolved too, so a correct password on one gets an
     // explicit message instead of "wrong password" (_mensaje_cuenta_inactiva).
-    let record: Option<(i64, String, String, Option<&'static str>)> =
+    let record: Option<(i64, String, String, Option<String>)> =
         sqlx::query_as::<_, (i64, String, String, Option<String>)>(
-            "SELECT u.id,u.username,u.password,CASE WHEN u.is_active AND u.activo THEN NULL \
+            "SELECT u.id,u.username,u.password,CASE \
+             WHEN u.is_active AND u.activo AND u.correo_verificado THEN NULL \
+             WHEN u.is_active AND u.activo AND NOT u.correo_verificado THEN 'SIN_VERIFICAR' \
              WHEN u.rol='EMPRESA' AND EXISTS(SELECT 1 FROM empresas e WHERE e.usuario_id=u.id AND e.estado_listas_restrictivas='RECHAZADO') THEN 'LISTAS' \
              WHEN u.rol='PROFESOR' AND u.last_login IS NULL THEN 'PENDIENTE' ELSE 'INHABILITADA' END \
              FROM usuarios u WHERE u.username=$1 OR (strpos($1,'@')>0 AND lower(u.email)=lower($1) AND (SELECT count(*) FROM usuarios WHERE lower(email)=lower($1))=1) ORDER BY u.username=$1 DESC LIMIT 1",
@@ -234,14 +236,7 @@ pub async fn login(
         .bind(&input.username)
         .fetch_optional(&state.pool)
         .await?
-        .map(|(id, account, hash, inactive)| {
-            let inactive = inactive.map(|reason| match reason.as_str() {
-                "LISTAS" => "Tu cuenta se encuentra inhabilitada debido a que la empresa aparece en listas restrictivas (Clinton/OFAC).",
-                "PENDIENTE" => "Tu cuenta está pendiente de aprobación por un administrador.",
-                _ => "Tu cuenta se encuentra inhabilitada. Contacta con el administrador de la plataforma.",
-            });
-            (id, account, hash, inactive)
-        });
+        ;
     let subject = match &record {
         Some((id, ..)) => digest(&format!("cuenta:{id}")),
         None => digest(&input.username.to_lowercase()),
@@ -311,19 +306,32 @@ pub async fn login(
             "Usuario o contraseña incorrectos".into(),
         ));
     }
-    if let Some(message) = inactive {
+    if let Some(reason) = inactive {
         // Right password, but the account cannot sign in: no session is opened.
-        // The specific reason is kept in the server log only, never disclosed.
+        let message = match reason.as_str() {
+            "LISTAS" => {
+                "Tu cuenta se encuentra inhabilitada debido a que la empresa aparece en listas restrictivas (Clinton/OFAC)."
+            }
+            "PENDIENTE" => "Tu cuenta está pendiente de aprobación por un administrador.",
+            "SIN_VERIFICAR" => "Confirma tu correo antes de iniciar sesión",
+            _ => {
+                "Tu cuenta se encuentra inhabilitada. Contacta con el administrador de la plataforma."
+            }
+        };
         tracing::warn!(
             user_id = id,
             reason = message,
             "login rejected: inactive account"
         );
         log_access(&state, Some(id), &account, "LOGIN_FALLIDO", ip.as_deref()).await?;
-        return Err(AppError(
-            StatusCode::UNAUTHORIZED,
-            "Usuario o contraseña incorrectos".into(),
-        ));
+        // Only the email-verification reason is shown to the user (they must
+        // know to check their inbox); every other inactive reason stays generic.
+        let shown = if reason == "SIN_VERIFICAR" {
+            message
+        } else {
+            "Usuario o contraseña incorrectos"
+        };
+        return Err(AppError(StatusCode::UNAUTHORIZED, shown.into()));
     }
     sqlx::query("DELETE FROM rust_login_attempts WHERE subject=$1")
         .bind(&subject)

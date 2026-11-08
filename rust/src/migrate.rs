@@ -45,6 +45,22 @@ DROP INDEX IF EXISTS "jurados_hackaton_email_ci_uniq";
 ALTER TABLE "equipos" DROP CONSTRAINT IF EXISTS "equipos_reto_nombre_unique";
 ALTER TABLE "equipos_reto_academico" DROP CONSTRAINT IF EXISTS "equipos_reto_academico_reto_nombre_equipo_unique";
 ALTER TABLE "documentos_empresas" DROP CONSTRAINT IF EXISTS "documentos_empresas_tipo_documento_fk_tipos_documento_legal";
+-- QA package S: cross-table integrity triggers (N20, N51, N58, N59, N60) must not
+-- fire while legacy rows are copied; they are re-created after the copy.
+DROP TRIGGER IF EXISTS "trg_votaciones_hackaton_integridad" ON "votaciones_hackaton";
+DROP TRIGGER IF EXISTS "trg_evaluacioncriterio_puntaje_maximo" ON "evaluacion_evaluacioncriterio";
+DROP TRIGGER IF EXISTS "trg_inscripciones_hackaton_reto" ON "inscripciones_hackaton";
+DROP TRIGGER IF EXISTS "trg_entregables_equipo_reto" ON "entregables";
+DROP TRIGGER IF EXISTS "trg_estudiantes_usuario_rol" ON "estudiantes";
+DROP TRIGGER IF EXISTS "trg_profesores_usuario_rol" ON "profesores";
+DROP TRIGGER IF EXISTS "trg_postulaciones_estudiante_rol" ON "postulaciones";
+DROP TRIGGER IF EXISTS "trg_entregables_estudiante_rol" ON "entregables";
+DROP TRIGGER IF EXISTS "trg_miembros_equipo_estudiante_rol" ON "miembros_equipo";
+DROP TRIGGER IF EXISTS "trg_equipos_academicos_estudiante_rol" ON "equipos_reto_academico_estudiantes";
+DROP TRIGGER IF EXISTS "trg_integraciones_profesor_rol" ON "integraciones_academicas";
+DROP TRIGGER IF EXISTS "trg_evaluaciones_profesor_rol" ON "evaluaciones";
+DROP TRIGGER IF EXISTS "trg_rubrica_creador_rol" ON "evaluacion_rubrica";
+DROP TRIGGER IF EXISTS "trg_equipos_academicos_profesor_rol" ON "equipos_reto_academico_profesores";
 "#;
 
 pub struct Summary {
@@ -154,6 +170,11 @@ pub async fn import_django(
             sqlx::raw_sql(include_str!("../sql/migrations/0003_unique_and_fk.sql"))
                 .execute(&mut *tx)
                 .await?;
+            sqlx::raw_sql(include_str!(
+                "../sql/migrations/0005_integridad_cruzada.sql"
+            ))
+            .execute(&mut *tx)
+            .await?;
             Ok(())
         }
         Err(error) => Err(error),
