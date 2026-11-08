@@ -138,6 +138,35 @@ Para no depender del veredicto de un solo agente, se repitió la verificación c
 
 - **Flujo de escritura del profesor en el navegador** (binario release): el profesor creó una unidad de estudio desde el formulario real (POST 200 y visible en la lista). Este recorrido encontró y corrigió dos errores de interfaz: el formulario de unidad exigía un PDF aunque el servidor lo trata como opcional (una edición obligaba a volver a subirlo), y la SPA ofrecía gestionar unidades a cualquier profesor aunque el servidor exige facultad asignada; ahora `/api/me` expone `gestiona_unidades` y la interfaz lo respeta (`qa_academic::test_me_indica_si_gestiona_unidades`).
 
+## 5c. Ronda 3: auditoría independiente por dominios
+
+Seis auditores independientes (InferHub) revisaron autenticación, datos, flujos, hackathon, ciclo de vida
+y frontend. El revisor principal verificó cada hallazgo contra el código y las pruebas existentes.
+
+| Hallazgo | Veredicto | Corrección | Prueba (`tests/qa_ronda3.rs` salvo indicación) |
+|---|---|---|---|
+| Jurado vota por un equipo que dirige, integra o asesora | Corregido | `hackathon.rs` `vote` responde 403 por conflicto de interés | `parity_hackaton::test_jurado_no_vota_por_equipo_que_asesora`, `end_to_end` |
+| Profesor gestiona hackathon de un reto eliminado | Corregido | `event.rs` `is_manager` exige `retos.eliminado_en IS NULL` | `test_profesor_no_gestiona_hackathon_de_reto_eliminado` |
+| Profesor reemplaza el equipo de integración de un reto eliminado | Corregido | `team.rs` `update` filtra retos eliminados | `test_profesor_no_edita_equipo_de_reto_eliminado` |
+| Edición de equipo académico con hackathon finalizado | Corregido | `edit_team` se bloquea como ya lo hacía `delete_team` | `test_no_edita_equipo_academico_con_hackathon_finalizado` |
+| Aceptar inscripción fuera de la etapa de inscripción | Corregido | `registration_state` aplica `window()` al aceptar (sin etapa fechada sigue abierto) | `test_gestor_no_acepta_inscripcion_fuera_de_la_etapa` |
+| Decisiones sobre postulaciones de retos cancelados/finalizados | Corregido | `application_state` rechaza ACEPTADA/RECHAZADA; el retiro del estudiante sigue permitido | `test_postulaciones_congeladas_en_reto_cancelado` |
+| Notificaciones a profesores con integración no aprobada | Corregido | `companies.rs` `comment` y la cancelación filtran `estado IN ('aprobada','publicada')` | `test_comentario_no_notifica_…`, `test_cancelacion_no_notifica_…` |
+| Gasto concurrente con la cancelación del reto | Corregido | `admite_gastos` bloquea la fila del reto (`FOR UPDATE OF r`); la cancelación no toca presupuestos, sin riesgo de interbloqueo | `test_cancelacion_no_atropella_gasto_en_vuelo` |
+| Reinvocar el cierre reescribe el expediente congelado | Corregido | `lifecycle.rs` `close` es idempotente sobre un reto finalizado | `test_reinvocar_cierre_no_reescribe_el_cierre` |
+| Reemplazar un entregable deja el archivo anterior huérfano | Corregido | `media.rs` `submit` borra el archivo previo tras el commit | `test_reemplazar_entregable_elimina_archivo_anterior` |
+| Sin límite de cantidad/tamaño agregado de adjuntos por solicitud | Corregido | máximo 10 archivos, 100 MB agregados y 1 MB por campo de texto | `test_carga_rechaza_exceso_de_archivos` |
+| Fórmulas en exportaciones CSV/XLSX | Ya mitigado | `csv_cell` antepone `'`; XLSX escribe cadenas | `csv_cell_neutralizes_formulas`, `domain::tests::csv_is_escaped_and_formula_safe` |
+| Flujos c1: `VERIFICADA` habilita operación | Rechazado | solo afecta un conteo del tablero y el formulario de revisión; `operating_reasons` no lo usa y una prueba de paridad fija el comportamiento | — |
+| Auth a1: enumeración de correos vía `POST /api/perfil` (usuario autenticado) | Aceptado como bajo | requiere sesión y el registro ya revela si un correo existe; sin acceso a datos ajenos | — |
+| Datos b1: fórmulas dentro de CSV subidos por usuarios | Rechazado (riesgo residual) | el archivo es contenido del autor, se entrega íntegro como `attachment` solo a participantes autorizados; reescribirlo corrompería datos. Las exportaciones generadas por la app sí neutralizan fórmulas | — |
+| Frontend | Sin hallazgos explotables | — | — |
+
+Las 11 pruebas de regresión fallan con el código anterior (verificado revirtiendo `src/`) y pasan con las correcciones.
+Cobertura de rutas: 107 rutas, todas referenciadas por al menos una prueba; todas las llamadas del SPA corresponden a rutas.
+Suite completa: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` y
+`cargo test --locked --no-fail-fast -- --include-ignored` en verde (498 pruebas, 0 fallos).
+
 ## 6. Tabla completa de los 128 hallazgos
 
 | N | Severidad | Área | Hallazgo (breve) | Veredicto | Nota o prueba de regresión |
