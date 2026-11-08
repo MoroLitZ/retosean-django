@@ -147,6 +147,7 @@ function authResult(title, message, iconName, footer) {
   if (footer) box.append(footer);
 }
 
+let verifiedToken = null;
 async function authRoute() {
   const hash = location.hash.slice(1);
   const alt =
@@ -369,6 +370,10 @@ async function authRoute() {
   }
   if (hash.startsWith("verificar/")) {
     const token = hash.slice("verificar/".length);
+    // Startup routes twice (showLogin and route); the single-use token must be
+    // sent once, or the second call would replace the success with an error.
+    if (verifiedToken === token) return;
+    verifiedToken = token;
     try {
       await api("/api/registro/verificar", { token });
       authResult(
