@@ -533,7 +533,7 @@ pub async fn comment(
         .await?;
     if user.rol == "EMPRESA" {
         let mut recipients: Vec<i64> = sqlx::query_scalar(
-            "SELECT DISTINCT profesor_id FROM integraciones_academicas WHERE reto_id=$1",
+            "SELECT DISTINCT profesor_id FROM integraciones_academicas WHERE reto_id=$1 AND estado IN ('aprobada','publicada')",
         )
         .bind(reto)
         .fetch_all(&mut *tx)

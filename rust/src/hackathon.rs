@@ -278,6 +278,15 @@ pub async fn edit_team(
     validate_team(&state, &mut input).await?;
     let mut tx = state.pool.begin().await?;
     let (reto, mirror) = academic_team(&mut tx, id, &user).await?;
+    let closed: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM hackathons WHERE reto_id=$1 AND (resultados_publicados OR estado='finalizado'))")
+        .bind(reto)
+        .fetch_one(&mut *tx)
+        .await?;
+    if closed {
+        return Err(AppError::bad(
+            "No se puede editar el equipo: el hackathon ya finalizó.",
+        ));
+    }
     sqlx::query("UPDATE equipos_reto_academico SET nombre_equipo=$2 WHERE id=$1")
         .bind(id)
         .bind(input.nombre_equipo.trim())
@@ -739,6 +748,11 @@ pub async fn registration_state(
     manager(&mut tx, reto, &user).await?;
     if ["finalizado", "cancelado"].contains(&status.as_str()) {
         return Err(AppError::bad("Hackathon cerrado"));
+    }
+    // Accepting a registration respects the inscription window; without a dated
+    // stage the window fails open (as `register` and the parity tests assert).
+    if input.estado == "ACEPTADA" {
+        window(&mut tx, hack, "inscripcion").await?;
     }
     let from: String =
         sqlx::query_scalar("SELECT estado FROM inscripciones_hackaton WHERE id=$1 FOR UPDATE")

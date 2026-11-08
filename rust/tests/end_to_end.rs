@@ -1248,6 +1248,27 @@ async fn native_http_lifecycle_and_permissions() {
             Some(json!({"estado":"ACEPTADA"})),
         )
         .await;
+        // A juror who advises the team (invited expert) cannot vote for it.
+        assert_eq!(
+            request(
+                &app,
+                &expert,
+                "POST",
+                &format!("/api/hackathons/{hack}/votar"),
+                Some(json!({"equipo_id":team,"puntaje":"4.75"}))
+            )
+            .await
+            .0,
+            StatusCode::FORBIDDEN
+        );
+        ok(
+            &app,
+            &teacher,
+            "POST",
+            &format!("/api/equipos-academicos/{academic}"),
+            Some(json!({"nombre_equipo":"Equipo Rust editado","profesores":[3],"estudiantes":[4]})),
+        )
+        .await;
         ok(
             &app,
             &expert,

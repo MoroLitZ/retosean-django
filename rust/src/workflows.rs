@@ -353,7 +353,7 @@ Número de reto asignado: {code}."
         }
         if input.estado == "cancelado" {
             let teachers: Vec<i64> = sqlx::query_scalar(
-                "SELECT DISTINCT profesor_id FROM integraciones_academicas WHERE reto_id=$1",
+                "SELECT DISTINCT profesor_id FROM integraciones_academicas WHERE reto_id=$1 AND estado IN ('aprobada','publicada')",
             )
             .bind(id)
             .fetch_all(&mut *tx)
@@ -652,8 +652,9 @@ pub async fn application_state(
     let user = auth::current(&state, &headers, true).await?;
     domain::max_chars(&input.comentario, 4000, "Comentario")?;
     let mut tx = state.pool.begin().await?;
-    let row: Option<(String,i64,i64,i64,String)> = sqlx::query_as("SELECT p.estado,p.estudiante_id,p.reto_id,r.empresa_id,r.titulo FROM postulaciones p JOIN retos r ON r.id=p.reto_id WHERE p.id=$1 AND r.eliminado_en IS NULL FOR UPDATE OF p,r").bind(id).fetch_optional(&mut *tx).await?;
-    let (from, student, challenge, owner, title) = row.ok_or_else(AppError::not_found)?;
+    let row: Option<(String,i64,i64,i64,String,String)> = sqlx::query_as("SELECT p.estado,p.estudiante_id,p.reto_id,r.empresa_id,r.titulo,r.estado FROM postulaciones p JOIN retos r ON r.id=p.reto_id WHERE p.id=$1 AND r.eliminado_en IS NULL FOR UPDATE OF p,r").bind(id).fetch_optional(&mut *tx).await?;
+    let (from, student, challenge, owner, title, reto_state) =
+        row.ok_or_else(AppError::not_found)?;
     let teacher: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2 AND estado IN ('aprobada','publicada'))",
     )
@@ -670,6 +671,15 @@ pub async fn application_state(
     };
     if !allowed {
         return Err(AppError::forbidden());
+    }
+    // WF-4: finalizing or cancelling a reto freezes its postulaciones; accept or
+    // reject decisions (unlike a student's withdrawal) must not reopen the reto.
+    if matches!(reto_state.as_str(), "cancelado" | "finalizado")
+        && matches!(input.estado.as_str(), "ACEPTADA" | "RECHAZADA")
+    {
+        return Err(AppError::bad(
+            "El reto está cerrado; las postulaciones están congeladas.",
+        ));
     }
     domain::transition("MAQUINA_POSTULACION", &from, &input.estado)?;
     sqlx::query("UPDATE postulaciones SET estado=$2 WHERE id=$1")

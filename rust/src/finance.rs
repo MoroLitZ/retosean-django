@@ -137,8 +137,21 @@ async fn amounts(
 /// validates the state at creation time; the reto can be cancelled or deleted
 /// afterwards, so gastos must not keep flowing into it.
 async fn admite_gastos(tx: &mut Transaction<'_, Postgres>, presupuesto: i64) -> Result<bool> {
-    Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM presupuestos p JOIN retos r ON r.id=p.reto_id WHERE p.id=$1 AND r.eliminado_en IS NULL AND r.estado NOT IN ('borrador','cancelado'))")
-        .bind(presupuesto).fetch_one(&mut **tx).await?)
+    // Lock the reto row so a concurrent cancellation (challenge_state takes
+    // FOR UPDATE on retos) cannot slip in between this check and the commit.
+    let reto: Option<i64> = sqlx::query_scalar(
+        "SELECT r.id FROM presupuestos p JOIN retos r ON r.id=p.reto_id WHERE p.id=$1 FOR UPDATE OF r",
+    )
+    .bind(presupuesto)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let Some(reto) = reto else {
+        return Ok(false);
+    };
+    Ok(sqlx::query_scalar("SELECT eliminado_en IS NULL AND estado NOT IN ('borrador','cancelado') FROM retos WHERE id=$1")
+        .bind(reto)
+        .fetch_one(&mut **tx)
+        .await?)
 }
 fn percent(total: Decimal, assigned: Decimal) -> Decimal {
     if total == Decimal::ZERO {

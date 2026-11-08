@@ -249,7 +249,7 @@ pub async fn update(
     let user = auth::current(&state, &headers, true).await?;
     validate(&team)?;
     let mut tx = state.pool.begin().await?;
-    let row: Option<(i64, i64, String, String, String)> = sqlx::query_as("SELECT i.reto_id,i.profesor_id,i.estado,r.estado,r.titulo FROM integraciones_academicas i JOIN retos r ON r.id=i.reto_id WHERE i.id=$1 FOR UPDATE OF i")
+    let row: Option<(i64, i64, String, String, String)> = sqlx::query_as("SELECT i.reto_id,i.profesor_id,i.estado,r.estado,r.titulo FROM integraciones_academicas i JOIN retos r ON r.id=i.reto_id AND r.eliminado_en IS NULL WHERE i.id=$1 FOR UPDATE OF i")
         .bind(id).fetch_optional(&mut *tx).await?;
     let (reto, owner, estado, reto_estado, titulo) = row.ok_or_else(AppError::not_found)?;
     if owner != user.id || user.rol != "PROFESOR" {

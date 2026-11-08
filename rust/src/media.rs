@@ -151,15 +151,18 @@ pub async fn submit(
     if !accepted {
         return Err(AppError::forbidden());
     }
-    let previous:Option<(i64,String,bool,bool)>=sqlx::query_as("SELECT id,estado,es_final,calificacion_publicada FROM entregables WHERE reto_id=$1 AND estudiante_id=$2 AND titulo=$3 FOR UPDATE").bind(reto).bind(user.id).bind(&title).fetch_optional(&mut *tx).await?;
+    let previous:Option<(i64,String,bool,bool,String)>=sqlx::query_as("SELECT id,estado,es_final,calificacion_publicada,archivo FROM entregables WHERE reto_id=$1 AND estudiante_id=$2 AND titulo=$3 FOR UPDATE").bind(reto).bind(user.id).bind(&title).fetch_optional(&mut *tx).await?;
     // PAR-03: un entregable final o con calificación publicada no se reemplaza.
-    if let Some((_, _, es_final, publicada)) = &previous
+    if let Some((_, _, es_final, publicada, _)) = &previous
         && (*es_final || *publicada)
     {
         return Err(AppError::bad(
             "No puedes reemplazar un entregable final o con calificación publicada.",
         ));
     }
+    let old_file = previous
+        .as_ref()
+        .map(|(_, _, _, _, archivo)| archivo.clone());
     let id:i64=sqlx::query_scalar("INSERT INTO entregables(reto_id,estudiante_id,titulo,es_final,puntaje_maximo,archivo,comentario_estudiante,fecha_entrega,actualizado_en,estado) VALUES($1,$2,$3,$4,5.00,$5,$6,now(),now(),'ENVIADO') ON CONFLICT(reto_id,estudiante_id,titulo) DO UPDATE SET archivo=excluded.archivo,comentario_estudiante=excluded.comentario_estudiante,es_final=excluded.es_final,estado='ENVIADO',nota=NULL,comentario_profesor=NULL,calificacion_publicada=false,calificacion_publicada_en=NULL,actualizado_en=now() RETURNING id")
         .bind(reto).bind(user.id).bind(&title).bind(final_file).bind(&key).bind(&comment).fetch_one(&mut *tx).await?;
     // A replacement invalidates old scores; history remains in the audit trail.
@@ -176,7 +179,7 @@ pub async fn submit(
         id,
         previous
             .as_ref()
-            .map(|(_, s, _, _)| s.as_str())
+            .map(|(_, s, _, _, _)| s.as_str())
             .unwrap_or(""),
         "ENVIADO",
         user.id,
@@ -202,6 +205,10 @@ pub async fn submit(
     if let Err(error) = tx.commit().await {
         let _ = tokio::fs::remove_file(path).await;
         return Err(error.into());
+    }
+    // A replaced deliverable must not orphan the previous stored file.
+    if let Some(old) = old_file.filter(|o| !o.is_empty()) {
+        let _ = tokio::fs::remove_file(state.config.media_root.join(old)).await;
     }
     Ok(Json(json!({"id":id,"estado":"ENVIADO"})))
 }
@@ -476,6 +483,13 @@ async fn store_document(
 
 /// MultipleFileField: up to 50 MB per file (retos and follow-ups).
 pub const ATTACHMENT_LIMIT: usize = 50 * 1024 * 1024;
+/// Cap on the number of files a single request may carry, and on the aggregate
+/// bytes held in memory at once (under the route's 110 MB body limit).
+pub const MAX_FILES_PER_REQUEST: usize = 10;
+pub const ATTACHMENT_TOTAL_LIMIT: usize = 100 * 1024 * 1024;
+/// A multipart text field is a form value, not a file; bound it so it cannot
+/// balloon the request memory alongside the attachments.
+const TEXT_FIELD_LIMIT: usize = 1024 * 1024;
 /// Support files keep a served extension; Django accepts any file, Rust only
 /// the types its download endpoint serves.
 pub fn attachment_extension(name: &str) -> Result<&'static str> {
@@ -576,6 +590,7 @@ pub async fn read_with_files(
 )> {
     let mut fields = std::collections::HashMap::new();
     let mut files = Vec::new();
+    let mut total = 0usize;
     while let Some(mut field) = multipart
         .next_field()
         .await
@@ -583,16 +598,26 @@ pub async fn read_with_files(
     {
         let name = field.name().unwrap_or("").to_string();
         if name == file_field {
+            if files.len() >= MAX_FILES_PER_REQUEST {
+                return Err(AppError::bad(format!(
+                    "Máximo {MAX_FILES_PER_REQUEST} archivos por solicitud"
+                )));
+            }
             let original = field.file_name().unwrap_or("archivo").to_string();
             let bytes = limited_bytes(&mut field, ATTACHMENT_LIMIT, &original).await?;
             if !bytes.is_empty() {
+                total += bytes.len();
+                if total > ATTACHMENT_TOTAL_LIMIT {
+                    return Err(AppError::bad(
+                        "El tamaño total de los archivos supera el límite permitido",
+                    ));
+                }
                 files.push((original, bytes));
             }
         } else {
-            let text = field
-                .text()
-                .await
-                .map_err(|_| AppError::bad("Campo inválido"))?;
+            let bytes = limited_bytes(&mut field, TEXT_FIELD_LIMIT, "El campo").await?;
+            let text =
+                String::from_utf8(bytes.to_vec()).map_err(|_| AppError::bad("Campo inválido"))?;
             fields.insert(name, text);
         }
     }

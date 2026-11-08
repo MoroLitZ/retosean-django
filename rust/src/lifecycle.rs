@@ -191,6 +191,14 @@ pub async fn close(
     }
     if from != "finalizado" {
         domain::transition("MAQUINA_RETO", &from, "finalizado")?;
+    } else {
+        // CIE-05: re-invoking close on an already-finalized reto must not rewrite
+        // the frozen closure record (notas/cerrado_por_id) or re-run the closing
+        // side effects; return the same idempotent result without mutating.
+        tx.commit().await?;
+        return Ok(Json(
+            json!({"estado":"finalizado","certificados_emitidos":0}),
+        ));
     }
     // CIE-02: no finalizar mientras existan entregables sin evaluar; de lo contrario
     // se congela el expediente y se emiten certificados con evaluaciones pendientes.

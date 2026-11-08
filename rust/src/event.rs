@@ -152,7 +152,7 @@ pub async fn advance_all(pool: &PgPool) -> Result<usize> {
 async fn is_manager(state: &AppState, user: &auth::User, reto: i64) -> Result<bool> {
     Ok(user.admin()
         || (user.rol == "PROFESOR"
-            && sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM integraciones_academicas WHERE reto_id=$1 AND profesor_id=$2 AND estado IN ('aprobada','publicada'))")
+            && sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM integraciones_academicas i JOIN retos r ON r.id=i.reto_id AND r.eliminado_en IS NULL WHERE i.reto_id=$1 AND i.profesor_id=$2 AND i.estado IN ('aprobada','publicada'))")
                 .bind(reto).bind(user.id).fetch_one(&state.pool).await?))
 }
 
