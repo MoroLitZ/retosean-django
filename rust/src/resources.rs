@@ -351,12 +351,7 @@ pub async fn export(
     Query(filters): Query<Filters>,
 ) -> Result<Response> {
     let user = auth::current(&state, &headers, false).await?;
-    let _permit = state
-        .heavy_slots
-        .clone()
-        .acquire_owned()
-        .await
-        .map_err(|_| AppError::bad("Servidor ocupado"))?;
+    let _permit = crate::heavy_permit(&state).await?;
     let mut data = rows(&state, &user, &name, &filters, true).await?;
     let total = data["total"].as_i64().unwrap_or(0);
     let records = std::mem::take(&mut data["records"]);

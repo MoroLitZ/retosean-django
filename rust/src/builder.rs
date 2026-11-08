@@ -892,12 +892,7 @@ pub async fn download(
     Json(input): Json<Request>,
 ) -> Result<Response> {
     let user = auth::current(&state, &headers, true).await?;
-    let _permit = state
-        .heavy_slots
-        .clone()
-        .acquire_owned()
-        .await
-        .map_err(|_| AppError::bad("Servidor ocupado"))?;
+    let _permit = crate::heavy_permit(&state).await?;
     let (_, _, bytes, filename, mime) = generate(&state, &user, &input).await?;
     Ok((
         [
@@ -919,12 +914,7 @@ pub async fn send(
     Json(input): Json<Request>,
 ) -> Result<Json<Value>> {
     let user = auth::current(&state, &headers, true).await?;
-    let _permit = state
-        .heavy_slots
-        .clone()
-        .acquire_owned()
-        .await
-        .map_err(|_| AppError::bad("Servidor ocupado"))?;
+    let _permit = crate::heavy_permit(&state).await?;
     let mut recipients: Vec<String> = input
         .destinatarios
         .replace(';', ",")

@@ -52,6 +52,26 @@ pub struct AppState {
     pub heavy_slots: std::sync::Arc<tokio::sync::Semaphore>,
 }
 
+/// One of the few slots for memory-heavy work (exports, imports, report
+/// generation). Callers take it after authorisation; waiting is bounded so a
+/// burst cannot queue requests forever.
+pub async fn heavy_permit(state: &AppState) -> error::Result<tokio::sync::OwnedSemaphorePermit> {
+    let busy = || {
+        error::AppError(
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            "El servidor está ocupado generando otros archivos; intenta de nuevo en un momento."
+                .into(),
+        )
+    };
+    tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        state.heavy_slots.clone().acquire_owned(),
+    )
+    .await
+    .map_err(|_| busy())?
+    .map_err(|_| busy())
+}
+
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route(

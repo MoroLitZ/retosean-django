@@ -514,12 +514,7 @@ pub async fn export(
     if !["pdf", "xlsx"].contains(&format.as_str()) {
         return Err(AppError::not_found());
     }
-    let _permit = state
-        .heavy_slots
-        .clone()
-        .acquire_owned()
-        .await
-        .map_err(|_| AppError::bad("Servidor ocupado"))?;
+    let _permit = crate::heavy_permit(&state).await?;
     let mut data = resources::rows(&state, &user, &name, &filters, true).await?;
     let resource_name = data["resource"].as_str().unwrap_or("Reporte").to_string();
     let total = data["total"].as_i64().unwrap_or(0);
@@ -682,12 +677,7 @@ pub async fn certificate(
 /// academico:portafolio: the user's certificates and deliverables as a PDF.
 pub async fn portfolio(State(state): State<AppState>, headers: HeaderMap) -> Result<Response> {
     let user = auth::current(&state, &headers, false).await?;
-    let _permit = state
-        .heavy_slots
-        .clone()
-        .acquire_owned()
-        .await
-        .map_err(|_| AppError::bad("Servidor ocupado"))?;
+    let _permit = crate::heavy_permit(&state).await?;
     let name = {
         let full = format!("{} {}", user.first_name, user.last_name)
             .trim()

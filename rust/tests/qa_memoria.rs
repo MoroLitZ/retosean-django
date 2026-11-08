@@ -233,3 +233,33 @@ async fn post_raw_files(t: &Ctx, reto: i64, parts: &[&[u8]]) -> (u16, String) {
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     (status, String::from_utf8_lossy(&bytes).into_owned())
 }
+
+parity!(test_limpieza_de_temporales_al_arrancar, |t| {
+    std::fs::create_dir_all(&t.media).unwrap();
+    std::fs::write(t.media.join(".interrumpido.part"), b"parcial").unwrap();
+    std::fs::write(t.media.join("guardado.pdf"), b"%PDF-1.4").unwrap();
+    assert_eq!(retosean::media::remove_stale_spool_files(&t.media), 1);
+    assert!(!t.media.join(".interrumpido.part").exists());
+    assert!(
+        t.media.join("guardado.pdf").exists(),
+        "stored files are kept"
+    );
+});
+
+parity!(test_parte_vacia_no_crea_temporales, |t| {
+    let reto = t.reto(COMPANY_USER, "borrador", "reto").await;
+    let (code, body) = multipart(
+        &t.app,
+        &t.company,
+        &format!("/api/retos/{reto}/archivos"),
+        &[],
+        &[
+            ("archivos", "vacio.pdf", b""),
+            ("archivos", "ok.pdf", b"%PDF-1.4 ok"),
+        ],
+    )
+    .await;
+    assert_eq!(code, 200, "{body}");
+    assert_eq!(body["archivos"], 1);
+    assert_eq!(spool_files(&t), 0);
+});

@@ -282,12 +282,6 @@ pub async fn import(
     if !admin.admin() {
         return Err(AppError::forbidden());
     }
-    let _permit = state
-        .heavy_slots
-        .clone()
-        .acquire_owned()
-        .await
-        .map_err(|_| AppError::bad("Servidor ocupado"))?;
     let (mut file, mut name, mut action) = (None, String::new(), String::from("previsualizar"));
     while let Some(field) = multipart
         .next_field()
@@ -311,6 +305,8 @@ pub async fn import(
         }
     }
     let file = file.ok_or_else(|| AppError::bad("Adjunta un archivo .csv o .xlsx"))?;
+    // The slot is taken after the body is read: a slow upload cannot hold it.
+    let _permit = crate::heavy_permit(&state).await?;
     let rows = match read_file(&name, file) {
         Ok(rows) => rows,
         Err(error) => return Ok(Json(json!({"error_global": error}))),

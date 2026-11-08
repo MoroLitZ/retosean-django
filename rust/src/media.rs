@@ -625,6 +625,22 @@ impl Drop for SpooledFile {
         }
     }
 }
+/// Deletes `.<uuid>.part` spool files left behind by a crash or a killed
+/// process; called once when the server starts.
+pub fn remove_stale_spool_files(root: &std::path::Path) -> usize {
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return 0;
+    };
+    entries
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            let name = e.file_name();
+            let name = name.to_string_lossy();
+            name.starts_with('.') && name.ends_with(".part")
+        })
+        .filter(|e| std::fs::remove_file(e.path()).is_ok())
+        .count()
+}
 /// Validates the spooled attachments and moves them to their final keys;
 /// returns (key, original name, size, path).
 pub async fn save_attachments(
@@ -682,7 +698,6 @@ async fn spool(
     total: &mut usize,
 ) -> Result<SpooledFile> {
     use tokio::io::AsyncWriteExt;
-    tokio::fs::create_dir_all(root).await.map_err(file_error)?;
     let mut upload = SpooledFile {
         path: root.join(format!(".{}.part", uuid::Uuid::new_v4().simple())),
         name,
@@ -690,12 +705,8 @@ async fn spool(
         class: None,
         persisted: false,
     };
-    let mut out = tokio::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&upload.path)
-        .await
-        .map_err(file_error)?;
+    // Created on the first non-empty chunk, so empty parts never touch the disk.
+    let mut out: Option<tokio::fs::File> = None;
     let mut sniffer = Sniffer::default();
     while let Some(chunk) = field
         .chunk()
@@ -717,10 +728,24 @@ async fn spool(
         upload.size += chunk.len();
         *total += chunk.len();
         sniffer.feed(&chunk);
-        out.write_all(&chunk).await.map_err(file_error)?;
+        if out.is_none() && !chunk.is_empty() {
+            tokio::fs::create_dir_all(root).await.map_err(file_error)?;
+            out = Some(
+                tokio::fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&upload.path)
+                    .await
+                    .map_err(file_error)?,
+            );
+        }
+        if let Some(file) = out.as_mut() {
+            file.write_all(&chunk).await.map_err(file_error)?;
+        }
     }
-    out.flush().await.map_err(file_error)?;
-    drop(out);
+    if let Some(mut file) = out {
+        file.flush().await.map_err(file_error)?;
+    }
     upload.class = sniffer.class();
     Ok(upload)
 }

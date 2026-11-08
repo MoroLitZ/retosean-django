@@ -140,6 +140,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
     retosean::auth::init(&pool).await?;
+    let stale = retosean::media::remove_stale_spool_files(&config.media_root);
+    if stale > 0 {
+        tracing::info!(files = stale, "removed interrupted upload spool files");
+    }
     // Notification emails (HU15): Django's EMAIL_* settings; console backend when unset.
     let site = retosean::registration::site_url(&config);
     let mailer = retosean::mail::install(retosean::mail::Mailer::from_env()).clone();
