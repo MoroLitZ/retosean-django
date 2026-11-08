@@ -66,12 +66,15 @@ pub(crate) fn parse_csv(text: &str) -> Vec<Vec<String>> {
     rows
 }
 
-fn read_file(name: &str, bytes: &[u8]) -> std::result::Result<Vec<Vec<String>>, String> {
+fn read_file(
+    name: &str,
+    bytes: axum::body::Bytes,
+) -> std::result::Result<Vec<Vec<String>>, String> {
     let name = name.to_lowercase();
     if name.ends_with(".xlsx") || name.ends_with(".xlsm") {
         use calamine::Reader;
         let mut book: calamine::Xlsx<_> =
-            calamine::open_workbook_from_rs(std::io::Cursor::new(bytes.to_vec()))
+            calamine::open_workbook_from_rs(std::io::Cursor::new(bytes))
                 .map_err(|e| format!("No se pudo leer el archivo: {e}"))?;
         let range = book
             .worksheet_range_at(0)
@@ -92,10 +95,12 @@ fn read_file(name: &str, bytes: &[u8]) -> std::result::Result<Vec<Vec<String>>, 
             .collect())
     } else if name.ends_with(".csv") {
         // utf-8 (with or without BOM), else latin-1, like Django's _leer_csv.
-        let text = match std::str::from_utf8(bytes) {
+        let text = match std::str::from_utf8(&bytes) {
             Ok(t) => t.trim_start_matches('\u{feff}').to_string(),
-            Err(_) => encoding_rs::WINDOWS_1252.decode(bytes).0.into_owned(),
+            Err(_) => encoding_rs::WINDOWS_1252.decode(&bytes).0.into_owned(),
         };
+        // The decoded text is kept; drop the raw bytes to avoid two copies.
+        drop(bytes);
         Ok(parse_csv(&text))
     } else {
         Err("Formato no soportado. Usa un archivo .csv o .xlsx.".into())
@@ -120,12 +125,13 @@ impl Row {
 async fn validate(
     state: &AppState,
     admin: &auth::User,
-    rows: &[Vec<String>],
+    rows: Vec<Vec<String>>,
 ) -> Result<std::result::Result<Vec<Row>, String>> {
-    let Some(first) = rows.first() else {
+    let mut rows = rows.into_iter();
+    let Some(first) = rows.next() else {
         return Ok(Err("El archivo está vacío.".into()));
     };
-    let cabeceras = headers_of(first);
+    let cabeceras = headers_of(&first);
     let faltan: Vec<&str> = OBLIGATORIAS
         .iter()
         .copied()
@@ -138,7 +144,13 @@ async fn validate(
             COLUMNAS.join(", ")
         )));
     }
-    let body = &rows[1..];
+    // Map each expected column to its position in the header row once.
+    let column_indices: Vec<Option<usize>> = COLUMNAS
+        .iter()
+        .map(|c| cabeceras.iter().position(|h| h == *c))
+        .collect();
+    let column_names: Vec<String> = COLUMNAS.iter().map(|c| c.to_string()).collect();
+    let body = rows;
     if body.len() > MAX_FILAS {
         return Ok(Err(format!(
             "El archivo tiene {} filas y el máximo permitido es {MAX_FILAS}.",
@@ -147,20 +159,21 @@ async fn validate(
     }
     let (mut users_seen, mut emails_seen) = (HashSet::new(), HashSet::new());
     let mut out = vec![];
-    for (i, row) in body.iter().enumerate() {
+    for (i, mut row) in body.enumerate() {
         if row.iter().all(|v| v.trim().is_empty()) {
             continue; // blank rows at the end of the file
         }
-        let datos: Vec<(String, String)> = COLUMNAS
+        let datos: Vec<(String, String)> = column_indices
             .iter()
-            .filter_map(|c| {
-                cabeceras.iter().position(|h| h == c).map(|idx| {
-                    (
-                        c.to_string(),
-                        row.get(idx)
-                            .map(|v| v.trim().to_string())
-                            .unwrap_or_default(),
-                    )
+            .enumerate()
+            .filter_map(|(col_i, idx)| {
+                idx.map(|idx| {
+                    let v = if idx < row.len() {
+                        std::mem::take(&mut row[idx])
+                    } else {
+                        String::new()
+                    };
+                    (column_names[col_i].clone(), v.trim().to_string())
                 })
             })
             .collect();
@@ -269,6 +282,12 @@ pub async fn import(
     if !admin.admin() {
         return Err(AppError::forbidden());
     }
+    let _permit = state
+        .heavy_slots
+        .clone()
+        .acquire_owned()
+        .await
+        .map_err(|_| AppError::bad("Servidor ocupado"))?;
     let (mut file, mut name, mut action) = (None, String::new(), String::from("previsualizar"));
     while let Some(field) = multipart
         .next_field()
@@ -292,11 +311,11 @@ pub async fn import(
         }
     }
     let file = file.ok_or_else(|| AppError::bad("Adjunta un archivo .csv o .xlsx"))?;
-    let rows = match read_file(&name, &file) {
+    let rows = match read_file(&name, file) {
         Ok(rows) => rows,
         Err(error) => return Ok(Json(json!({"error_global": error}))),
     };
-    let rows = match validate(&state, &admin, &rows).await? {
+    let rows = match validate(&state, &admin, rows).await? {
         Ok(rows) => rows,
         Err(error) => return Ok(Json(json!({"error_global": error}))),
     };

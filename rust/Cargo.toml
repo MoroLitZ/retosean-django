@@ -9,6 +9,8 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "fs", "
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls-ring-native-roots", "postgres", "json", "chrono", "uuid", "rust_decimal", "derive", "migrate", "macros"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Streams file downloads from disk (already in the tree through axum).
+futures-util = { version = "0.3", default-features = false }
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 rust_decimal = { version = "1", features = ["serde"] }
@@ -31,3 +33,10 @@ lettre = { version = "0.11", default-features = false, features = ["builder", "s
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 
+
+# Smaller binary: whole-program LTO and no debug info in release builds.
+# panic stays "unwind" so one failing request cannot take the server down.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = "debuginfo"

@@ -60,11 +60,12 @@ pub async fn progress(
         .get(axum::http::header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
         .is_some_and(|v| v.starts_with("multipart/"));
-    let (input, files) = if multipart {
+    let (input, mut files) = if multipart {
         let form = axum::extract::Multipart::from_request(request, &state)
             .await
             .map_err(|_| AppError::bad("Carga inválida"))?;
-        let (fields, files) = crate::media::read_with_files(form, "archivos").await?;
+        let (fields, files) =
+            crate::media::read_with_files(&state.config.media_root, form, "archivos").await?;
         let get = |k: &str| fields.get(k).cloned().unwrap_or_default();
         let input = ProgressInput {
             tipo_sesion: get("tipo_sesion"),
@@ -141,12 +142,17 @@ pub async fn progress(
     }
     let id: i64 = sqlx::query_scalar("INSERT INTO seguimientos_reto(reto_id,tipo_sesion,fecha_sesion,porcentaje_avance,avances,observaciones,acuerdos,creado_por_id,creado_en) VALUES($1,$2,COALESCE($3,(now() AT TIME ZONE 'America/Bogota')::date),$4,$5,$6,$7,$8,now()) RETURNING id")
         .bind(reto).bind(kind).bind(input.fecha_sesion).bind(input.porcentaje_avance as i16).bind(&input.avances).bind(&input.observaciones).bind(&input.acuerdos).bind(user.id).fetch_one(&mut *tx).await?;
-    let saved = crate::media::save_attachments(&state, &files).await?;
-    for (key, original, size, _) in &saved {
-        sqlx::query("INSERT INTO seguimiento_seguimientoarchivo(seguimiento_id,archivo,nombre_original,tamano,creado_en) VALUES($1,$2,$3,$4,now())")
-            .bind(id).bind(key).bind(original).bind(size).execute(&mut *tx).await?;
+    let saved = crate::media::save_attachments(&state, &mut files).await?;
+    // Any failure from here on removes the stored files, not just a failed commit.
+    let commit_result = async {
+        for (key, original, size, _) in &saved {
+            sqlx::query("INSERT INTO seguimiento_seguimientoarchivo(seguimiento_id,archivo,nombre_original,tamano,creado_en) VALUES($1,$2,$3,$4,now())")
+                .bind(id).bind(key).bind(original).bind(size).execute(&mut *tx).await?;
+        }
+        tx.commit().await
     }
-    if let Err(error) = tx.commit().await {
+    .await;
+    if let Err(error) = commit_result {
         for (_, _, _, path) in saved {
             let _ = tokio::fs::remove_file(path).await;
         }

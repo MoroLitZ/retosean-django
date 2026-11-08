@@ -57,6 +57,11 @@ async function logout() {
 }
 $("logout").onclick = logout;
 $("close-dialog").onclick = () => $("detail-dialog").close();
+// Closing the detail dialog (X, Escape or code) releases the record it showed.
+// The close event is asynchronous: skip it if the dialog was already reopened.
+$("detail-dialog").addEventListener("close", () => {
+  if (!$("detail-dialog").open) $("dialog-content").replaceChildren();
+});
 $("new-challenge").onclick = () => {
   if (selected === "usuarios")
     simpleForm(

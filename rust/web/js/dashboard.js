@@ -183,8 +183,7 @@ async function loadDashboard() {
   const applyBtn = periodForm ? periodForm.querySelector('[type="submit"]') : null;
 
   // ── Estado de carga: esqueletos + aria-busy en las regiones dinámicas ──
-  charts.forEach((c) => c.destroy());
-  charts = [];
+  releaseCharts();
   kpis.className = "dash-kpis mb-4";
   graficas.className = "dash-graficas mb-4";
   accesos.className = "cluster cluster--sm";

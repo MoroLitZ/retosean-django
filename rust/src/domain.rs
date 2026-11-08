@@ -154,19 +154,31 @@ pub fn validate_date(date: Option<chrono::NaiveDate>, label: &str) -> Result<()>
     Ok(())
 }
 pub fn csv_cell(value: &serde_json::Value) -> String {
-    let text = match value {
-        serde_json::Value::Null => String::new(),
-        serde_json::Value::String(v) => v.clone(),
-        other => other.to_string(),
-    };
+    match value {
+        serde_json::Value::Null => csv_text(""),
+        serde_json::Value::String(v) => csv_text(v),
+        other => csv_text(&other.to_string()),
+    }
+}
+/// Quoted CSV cell; a leading formula character (= + - @ tab CR) is
+/// neutralised with an apostrophe so spreadsheets never evaluate it.
+pub fn csv_text(text: &str) -> String {
     let dangerous = text
         .trim_start()
         .starts_with(['=', '+', '-', '@', '\t', '\r']);
-    format!(
-        "\"{}{}\"",
-        if dangerous { "'" } else { "" },
-        text.replace('"', "\"\"")
-    )
+    let mut out = String::with_capacity(text.len() + 3);
+    out.push('"');
+    if dangerous {
+        out.push('\'');
+    }
+    for c in text.chars() {
+        if c == '"' {
+            out.push('"');
+        }
+        out.push(c);
+    }
+    out.push('"');
+    out
 }
 #[cfg(test)]
 mod tests {

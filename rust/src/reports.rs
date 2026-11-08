@@ -60,8 +60,9 @@ pub fn wrap_mono(text: &str, max: usize) -> Vec<String> {
 /// Each page uses a fixed-width base font; long lines wrap (never cut) and no
 /// HTML is interpreted.
 pub fn pdf_lines(title: &str, lines: &[String]) -> Vec<u8> {
-    let lines: Vec<String> = lines.iter().flat_map(|l| wrap_mono(l, 95)).collect();
-    let lines = lines.as_slice();
+    // First pass: count wrapped lines so the page structure can be reserved
+    // without keeping a second full copy of the wrapped text.
+    let total_wrapped: usize = lines.iter().map(|l| wrap_mono(l, 95).len()).sum();
     // The repeated page header is one line; the full title is in the body.
     let header: String = if title.chars().count() > 85 {
         title.chars().take(84).collect::<String>() + "…"
@@ -72,12 +73,12 @@ pub fn pdf_lines(title: &str, lines: &[String]) -> Vec<u8> {
     let pages = Ref::new(2);
     let font = Ref::new(3);
     let bold = Ref::new(4);
-    let chunks: Vec<_> = if lines.is_empty() {
-        vec![&[][..]]
+    let chunk_count = if total_wrapped == 0 {
+        1
     } else {
-        lines.chunks(47).collect()
+        total_wrapped.div_ceil(47)
     };
-    let ids: Vec<_> = (0..chunks.len())
+    let ids: Vec<_> = (0..chunk_count)
         .map(|i| Ref::new(5 + (i as i32) * 2))
         .collect();
     pdf.catalog(Ref::new(1)).pages(pages);
@@ -90,9 +91,14 @@ pub fn pdf_lines(title: &str, lines: &[String]) -> Vec<u8> {
     pdf.type1_font(bold)
         .base_font(Name(b"Helvetica-Bold"))
         .encoding_predefined(Name(b"WinAnsiEncoding"));
-    for (i, chunk) in chunks.iter().enumerate() {
+
+    // Second pass: wrap on the fly, 47 lines per page; an empty export still
+    // renders one page with the header.
+    let mut wrapped = lines.iter().flat_map(|l| wrap_mono(l, 95));
+    for (i, &id) in ids.iter().enumerate() {
+        let chunk: Vec<String> = wrapped.by_ref().take(47).collect();
         let contents = Ref::new(6 + (i as i32) * 2);
-        let mut page = pdf.page(ids[i]);
+        let mut page = pdf.page(id);
         page.parent(pages)
             .media_box(Rect::new(0., 0., 595., 842.))
             .contents(contents);
@@ -135,7 +141,7 @@ pub fn pdf_lines(title: &str, lines: &[String]) -> Vec<u8> {
                     .with_timezone(&chrono::FixedOffset::west_opt(5 * 3600).unwrap())
                     .format("%Y-%m-%d"),
                 i + 1,
-                chunks.len()
+                chunk_count
             ))))
             .end_text();
         pdf.stream(contents, &content.finish());
@@ -508,8 +514,18 @@ pub async fn export(
     if !["pdf", "xlsx"].contains(&format.as_str()) {
         return Err(AppError::not_found());
     }
-    let data = resources::rows(&state, &user, &name, &filters, true).await?;
-    let rows = data["records"]
+    let _permit = state
+        .heavy_slots
+        .clone()
+        .acquire_owned()
+        .await
+        .map_err(|_| AppError::bad("Servidor ocupado"))?;
+    let mut data = resources::rows(&state, &user, &name, &filters, true).await?;
+    let resource_name = data["resource"].as_str().unwrap_or("Reporte").to_string();
+    let total = data["total"].as_i64().unwrap_or(0);
+    let records = std::mem::take(&mut data["records"]);
+    drop(data);
+    let rows = records
         .as_array()
         .ok_or_else(|| AppError::bad("La respuesta del recurso no contiene registros"))?;
     // REP-4: the row set is capped by resources::rows at EXPORT_LIMIT rows.
@@ -528,20 +544,17 @@ pub async fn export(
         .iter()
         .map(|f| resources::field_label(&name, f))
         .collect();
-    let title = format!(
-        "{} | {} de {} registros",
-        data["resource"].as_str().unwrap_or("Reporte"),
-        rows.len(),
-        data["total"]
-    );
+    let title = format!("{} | {} de {} registros", resource_name, rows.len(), total);
     let (content_type, disposition, bytes) = if format == "pdf" {
         let mut lines = vec![title.clone(), String::new()];
         for row in rows {
             for (field, label) in fields.iter().zip(&labels) {
-                lines.push(format!(
-                    "{label}: {}",
-                    resources::display_value(&name, field, &row[field])
-                ));
+                let value = resources::display_value(&name, field, &row[field]);
+                let mut line = String::with_capacity(label.len() + 2 + value.len());
+                line.push_str(label);
+                line.push_str(": ");
+                line.push_str(value.as_ref());
+                lines.push(line);
             }
             lines.push("—".repeat(60));
         }
@@ -573,14 +586,11 @@ pub async fn export(
         for (r, row) in rows.iter().enumerate() {
             for (c, field) in fields.iter().enumerate() {
                 let value = &row[field];
+                let cell = resources::display_value(&name, field, value);
                 // Strings preserve identifiers, decimal precision and formula
                 // safety; booleans read Sí/No and choices show their labels.
                 sheet
-                    .write_string(
-                        r as u32 + 1,
-                        c as u16,
-                        resources::display_value(&name, field, value),
-                    )
+                    .write_string(r as u32 + 1, c as u16, cell.as_ref())
                     .map_err(error)?;
             }
         }
@@ -672,6 +682,12 @@ pub async fn certificate(
 /// academico:portafolio: the user's certificates and deliverables as a PDF.
 pub async fn portfolio(State(state): State<AppState>, headers: HeaderMap) -> Result<Response> {
     let user = auth::current(&state, &headers, false).await?;
+    let _permit = state
+        .heavy_slots
+        .clone()
+        .acquire_owned()
+        .await
+        .map_err(|_| AppError::bad("Servidor ocupado"))?;
     let name = {
         let full = format!("{} {}", user.first_name, user.last_name)
             .trim()

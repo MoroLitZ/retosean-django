@@ -11,6 +11,7 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::borrow::Cow;
 use std::sync::OnceLock;
 
 pub fn schema() -> &'static Vec<Value> {
@@ -43,32 +44,34 @@ pub fn field_label(table: &str, field: &str) -> String {
 }
 /// Allowed URL schemes for link-like fields; anything else (javascript:,
 /// data:, file:, etc.) is stripped on export to avoid stored XSS / open redirect.
-fn safe_url(field: &str, value: &str) -> String {
+fn safe_url<'a>(field: &str, value: &'a str) -> Cow<'a, str> {
     let name = field.to_ascii_lowercase();
     let is_link = name.ends_with("_url")
         || name == "link"
         || name.starts_with("enlace_")
         || name == "sitio_web";
     if !is_link || value.is_empty() {
-        return value.to_string();
+        return Cow::Borrowed(value);
     }
     let scheme = value.split(':').next().unwrap_or("").to_ascii_lowercase();
     if ["http", "https", "mailto", "tel"].contains(&scheme.as_str()) {
-        value.to_string()
+        Cow::Owned(value.to_string())
     } else {
-        String::new()
+        Cow::Owned(String::new())
     }
 }
 
 /// Display text of an exported value: booleans as Sí/No and choice codes
 /// with their labels; the stored values themselves are unchanged.
-pub fn display_value(table: &str, field: &str, value: &Value) -> String {
+pub fn display_value(table: &str, field: &str, value: &Value) -> Cow<'static, str> {
     match value {
-        Value::Null => String::new(),
-        Value::Bool(true) => "Sí".into(),
-        Value::Bool(false) => "No".into(),
-        Value::String(s) => safe_url(field, &crate::dashboard::etiqueta(table, field, s)),
-        other => other.to_string(),
+        Value::Null => Cow::Borrowed(""),
+        Value::Bool(true) => Cow::Borrowed("Sí"),
+        Value::Bool(false) => Cow::Borrowed("No"),
+        Value::String(s) => {
+            Cow::Owned(safe_url(field, &crate::dashboard::etiqueta(table, field, s)).into_owned())
+        }
+        other => Cow::Owned(other.to_string()),
     }
 }
 pub fn scope(table: &str, user: &User) -> Option<String> {
@@ -348,7 +351,19 @@ pub async fn export(
     Query(filters): Query<Filters>,
 ) -> Result<Response> {
     let user = auth::current(&state, &headers, false).await?;
-    let data = rows(&state, &user, &name, &filters, true).await?;
+    let _permit = state
+        .heavy_slots
+        .clone()
+        .acquire_owned()
+        .await
+        .map_err(|_| AppError::bad("Servidor ocupado"))?;
+    let mut data = rows(&state, &user, &name, &filters, true).await?;
+    let total = data["total"].as_i64().unwrap_or(0);
+    let records = std::mem::take(&mut data["records"]);
+    drop(data);
+    let records = records
+        .as_array()
+        .ok_or_else(|| AppError::bad("La respuesta del recurso no contiene registros"))?;
     let fields_arr = resource(&name)?["fields"]
         .as_array()
         .ok_or_else(|| AppError::bad("Recurso inválido para exportación"))?;
@@ -357,22 +372,23 @@ pub async fn export(
         .filter_map(|f| f["name"].as_str())
         .filter(|f| !["password", "is_staff", "is_superuser"].contains(f))
         .collect();
-    let mut csv = format!(
-        "\u{feff}{}\r\n",
-        fields
-            .iter()
-            .map(|f| crate::domain::csv_cell(&json!(field_label(&name, f))))
-            .collect::<Vec<_>>()
-            .join(",")
-    );
-    for row in data["records"].as_array().unwrap() {
-        csv.push_str(
-            &fields
-                .iter()
-                .map(|f| crate::domain::csv_cell(&json!(display_value(&name, f, &row[*f]))))
-                .collect::<Vec<_>>()
-                .join(","),
-        );
+    let mut csv = String::with_capacity(records.len() * fields.len() * 32 + 1024);
+    csv.push('\u{feff}');
+    for (i, f) in fields.iter().enumerate() {
+        csv.push_str(&crate::domain::csv_text(&field_label(&name, f)));
+        if i + 1 < fields.len() {
+            csv.push(',');
+        }
+    }
+    csv.push_str("\r\n");
+    for row in records {
+        for (i, f) in fields.iter().enumerate() {
+            let cell = display_value(&name, f, &row[*f]);
+            csv.push_str(&crate::domain::csv_text(cell.as_ref()));
+            if i + 1 < fields.len() {
+                csv.push(',');
+            }
+        }
         csv.push_str("\r\n");
     }
     Ok((
@@ -384,7 +400,7 @@ pub async fn export(
             ),
             (
                 header::HeaderName::from_static("x-total-count"),
-                data["total"].to_string().as_str(),
+                total.to_string().as_str(),
             ),
         ],
         csv,

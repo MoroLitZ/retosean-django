@@ -1498,6 +1498,7 @@ dependencies = [
  "chrono",
  "dotenvy",
  "encoding_rs",
+ "futures-util",
  "http-body-util",
  "lettre",
  "pbkdf2",

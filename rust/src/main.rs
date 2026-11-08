@@ -151,6 +151,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config,
         password_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
         login_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
+        heavy_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
     });
     // Expose the TCP peer so auth uses the real client address unless the app is
     // explicitly behind a trusted proxy (config.trust_proxy).

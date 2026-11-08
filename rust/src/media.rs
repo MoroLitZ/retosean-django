@@ -21,18 +21,29 @@ async fn limited_bytes(
     limit: usize,
     name: &str,
 ) -> Result<axum::body::Bytes> {
-    let mut buf: Vec<u8> = Vec::new();
+    // Keep the received chunks and copy them once into an exact-size buffer,
+    // instead of a Vec that doubles its capacity as it grows.
+    let mut chunks: Vec<axum::body::Bytes> = Vec::new();
+    let mut len = 0usize;
     while let Some(chunk) = field
         .chunk()
         .await
         .map_err(|_| AppError::bad(format!("{name}: error leyendo el archivo")))?
     {
-        if buf.len() + chunk.len() > limit {
+        if len + chunk.len() > limit {
             return Err(AppError::bad(format!(
                 "{name} supera el límite de {} MB",
                 limit / 1024 / 1024
             )));
         }
+        len += chunk.len();
+        chunks.push(chunk);
+    }
+    if chunks.len() == 1 {
+        return Ok(chunks.pop().unwrap_or_default());
+    }
+    let mut buf = Vec::with_capacity(len);
+    for chunk in chunks {
         buf.extend_from_slice(&chunk);
     }
     Ok(axum::body::Bytes::from(buf))
@@ -232,7 +243,7 @@ pub async fn download(
     if !safe_key(key) {
         return Err(AppError::not_found());
     }
-    let data = tokio::fs::read(state.config.media_root.join(key))
+    let file = tokio::fs::File::open(state.config.media_root.join(key))
         .await
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
@@ -241,7 +252,21 @@ pub async fn download(
                 file_error(e)
             }
         })?;
+    let length = file.metadata().await.map_err(file_error)?.len();
     let extension = key.rsplit('.').next().unwrap_or("bin");
+    // Stream in 64 KiB chunks so a download never holds the whole file in memory.
+    let body = axum::body::Body::from_stream(futures_util::stream::try_unfold(
+        file,
+        |mut file| async move {
+            let mut buf = vec![0u8; 64 * 1024];
+            let n = tokio::io::AsyncReadExt::read(&mut file, &mut buf).await?;
+            if n == 0 {
+                return Ok::<_, std::io::Error>(None);
+            }
+            buf.truncate(n);
+            Ok(Some((axum::body::Bytes::from(buf), file)))
+        },
+    ));
     Ok((
         [
             (header::CONTENT_TYPE, "application/octet-stream".to_string()),
@@ -249,8 +274,9 @@ pub async fn download(
                 header::CONTENT_DISPOSITION,
                 format!("attachment; filename=retosean-adjunto.{extension}"),
             ),
+            (header::CONTENT_LENGTH, length.to_string()),
         ],
-        data,
+        body,
     )
         .into_response())
 }
@@ -532,20 +558,89 @@ fn content_class(data: &[u8]) -> Option<&'static str> {
         None
     }
 }
-/// Writes validated attachments; returns (key, original name, size, path).
+/// Magic bytes and text-ness of an upload, tracked while it streams so the
+/// whole file never has to be in memory. Equivalent to `content_class` on the
+/// complete data.
+#[derive(Default)]
+struct Sniffer {
+    head: Vec<u8>,
+    carry: Vec<u8>,
+    not_text: bool,
+}
+impl Sniffer {
+    fn feed(&mut self, chunk: &[u8]) {
+        if self.head.len() < 8 {
+            let take = (8 - self.head.len()).min(chunk.len());
+            self.head.extend_from_slice(&chunk[..take]);
+        }
+        if self.not_text {
+            return;
+        }
+        if chunk.contains(&0) {
+            self.not_text = true;
+            return;
+        }
+        // A multibyte character may be split across chunks: validate the
+        // carried prefix together with the new bytes.
+        let joined;
+        let data: &[u8] = if self.carry.is_empty() {
+            chunk
+        } else {
+            let mut buf = std::mem::take(&mut self.carry);
+            buf.extend_from_slice(chunk);
+            joined = buf;
+            &joined
+        };
+        if let Err(error) = std::str::from_utf8(data) {
+            if error.error_len().is_some() {
+                self.not_text = true;
+            } else {
+                self.carry = data[error.valid_up_to()..].to_vec();
+            }
+        }
+    }
+    fn class(&self) -> Option<&'static str> {
+        let text = !self.not_text && self.carry.is_empty();
+        match content_class(&self.head) {
+            // The head alone may look like text; the verdict needs every byte.
+            Some("text") | None => text.then_some("text"),
+            magic => magic,
+        }
+    }
+}
+/// An attachment spooled to a private temporary file (`.<uuid>.part` in the
+/// media root, never named after user input). The file is deleted when the
+/// value is dropped unless `save_attachments` moved it to its final key.
+pub struct SpooledFile {
+    pub name: String,
+    pub size: usize,
+    class: Option<&'static str>,
+    path: std::path::PathBuf,
+    persisted: bool,
+}
+impl Drop for SpooledFile {
+    fn drop(&mut self) {
+        if !self.persisted {
+            let _ = std::fs::remove_file(&self.path);
+        }
+    }
+}
+/// Validates the spooled attachments and moves them to their final keys;
+/// returns (key, original name, size, path).
 pub async fn save_attachments(
     state: &AppState,
-    files: &[(String, axum::body::Bytes)],
+    files: &mut [SpooledFile],
 ) -> Result<Vec<(String, String, i64, std::path::PathBuf)>> {
-    for (name, data) in files {
-        if data.len() > ATTACHMENT_LIMIT {
+    for file in files.iter() {
+        let name = &file.name;
+        if file.size > ATTACHMENT_LIMIT {
             return Err(AppError::bad(format!("{name} supera el límite de 50 MB.")));
         }
         let declared = attachment_extension(name)?;
         // RET-08: se valida el contenido, no solo la extensión, para que un
         // HTML o un ejecutable renombrado (.pdf) no pase como archivo soporte.
         let coherent = matches!(
-            (declared, content_class(data).unwrap_or("binario")),
+            (declared, file.class.unwrap_or("binario")),
             ("pdf", "pdf")
                 | ("png", "png")
                 | ("jpg", "jpg")
@@ -558,38 +653,86 @@ pub async fn save_attachments(
             )));
         }
     }
-    tokio::fs::create_dir_all(&state.config.media_root)
-        .await
-        .map_err(file_error)?;
-    let mut saved = Vec::new();
-    for (name, data) in files {
+    let mut saved: Vec<(String, String, i64, std::path::PathBuf)> = Vec::new();
+    for file in files.iter_mut() {
         let key = format!(
             "{}.{}",
             uuid::Uuid::new_v4().simple(),
-            attachment_extension(name)?
+            attachment_extension(&file.name)?
         );
         let path = state.config.media_root.join(&key);
-        if let Err(error) = tokio::fs::write(&path, data).await {
+        if let Err(error) = tokio::fs::rename(&file.path, &path).await {
             for (_, _, _, written) in &saved {
                 let _ = tokio::fs::remove_file(written).await;
             }
             return Err(file_error(error));
         }
-        let original: String = name.chars().take(255).collect();
-        saved.push((key, original, data.len() as i64, path));
+        file.persisted = true;
+        let original: String = file.name.chars().take(255).collect();
+        saved.push((key, original, file.size as i64, path));
     }
     Ok(saved)
 }
+/// Streams one file part into a temporary file, enforcing the per-file and
+/// per-request limits as the bytes arrive.
+async fn spool(
+    root: &std::path::Path,
+    field: &mut axum::extract::multipart::Field<'_>,
+    name: String,
+    total: &mut usize,
+) -> Result<SpooledFile> {
+    use tokio::io::AsyncWriteExt;
+    tokio::fs::create_dir_all(root).await.map_err(file_error)?;
+    let mut upload = SpooledFile {
+        path: root.join(format!(".{}.part", uuid::Uuid::new_v4().simple())),
+        name,
+        size: 0,
+        class: None,
+        persisted: false,
+    };
+    let mut out = tokio::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&upload.path)
+        .await
+        .map_err(file_error)?;
+    let mut sniffer = Sniffer::default();
+    while let Some(chunk) = field
+        .chunk()
+        .await
+        .map_err(|_| AppError::bad(format!("{}: error leyendo el archivo", upload.name)))?
+    {
+        if upload.size + chunk.len() > ATTACHMENT_LIMIT {
+            return Err(AppError::bad(format!(
+                "{} supera el límite de {} MB",
+                upload.name,
+                ATTACHMENT_LIMIT / 1024 / 1024
+            )));
+        }
+        if *total + chunk.len() > ATTACHMENT_TOTAL_LIMIT {
+            return Err(AppError::bad(
+                "El tamaño total de los archivos supera el límite permitido",
+            ));
+        }
+        upload.size += chunk.len();
+        *total += chunk.len();
+        sniffer.feed(&chunk);
+        out.write_all(&chunk).await.map_err(file_error)?;
+    }
+    out.flush().await.map_err(file_error)?;
+    drop(out);
+    upload.class = sniffer.class();
+    Ok(upload)
+}
 /// Text fields plus every file under `file_field` (retos and follow-ups).
+/// Files are spooled under `root` instead of being held in memory.
 pub async fn read_with_files(
+    root: &std::path::Path,
     mut multipart: Multipart,
     file_field: &str,
-) -> Result<(
-    std::collections::HashMap<String, String>,
-    Vec<(String, axum::body::Bytes)>,
-)> {
+) -> Result<(std::collections::HashMap<String, String>, Vec<SpooledFile>)> {
     let mut fields = std::collections::HashMap::new();
-    let mut files = Vec::new();
+    let mut files: Vec<SpooledFile> = Vec::new();
     let mut total = 0usize;
     while let Some(mut field) = multipart
         .next_field()
@@ -604,15 +747,10 @@ pub async fn read_with_files(
                 )));
             }
             let original = field.file_name().unwrap_or("archivo").to_string();
-            let bytes = limited_bytes(&mut field, ATTACHMENT_LIMIT, &original).await?;
-            if !bytes.is_empty() {
-                total += bytes.len();
-                if total > ATTACHMENT_TOTAL_LIMIT {
-                    return Err(AppError::bad(
-                        "El tamaño total de los archivos supera el límite permitido",
-                    ));
-                }
-                files.push((original, bytes));
+            let upload = spool(root, &mut field, original, &mut total).await?;
+            // Empty parts are ignored (the temporary file is removed on drop).
+            if upload.size > 0 {
+                files.push(upload);
             }
         } else {
             let bytes = limited_bytes(&mut field, TEXT_FIELD_LIMIT, "El campo").await?;
@@ -644,7 +782,7 @@ pub async fn reto_files(
     if !user.admin() && !editable(&estado) {
         return Err(AppError::forbidden());
     }
-    let (_, files) = read_with_files(multipart, "archivos").await?;
+    let (_, mut files) = read_with_files(&state.config.media_root, multipart, "archivos").await?;
     if files.is_empty() {
         return Err(AppError::bad("Adjunta al menos un archivo"));
     }
@@ -661,7 +799,7 @@ pub async fn reto_files(
     if !user.admin() && !editable(&current) {
         return Err(AppError::forbidden());
     }
-    let saved = save_attachments(&state, &files).await?;
+    let saved = save_attachments(&state, &mut files).await?;
     let commit_result = async {
         for (key, original, size, _) in &saved {
             sqlx::query("INSERT INTO retos_retoarchivo(reto_id,archivo,nombre_original,tamano,creado_en) VALUES($1,$2,$3,$4,now())")
@@ -692,6 +830,44 @@ mod tests {
             assert!(!safe_key(key));
         }
         assert!(safe_key("09df6e9134944ef89f4af98922ae8322.pdf"));
+    }
+    #[test]
+    fn streamed_sniffing_matches_whole_file_classification() {
+        let text = "año ñandú — 漢字 ok".as_bytes();
+        let samples: [&[u8]; 6] = [
+            text,
+            b"%PDF-1.4 body",
+            b"\x89PNG\r\n\x1a\n....",
+            b"PK\x03\x04zip",
+            b"abc\xff\xfe",
+            b"abc\0def",
+        ];
+        for data in samples {
+            // Every split point, including inside multibyte characters.
+            for cut in 0..=data.len() {
+                let mut sniffer = Sniffer::default();
+                sniffer.feed(&data[..cut]);
+                sniffer.feed(&data[cut..]);
+                assert_eq!(
+                    sniffer.class(),
+                    content_class(data),
+                    "{data:?} cut at {cut}"
+                );
+            }
+            let mut bytewise = Sniffer::default();
+            for b in data {
+                bytewise.feed(std::slice::from_ref(b));
+            }
+            assert_eq!(
+                bytewise.class(),
+                content_class(data),
+                "{data:?} byte by byte"
+            );
+        }
+        // A file that ends inside a multibyte character is not text.
+        let mut sniffer = Sniffer::default();
+        sniffer.feed(&text[..2]);
+        assert_eq!(sniffer.class(), None);
     }
     #[test]
     fn formats_are_detected_from_content() {

@@ -206,11 +206,21 @@ function toast(message, variant = "info") {
   } catch {}
   toastTimer = setTimeout(hideToast, Math.max(4500, 60 * text.length));
 }
+// Destroys the dashboard charts (canvas, data and Chart.js listeners) so they
+// are not kept alive while the dashboard is hidden.
+function releaseCharts() {
+  charts.forEach((c) => c.destroy());
+  charts = [];
+}
 function showLogin() {
   // Cierra el diálogo de detalle: vive fuera de #app-view y, si quedara
   // abierto sobre el login, bloquearía el inicio de sesión con datos viejos.
   if ($("detail-dialog").open) $("detail-dialog").close();
   $("dialog-content").replaceChildren();
+  // Nothing from the previous session stays in memory behind the login view.
+  releaseCharts();
+  ["kpis", "graficas", "accesos", "table-head", "table-body"].forEach((id) => $(id)?.replaceChildren());
+  resources = [];
   // Deja el shell en un estado limpio y con su aria sincronizado.
   setBellMenu(false);
   setSidebar(false);
@@ -516,6 +526,7 @@ async function route() {
         : "Agregar registro";
   $("import-users").hidden = !(selected === "usuarios" && admin());
   $("dashboard-panel").hidden = selected !== "dashboard";
+  if (selected !== "dashboard") releaseCharts();
   $("builder-panel").hidden = selected !== "reportes";
   $("records-panel").hidden = ["dashboard", "reportes"].includes(selected);
   const main = $("main-content");

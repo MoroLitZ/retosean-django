@@ -48,6 +48,8 @@ pub struct AppState {
     /// login flood cannot block account creation.
     pub password_slots: std::sync::Arc<tokio::sync::Semaphore>,
     pub login_slots: std::sync::Arc<tokio::sync::Semaphore>,
+    /// Memory-capped concurrency for heavy exports/imports.
+    pub heavy_slots: std::sync::Arc<tokio::sync::Semaphore>,
 }
 
 pub fn router(state: AppState) -> Router {

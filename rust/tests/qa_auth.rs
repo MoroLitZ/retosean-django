@@ -433,6 +433,7 @@ where
         config,
         password_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
         login_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
+        heavy_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
     });
     let ctx = Ctx {
         admin: login(&app, "admin.demo").await,

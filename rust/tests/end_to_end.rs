@@ -188,6 +188,7 @@ async fn native_http_lifecycle_and_permissions() {
         config,
         password_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
         login_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
+        heavy_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
     });
     let test_pool = pool.clone();
     let result = std::panic::AssertUnwindSafe(async move {
@@ -2241,6 +2242,7 @@ async fn test_rechaza_contrasena_debil_en_registro_alta_cambio_y_restablecimient
         config,
         password_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
         login_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
+        heavy_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
     });
     let test_pool = pool.clone();
     let result = std::panic::AssertUnwindSafe(async move {
