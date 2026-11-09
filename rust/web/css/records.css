@@ -30,6 +30,13 @@
   max-width: 20rem;
 }
 
+/* Línea de ayuda en lenguaje sencillo bajo el título del listado
+   (roles simplificados); se rellena desde PAGE_HELP en records.js. */
+.page-help {
+  color: var(--ink-muted);
+  max-width: 70ch;
+}
+
 /* Herramientas extra del listado (acciones, filtros de área, enlaces). */
 #extra-panel {
   display: flex;
