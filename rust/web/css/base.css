@@ -89,22 +89,27 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* ── 2. Typography ── */
+/* ── 2. Typography roles ── */
 h1 {
   font-size: var(--text-2xl);
   font-weight: var(--weight-extrabold);
+  letter-spacing: var(--tracking-tight);
 }
 h2 {
   font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
 }
 h3 {
   font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
 }
 h4 {
-  font-size: var(--text-base);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
 }
 h5 {
   font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
 }
 h6 {
   font-size: var(--text-sm);
@@ -130,7 +135,7 @@ samp {
 
 /* ── 3. Links ── */
 a {
-  color: var(--accent);
+  color: var(--brand-text);
   text-decoration: none;
 }
 
@@ -142,19 +147,18 @@ a:hover {
 a.text-link,
 .text-link,
 .text-link-green {
-  color: var(--brand);
+  color: var(--brand-text);
   font-weight: var(--weight-semibold);
 }
 .text-link:hover,
 .text-link-green:hover {
-  color: var(--brand-hover);
+  color: var(--brand-text);
 }
 
 /* ── 4. Focus-visible (keyboard only) ── */
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
-  outline: 3px solid rgba(59, 172, 82, 0.55);
-  outline-offset: var(--focus-offset);
-  border-radius: 2px;
+  outline: 0;
+  box-shadow: var(--focus-ring);
 }
 
 :where(a, button, input, select, textarea, summary, [tabindex]):focus:not(:focus-visible) {
@@ -163,8 +167,8 @@ a.text-link,
 
 /* ── 5. Selection ── */
 ::selection {
-  background: var(--brand);
-  color: #ffffff;
+  background: var(--brand-subtle-strong);
+  color: var(--ink);
 }
 
 /* ── 6. Scrollbars ── */
@@ -312,6 +316,12 @@ a.text-link,
   overflow-wrap: anywhere;
   white-space: normal;
 }
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+.text-balance {
+  text-wrap: balance;
+}
 .fw-normal {
   font-weight: var(--weight-normal) !important;
 }
@@ -393,13 +403,13 @@ a.text-link,
 .w-100 { width: 100%; }
 .min-w-0 { min-width: 0; }
 
-/* The hidden attribute always wins over component display rules. */
-[hidden] {
-  display: none !important;
-}
-
 /* Programmatic focus targets (page heading, main) need no ring. */
 [tabindex="-1"]:focus {
   outline: none;
   box-shadow: none;
+}
+
+/* The hidden attribute always wins over component display rules. */
+[hidden] {
+  display: none !important;
 }

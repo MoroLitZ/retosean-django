@@ -383,8 +383,24 @@ async function loadDashboard() {
     Chart.defaults.color = dash_token("--ink-muted", "#6b7280");
     Chart.defaults.plugins.legend.labels.boxWidth = 12;
   }
-  const accent = dash_token("--accent", "#005e85");
+  const palette = [
+    dash_token("--chart-1", "#27783a"),
+    dash_token("--chart-2", "#005e85"),
+    dash_token("--chart-3", "#d97706"),
+    dash_token("--chart-4", "#7c3aed"),
+    dash_token("--chart-5", "#0e9f8e"),
+    dash_token("--chart-6", "#db2777"),
+    dash_token("--chart-7", "#64748b"),
+    dash_token("--chart-8", "#84cc16"),
+  ];
+  const gridColor = dash_token("--chart-grid", "rgba(0, 0, 0, 0.08)");
+  const tickColor = dash_token("--chart-tick", "#677069");
   const surfaceColor = dash_token("--surface", "#ffffff");
+  const colorAt = (i) => palette[i % palette.length];
+  const short = (s) => {
+    s = String(s ?? "");
+    return s.length > 18 ? s.slice(0, 17) + "…" : s;
+  };
 
   graficas.replaceChildren();
   let chartIndex = 0;
@@ -466,6 +482,7 @@ async function loadDashboard() {
     graficas.append(panel);
 
     const circular = tipo === "doughnut";
+    const isLine = tipo === "line";
     charts.push(
       new Chart(canvas, {
         type: tipo,
@@ -475,22 +492,87 @@ async function loadDashboard() {
             {
               label: etiqueta,
               data: serie.data,
-              backgroundColor: circular ? serie.colors : tipo === "line" ? accent + "1f" : serie.colors,
-              borderColor: tipo === "line" ? accent : surfaceColor,
-              borderWidth: tipo === "line" ? 2 : 1,
-              fill: tipo === "line",
-              tension: 0.3,
-              pointRadius: 3,
+              ...(circular
+                ? {
+                    backgroundColor: serie.labels.map((_, i) => colorAt(i)),
+                    borderColor: surfaceColor,
+                    borderWidth: 2,
+                    hoverOffset: 6,
+                  }
+                : isLine
+                  ? {
+                      borderColor: colorAt(1),
+                      backgroundColor: colorAt(1) + "1f",
+                      borderWidth: 2,
+                      fill: true,
+                      pointRadius: 3,
+                      tension: 0.3,
+                    }
+                  : {
+                      backgroundColor: colorAt(0),
+                      borderRadius: 6,
+                      borderSkipped: false,
+                      maxBarThickness: 48,
+                      borderWidth: 0,
+                    }),
             },
           ],
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: { legend: { display: circular, position: "bottom" } },
+          ...(circular ? { cutout: "62%" } : {}),
+          plugins: {
+            legend: circular
+              ? {
+                  display: true,
+                  position: "bottom",
+                  labels: {
+                    usePointStyle: true,
+                    pointStyle: "circle",
+                    boxWidth: 8,
+                    padding: 16,
+                    font: { size: 12 },
+                    // Doughnut keeps Chart.js' per-slice label generator (Chart.overrides),
+                    // falling back to the generic per-dataset one.
+                    generateLabels: (chart) => {
+                      const base =
+                        Chart.overrides?.[chart.config.type]?.plugins?.legend?.labels?.generateLabels ||
+                        Chart.defaults.plugins.legend.labels.generateLabels;
+                      return base(chart).map((l) => ({ ...l, text: short(l.text) }));
+                    },
+                  },
+                }
+              : { display: false },
+            tooltip: {
+              callbacks: {
+                title: (items) =>
+                  items.map((it) =>
+                    String(it.chart.data.labels?.[it.dataIndex] ?? it.label ?? ""),
+                  ),
+              },
+            },
+          },
           scales: circular
             ? {}
-            : { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } },
+            : {
+                y: {
+                  beginAtZero: true,
+                  grid: { color: gridColor },
+                  ticks: { precision: 0, color: tickColor },
+                },
+                x: {
+                  grid: { display: false },
+                  ticks: {
+                    color: tickColor,
+                    maxRotation: 0,
+                    autoSkip: true,
+                    callback(value) {
+                      return short(this.getLabelForValue(value));
+                    },
+                  },
+                },
+              },
         },
       }),
     );

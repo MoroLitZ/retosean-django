@@ -1,188 +1,325 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   RetosEAN Design Tokens
-   Universidad EAN — brand green #3bac52, near-black #0a0a0a
-   Single source of truth for colour, type, spacing, radius, shadow, focus, motion.
+   RetosEAN Design Tokens — v2
+   Universidad EAN · brand green #3bac52 · near-black #0a0a0a
+   Single source of truth for colour, type, spacing, radius, shadow, focus,
+   motion, layout and z-index. Every other stylesheet consumes these names;
+   view CSS must never hard-code a colour, size or shadow that exists here.
+
+   Naming rules
+   · --brand           identity colour: logo, decorative accents, focus ring, icon tints.
+   · --brand-strong    the ONLY green allowed behind white text (≥ 4.5:1 on light).
+   · --on-brand        text colour placed on --brand-strong.
+   · --brand-text      green used as text/link colour on light or dark surfaces.
+   · --<semantic>      foreground (text/icon) · --<semantic>-bg tint · --<semantic>-border.
+   · --chart-1…8       categorical chart palette, ordered by priority.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
   color-scheme: light;
 
-  /* ── Brand ── */
-  --brand: #3bac52;
-  --brand-hover: #2d8a40;
-  --brand-subtle: rgba(59, 172, 82, 0.13);
-  --accent: #005e85;
-  --accent-hover: #004b6b;
-  --teal: #00c0b3;
+  /* ── Brand ramp (EAN green) ── */
+  --brand-50: #eef9f0;
+  --brand-100: #d6f1dc;
+  --brand-200: #b0e3bc;
+  --brand-300: #7fcf93;
+  --brand-400: #52bb6a;
+  --brand-500: #3bac52;
+  --brand-600: #2f9447;
+  --brand-700: #27783a;
+  --brand-800: #215f31;
+  --brand-900: #1a4a28;
+
+  --brand: var(--brand-500);
+  --brand-hover: var(--brand-600);
+  --brand-strong: var(--brand-700);
+  --brand-strong-hover: var(--brand-800);
+  --brand-text: var(--brand-700);
+  --on-brand: #ffffff;
+  --brand-subtle: var(--brand-50);
+  --brand-subtle-strong: var(--brand-100);
+  --brand-glow: rgba(59, 172, 82, 0.18);
+
+  /* ── Accent (EAN blue) ── */
+  --accent-500: #005e85;
+  --accent-600: #004b6b;
+  --accent: var(--accent-500);
+  --accent-hover: var(--accent-600);
+  --accent-text: var(--accent-500);
+  --accent-subtle: #e6f1f6;
+  --teal: #0e9f8e;
   --ink-brand: #0a0a0a;
 
-  /* ── Neutrals (light) ── */
-  --bg: #f4f6f4;
+  /* ── Neutrals (light, slightly green-tinted greys) ── */
+  --bg: #f3f5f3;
   --surface: #ffffff;
-  --surface-subtle: #f9fafb;
+  --surface-subtle: #f8faf8;
   --surface-raised: #ffffff;
+  --surface-sunken: #eceeec;
+  --overlay: rgba(10, 14, 11, 0.55);
 
-  --ink: #0a0a0a;
-  --ink-soft: #374151;
-  --ink-muted: #6b7280;
-  --ink-faint: #9ca3af;
+  --ink: #111614;
+  --ink-soft: #3a423d;
+  --ink-muted: #677069;
+  --ink-faint: #7d867f;
   --ink-inverse: #ffffff;
 
-  --border: #e5e7eb;
-  --border-strong: #d1d5db;
+  --border: #e3e7e4;
+  --border-strong: #c9d0cb;
+  --hairline: rgba(17, 22, 20, 0.08);
 
-  /* ── Semantic colours ── */
-  --success: #15803d;
-  --success-bg: #dcfce7;
-  --warning: #b45309;
-  --warning-bg: #fef3c7;
-  --danger: #b91c1c;
-  --danger-bg: #fee2e2;
-  --info: #155e75;
-  --info-bg: #cffafe;
+  /* ── Semantic colours (fg ≥ 4.5:1 on --surface and on its own -bg) ── */
+  --success: #1f7a3a;
+  --success-bg: #e6f6ea;
+  --success-border: #bfe5ca;
+  --warning: #9a5b00;
+  --warning-bg: #fff4e0;
+  --warning-border: #f5d79a;
+  --danger: #b42318;
+  --danger-bg: #feeceb;
+  --danger-border: #f7c1bb;
+  --info: #0b5c7a;
+  --info-bg: #e6f3f8;
+  --info-border: #b8dbe8;
+  --neutral: #4b5563;
+  --neutral-bg: #eef0f1;
+  --neutral-border: #d5d9dd;
 
-  /* Focus ring */
-  --focus-ring: 0 0 0 3px rgba(59, 172, 82, 0.35);
+  /* ── Chart palette (categorical, in priority order) ── */
+  --chart-1: #27783a;
+  --chart-2: #005e85;
+  --chart-3: #d97706;
+  --chart-4: #7c3aed;
+  --chart-5: #0e9f8e;
+  --chart-6: #db2777;
+  --chart-7: #64748b;
+  --chart-8: #84cc16;
+  --chart-grid: rgba(17, 22, 20, 0.08);
+  --chart-tick: #677069;
+
+  /* ── Focus ── */
+  --focus-ring-color: rgba(59, 172, 82, 0.45);
+  --focus-ring: 0 0 0 3px var(--focus-ring-color);
   --focus-offset: 2px;
 
-  /* ── Typography (system stack only) ── */
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, sans-serif;
+  /* ── Typography (system stack; Inter is used only if locally installed) ── */
+  --font-sans: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui,
+    -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-display: var(--font-sans);
-  --font-mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono",
-    Menlo, monospace;
+  --font-mono: ui-monospace, "Cascadia Mono", "SFMono-Regular", Consolas,
+    "Liberation Mono", Menlo, monospace;
 
-  --text-xs: 0.72rem;
-  --text-sm: 0.82rem;
-  --text-base: 0.92rem;
-  --text-lg: 1.1rem;
-  --text-xl: 1.35rem;
-  --text-2xl: 1.5rem;
-  --text-3xl: 1.75rem;
+  --text-2xs: 0.6875rem; /* 11px  tiny badges */
+  --text-xs: 0.75rem; /* 12px  eyebrows, captions */
+  --text-sm: 0.8125rem; /* 13px  table cells, hints */
+  --text-base: 0.9375rem; /* 15px  body */
+  --text-md: 1rem; /* 16px  emphasised body, inputs on mobile */
+  --text-lg: 1.125rem; /* 18px  h3 */
+  --text-xl: 1.375rem; /* 22px  h2 / page title */
+  --text-2xl: 1.625rem; /* 26px  h1 / KPI value */
+  --text-3xl: 2rem; /* 32px  display */
+  --text-4xl: 2.5rem; /* 40px  hero numbers */
 
   --weight-light: 300;
   --weight-normal: 400;
+  --weight-medium: 500;
   --weight-semibold: 600;
   --weight-bold: 700;
   --weight-extrabold: 800;
 
   --leading-tight: 1.2;
+  --leading-snug: 1.35;
   --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+  --tracking-caps: 0.06em;
+  --tracking-tight: -0.01em;
 
-  /* ── Spacing (4px base) ── */
+  /* ── Spacing (4px base; names are stable, do not renumber) ── */
+  --space-0: 0;
+  --space-0-5: 2px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
+  --space-4-5: 20px;
   --space-5: 24px;
   --space-6: 32px;
   --space-7: 48px;
   --space-8: 64px;
 
   /* ── Radii ── */
+  --radius-xs: 4px;
   --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
   --radius-pill: 999px;
 
-  /* ── Shadows ── */
-  --shadow-sm: 0 1px 2px rgba(10, 10, 10, 0.06);
-  --shadow-md: 0 4px 14px rgba(10, 10, 10, 0.08);
-  --shadow-lg: 0 28px 72px rgba(0, 0, 0, 0.25);
+  /* ── Elevation ── */
+  --shadow-xs: 0 1px 1px rgba(17, 22, 20, 0.04);
+  --shadow-sm: 0 1px 2px rgba(17, 22, 20, 0.06), 0 1px 3px rgba(17, 22, 20, 0.04);
+  --shadow-md: 0 6px 16px -4px rgba(17, 22, 20, 0.12), 0 2px 6px rgba(17, 22, 20, 0.06);
+  --shadow-lg: 0 24px 56px -12px rgba(17, 22, 20, 0.28), 0 8px 20px rgba(17, 22, 20, 0.1);
+  --shadow-brand: 0 8px 20px -6px rgba(59, 172, 82, 0.45);
+
+  /* ── Control sizing ── */
+  --control-h-sm: 32px;
+  --control-h: 40px;
+  --control-h-lg: 48px;
+  --control-px: 14px;
+  --control-radius: var(--radius-md);
+  --target-min: 40px;
 
   /* ── Motion ── */
   --duration-fast: 120ms;
   --duration-base: 180ms;
   --duration-slow: 280ms;
-  --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
 
   /* ── Shell layout ── */
-  --sidebar-width: 262px;
-  --topbar-h: 62px;
+  --sidebar-width: 264px;
+  --topbar-h: 60px;
+  --content-max: 1360px;
+  --content-pad: 32px;
+  --content-pad-mobile: 16px;
+  --dialog-w: 800px;
+  --dialog-w-sm: 520px;
+
+  /* ── Z-index scale ── */
+  --z-sticky: 10;
+  --z-topbar: 1040;
+  --z-sidebar: 1050;
+  --z-menu: 1060;
+  --z-dialog: 1080;
+  --z-toast: 1100;
 
   /* ── Sidebar (near-black brand surface, constant across themes) ── */
   --sidebar-bg: #0a0a0a;
   --sidebar-bg-deep: #060606;
-  --sidebar-ink: rgba(255, 255, 255, 0.65);
-  --sidebar-ink-muted: rgba(255, 255, 255, 0.32);
+  --sidebar-ink: rgba(255, 255, 255, 0.72);
+  --sidebar-ink-muted: rgba(255, 255, 255, 0.46);
   --sidebar-ink-hover: #ffffff;
   --sidebar-hover: rgba(255, 255, 255, 0.07);
-  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-active: rgba(255, 255, 255, 0.1);
+  --sidebar-border: rgba(255, 255, 255, 0.07);
   --sidebar-accent: var(--brand);
-  --sidebar-accent-subtle: var(--brand-subtle);
+  --sidebar-accent-subtle: rgba(59, 172, 82, 0.16);
 
   /* ── Icon sizing ── */
+  --icon-xs: 0.8rem;
   --icon-sm: 0.9rem;
-  --icon-base: 1.05rem;
-  --icon-lg: 1.3rem;
+  --icon-base: 1.1rem;
+  --icon-lg: 1.35rem;
+  --icon-xl: 1.75rem;
+
+  /* ── Decorative KPI tones without a semantic meaning ── */
+  --kpi-violet: #7c3aed;
+  --kpi-violet-bg: rgba(124, 58, 237, 0.12);
+  --kpi-pink: #db2777;
+  --kpi-pink-bg: rgba(219, 39, 119, 0.12);
 }
 
+/* ═══════════════ Dark theme ═══════════════ */
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
 
-    --bg: #0d110d;
-    --surface: #151a15;
-    --surface-subtle: #1c231d;
-    --surface-raised: #1f271f;
+    --brand-strong: var(--brand-500);
+    --brand-strong-hover: var(--brand-400);
+    --on-brand: #06150a;
+    --brand-text: #6fd189;
+    --brand-subtle: rgba(59, 172, 82, 0.14);
+    --brand-subtle-strong: rgba(59, 172, 82, 0.24);
+    --brand-glow: rgba(59, 172, 82, 0.28);
 
-    --ink: #eef4ee;
-    --ink-soft: #cbd5cb;
-    --ink-muted: #9aa89a;
-    --ink-faint: #6c7a6c;
+    --accent-text: #5db5dc;
+    --accent-subtle: rgba(0, 94, 133, 0.28);
+
+    --bg: #0f1411;
+    --surface: #171d19;
+    --surface-subtle: #1d241f;
+    --surface-raised: #212a24;
+    --surface-sunken: #0b0f0c;
+    --overlay: rgba(0, 0, 0, 0.65);
+
+    --ink: #eef3ef;
+    --ink-soft: #c8d1ca;
+    --ink-muted: #97a39a;
+    --ink-faint: #68736b;
     --ink-inverse: #0a0a0a;
 
-    --border: #263026;
-    --border-strong: #3a483a;
+    --border: #28322b;
+    --border-strong: #3b483e;
+    --hairline: rgba(255, 255, 255, 0.08);
 
-    --brand-subtle: rgba(59, 172, 82, 0.2);
-    --accent-subtle: rgba(0, 94, 133, 0.25);
-
-    --success: #4ade80;
-    --success-bg: rgba(74, 222, 128, 0.14);
-    --warning: #fbbf24;
-    --warning-bg: rgba(251, 191, 36, 0.14);
+    --success: #5fcf78;
+    --success-bg: rgba(95, 207, 120, 0.14);
+    --success-border: rgba(95, 207, 120, 0.35);
+    --warning: #f5b74a;
+    --warning-bg: rgba(245, 183, 74, 0.14);
+    --warning-border: rgba(245, 183, 74, 0.35);
     --danger: #f87171;
     --danger-bg: rgba(248, 113, 113, 0.16);
-    --info: #67e8f9;
-    --info-bg: rgba(103, 232, 249, 0.14);
+    --danger-border: rgba(248, 113, 113, 0.38);
+    --info: #67c3e8;
+    --info-bg: rgba(103, 195, 232, 0.14);
+    --info-border: rgba(103, 195, 232, 0.35);
+    --neutral: #a6b0a9;
+    --neutral-bg: rgba(166, 176, 169, 0.14);
+    --neutral-border: rgba(166, 176, 169, 0.3);
 
+    --chart-1: #52bb6a;
+    --chart-2: #3aa0d6;
+    --chart-3: #f59e0b;
+    --chart-4: #a78bfa;
+    --chart-5: #2dd4bf;
+    --chart-6: #f472b6;
+    --chart-7: #94a3b8;
+    --chart-8: #a3e635;
+    --chart-grid: rgba(255, 255, 255, 0.08);
+    --chart-tick: #97a39a;
+
+    --shadow-xs: 0 1px 1px rgba(0, 0, 0, 0.3);
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.5);
-    --shadow-lg: 0 28px 72px rgba(0, 0, 0, 0.7);
+    --shadow-md: 0 6px 16px -4px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 24px 56px -12px rgba(0, 0, 0, 0.75);
+    --shadow-brand: 0 8px 20px -6px rgba(59, 172, 82, 0.35);
 
-    --focus-ring: 0 0 0 3px rgba(59, 172, 82, 0.45);
+    --focus-ring-color: rgba(111, 209, 137, 0.55);
+
+    --kpi-violet: #a78bfa;
+    --kpi-violet-bg: rgba(167, 139, 250, 0.16);
+    --kpi-pink: #f472b6;
+    --kpi-pink-bg: rgba(244, 114, 182, 0.16);
   }
 }
 
-/* ── Per-role accent variants (see shell.css for how they tint the sidebar) ── */
+/* ── Per-role sidebar accent (how shell.css tints the active item) ── */
 body.role-admin {
-  --sidebar-accent: #7c8794;
-  --sidebar-accent-subtle: rgba(124, 135, 148, 0.18);
+  --sidebar-accent: #8b96a3;
+  --sidebar-accent-subtle: rgba(139, 150, 163, 0.18);
 }
 body.role-profesor {
   --sidebar-accent: #2da8d0;
-  --sidebar-accent-subtle: rgba(0, 94, 133, 0.2);
+  --sidebar-accent-subtle: rgba(45, 168, 208, 0.18);
 }
 body.role-empresa,
 body.role-estudiante,
 body.role-experto {
   --sidebar-accent: var(--brand);
-  --sidebar-accent-subtle: var(--brand-subtle);
+  --sidebar-accent-subtle: rgba(59, 172, 82, 0.16);
 }
 
-/* The legacy stylesheet recolours `--accent` per role for its (removed) sidebar
-   theme; pin the semantic accent back to EAN blue so buttons/text stay stable
-   regardless of role. */
+/* Semantic accent never changes with the role. */
 body.role-admin,
 body.role-empresa,
 body.role-estudiante,
 body.role-profesor,
 body.role-experto {
-  --accent: #005e85;
-  --accent-hover: #004b6b;
+  --accent: var(--accent-500);
+  --accent-hover: var(--accent-600);
 }
 
 /* ── Reduced motion ── */

@@ -5,7 +5,7 @@
 /* Truncado accesible de las celdas de datos: el texto completo sigue disponible
    en el atributo `title` y en el DOM para lectores de pantalla. */
 #table-body td {
-  max-width: 18rem;
+  max-width: 24rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -19,6 +19,7 @@
 
 /* Filas fantasma de la tabla mientras la consulta está en vuelo. */
 .records-skeleton-row td {
+  height: var(--control-h-lg);
   padding-block: var(--space-2);
 }
 .records-skeleton-row .skeleton--row {
@@ -33,7 +34,7 @@
 /* Línea de ayuda en lenguaje sencillo bajo el título del listado
    (roles simplificados); se rellena desde PAGE_HELP en records.js. */
 .page-help {
-  color: var(--ink-muted);
+  color: var(--ink-soft);
   max-width: 70ch;
 }
 

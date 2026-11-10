@@ -1,18 +1,29 @@
 /* RetosEAN — create/edit form styles (forms area).
-   - Two-column form grid that collapses to one column on narrow screens.
+   - One column by default; two columns from 640px.
    - Action row for form submit buttons.
    - Inline comment control and indeterminate upload progress. */
 
-/* Two-column form grid; collapses to a single column below 768px. */
+/* Form grid: one column on narrow screens, two columns ≥ 640px. */
 .form-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 var(--space-4);
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
   align-items: start;
 }
-@media (max-width: 768px) {
+.form-grid .field--full {
+  grid-column: 1 / -1;
+}
+.form-grid .field--full > .btn {
+  width: 100%;
+}
+@media (min-width: 640px) {
   .form-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4) var(--space-4-5);
+  }
+  .form-grid .field--full > .btn {
+    width: auto;
+    justify-self: end;
   }
 }
 
@@ -30,6 +41,8 @@
   display: flex;
   gap: var(--space-2);
   align-items: center;
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
 }
 .forms-comment .input {
   flex: 1 1 auto;
