@@ -913,6 +913,7 @@ textarea {
 /* ═══════════════ Toast ═══════════════ */
 #toast {
   position: fixed;
+  inset: auto;
   left: 50%;
   right: auto;
   bottom: var(--space-4-5);
@@ -1412,11 +1413,6 @@ dialog > .dialog-actions {
 .progress[aria-valuemax] {
   width: 100%;
 }
-.progress--busy .progress__bar {
-  width: 40%;
-  animation: indeterminate 1.2s var(--ease-in-out) infinite;
-}
-
 /* Indeterminate top progress (page loading) */
 .app-progress {
   position: fixed;

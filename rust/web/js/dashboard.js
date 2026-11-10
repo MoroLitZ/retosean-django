@@ -559,12 +559,13 @@ async function loadDashboard() {
                 y: {
                   beginAtZero: true,
                   grid: { color: gridColor },
-                  ticks: { precision: 0, color: tickColor },
+                  ticks: { precision: 0, color: tickColor, font: { size: 12 } },
                 },
                 x: {
                   grid: { display: false },
                   ticks: {
                     color: tickColor,
+                    font: { size: 12 },
                     maxRotation: 0,
                     autoSkip: true,
                     callback(value) {
