@@ -44,6 +44,43 @@ const COLUMNS = {
   tipos_documento_legal: [["orden", "Orden"], ["nombre", "Documento"], ["obligatorio", "Obligatorio"], ["vigencia_dias", "Vigencia (días)"], ["activo", "Activo"]],
   cierre_solicitudlogistica: [["reto", "Reto"], ["evento", "Evento"], ["tipo", "Tipo"], ["estado", "Estado"], ["creada_en", "Solicitada"]],
 };
+// Línea de ayuda en lenguaje sencillo bajo el título de cada listado,
+// solo para los roles simplificados (ESTUDIANTE, PROFESOR, EMPRESA).
+const PAGE_HELP = {
+  ESTUDIANTE: {
+    retos: "Aquí ves los retos abiertos de las empresas. Abre uno con «Ver detalle» para leerlo y postularte.",
+    postulaciones: "El estado de cada reto al que te postulaste. Cuando te acepten, podrás subir tus entregables.",
+    entregables: "Sube aquí los archivos que te piden en cada reto y consulta tu nota.",
+    retos_favoritos: "Tus retos guardados. Ábrelos con «Ver detalle» para postularte cuando quieras.",
+    cierre_encuestasatisfaccion: "Cuando termina un reto, cuenta aquí cómo te fue. Tu opinión ayuda a mejorar.",
+    certificados: "Los certificados que has ganado por participar. Descárgalos desde «Ver detalle».",
+    equipos_reto_academico: "Los equipos en los que participas y el reto de cada uno.",
+    hackathons: "Los hackathones disponibles. Abre uno con «Ver detalle» para inscribir a tu equipo.",
+    notificaciones: "Los avisos que te envía la plataforma. Abre uno para marcarlo como leído.",
+  },
+  PROFESOR: {
+    integraciones_academicas: "Los retos que conectaste con tus cursos. Abre uno para ver su estado o editarlo.",
+    retos: "Los retos de empresas que puedes llevar a tu clase. Abre uno y usa «Integrar a mi curso».",
+    postulaciones: "Los estudiantes postulados a los retos de tus cursos. Acéptalos o recházalos desde «Ver detalle».",
+    entregables: "Revisa y califica lo que entregaron tus estudiantes.",
+    cierres_reto: "Los retos de tus cursos que ya se cerraron.",
+    cierre_encuestasatisfaccion: "Cuando termina un reto, cuenta aquí cómo te fue. Tu opinión ayuda a mejorar.",
+    unidades_estudio: "Las unidades de estudio disponibles para crear equipos académicos.",
+    hackathons: "Los hackathones activos. Abre uno para ver su detalle o votar como jurado.",
+    notificaciones: "Los avisos que te envía la plataforma. Abre uno para marcarlo como leído.",
+  },
+  EMPRESA: {
+    retos: "Los retos que publicaste. Publica uno nuevo con el botón «Publicar Reto».",
+    integraciones_academicas: "Los profesores que quieren usar tus retos en clase. Aprueba o rechaza desde «Ver detalle».",
+    postulaciones: "Los estudiantes que se postularon a tus retos. Acéptalos o recházalos desde «Ver detalle».",
+    documentos_empresas: "Sube los documentos legales que la universidad necesita para aprobar tu empresa.",
+    seguimientos_reto: "El avance que profesores y estudiantes registran en tus retos.",
+    cierres_reto: "Tus retos que ya terminaron y su cierre.",
+    cierre_encuestasatisfaccion: "Cuando termina un reto, cuenta aquí cómo te fue. Tu opinión ayuda a mejorar.",
+    hackathons: "Los hackathones activos. Abre uno para ver su detalle.",
+    notificaciones: "Los avisos que te envía la plataforma. Abre uno para marcarlo como leído.",
+  },
+};
 // Columnas que se muestran alineadas a la derecha con cifras tabulares.
 const records_NUMERIC = [
   "monto",
@@ -130,6 +167,13 @@ async function loadRecords() {
     tbl.prepend(el("caption", "visually-hidden", title(table)));
   }
   const body = $("table-body");
+  // Línea de ayuda del listado: solo roles simplificados y solo si hay texto.
+  const pageHelp = $("page-help");
+  if (pageHelp) {
+    const helpText = (PAGE_HELP[role()] || {})[table] || "";
+    pageHelp.textContent = helpText;
+    pageHelp.hidden = !simpleRole() || !helpText;
+  }
   body.replaceChildren(records_skeletonRows(6));
   const inactive = table === "unidades_estudio" && showInactive ? "&activo=0" : "";
   let data;

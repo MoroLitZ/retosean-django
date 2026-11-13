@@ -112,6 +112,25 @@ const ACCESOS = {
   EXPERTO: [["hackathons", "Mis hackathones", "lightning-charge"]],
 };
 
+// Tarjeta de bienvenida de los roles simplificados: [ruta, texto, explicación].
+const BIENVENIDA = {
+  ESTUDIANTE: [
+    ["retos", "Buscar un reto", "Encuentra un reto y postúlate."],
+    ["entregables", "Mis entregables", "Sube tus avances y mira tus notas."],
+    ["postulaciones", "Mis postulaciones", "Revisa si ya te aceptaron."],
+  ],
+  PROFESOR: [
+    ["entregables", "Calificar entregables", "Califica lo que enviaron tus estudiantes."],
+    ["integraciones_academicas", "Mis cursos", "Conecta retos con tus cursos."],
+    ["postulaciones", "Mis estudiantes", "Revisa quién está en cada reto."],
+  ],
+  EMPRESA: [
+    ["publicar", "Publicar un reto", "Plantea un problema real para que los estudiantes lo resuelvan."],
+    ["postulaciones", "Estudiantes postulados", "Acepta o rechaza a quienes se postularon."],
+    ["documentos_empresas", "Mis documentos legales", "Sube los documentos que la universidad necesita."],
+  ],
+};
+
 let dashboardQuery = "";
 
 /* ── Helpers privados (prefijo dash_, propios del área dashboard) ─────────── */
@@ -125,6 +144,84 @@ function dash_tipoEs(tipo) {
 function dash_token(name, fallback) {
   const value = getComputedStyle(document.documentElement).getPropertyValue(name);
   return (value && value.trim()) || fallback;
+}
+
+// Misma regla de visibilidad del menú lateral: la acción solo se muestra si el
+// rol realmente tiene esa ruta («publicar» existe cuando hay «retos»).
+function dash_has(target) {
+  return resources.some((r) => r.table === (target === "publicar" ? "retos" : target));
+}
+
+// Tarjeta «Hola, …» con las acciones principales del rol simplificado.
+function dash_renderWelcome() {
+  const panel = $("dashboard-panel");
+  let box = $("dash-welcome");
+  const actions = (BIENVENIDA[role()] || []).filter(([target]) => dash_has(target));
+  if (!simpleRole() || !actions.length) {
+    if (box) box.hidden = true;
+    return;
+  }
+  if (!box) {
+    box = el("section", "surface dash-welcome");
+    box.id = "dash-welcome";
+    panel.prepend(box);
+  }
+  box.hidden = false;
+  const list = el("div", "dash-welcome-actions");
+  for (const [target, text, hint] of actions) {
+    const item = el("div", "dash-welcome-action");
+    const a = el("a", "btn btn--primary btn--lg w-100", text);
+    a.href = "#" + target;
+    item.append(a, el("p", "dash-welcome-hint text-center", hint));
+    list.append(item);
+  }
+  box.replaceChildren(
+    el("h2", "dash-welcome-title", `Hola, ${user.first_name || user.username}`),
+    el("p", "dash-welcome-sub", "Esto es lo que puedes hacer ahora:"),
+    list,
+  );
+}
+
+// Filtro de periodo compacto para los roles simplificados: un <select> pequeño
+// a la derecha del título «Tu resumen» que replica las opciones de #periodo y
+// dispara la lógica de aplicación ya existente (periodo-form) al cambiar.
+function dash_compactPeriod(simple, sinRol) {
+  const kpiTitle = $("dash-kpis-title");
+  let head = $("dash-kpis-head");
+  if (simple && kpiTitle && !head) {
+    head = el("div", "dash-section-head");
+    head.id = "dash-kpis-head";
+    kpiTitle.before(head);
+    head.append(kpiTitle);
+    const compact = el("select", "select input--sm dash-periodo");
+    compact.id = "periodo-compact";
+    compact.setAttribute("aria-label", "Periodo");
+    compact.onchange = () => {
+      $("periodo").value = compact.value;
+      $("periodo-form").requestSubmit();
+    };
+    head.append(compact);
+  }
+  // Al volver a entrar con ADMIN/EXPERTO sin recargar, se deshace el envoltorio.
+  if (head && !simple) {
+    head.before(kpiTitle);
+    head.remove();
+    head = null;
+  }
+  if (head) head.hidden = sinRol;
+  const compact = $("periodo-compact");
+  if (compact) {
+    compact.replaceChildren(
+      // «Personalizado» necesita las fechas Desde/Hasta de la tarjeta oculta.
+      ...[...$("periodo").options].filter((o) => o.value !== "custom").map((o) => {
+        const option = el("option", "", o.textContent);
+        option.value = o.value;
+        option.selected = o.selected;
+        return option;
+      }),
+    );
+    compact.hidden = !simple || sinRol;
+  }
 }
 
 // Inserta un encabezado de sección antes de `target` (idempotente) y lo devuelve.
@@ -181,6 +278,11 @@ async function loadDashboard() {
   const accesos = $("accesos");
   const periodForm = $("periodo-form");
   const applyBtn = periodForm ? periodForm.querySelector('[type="submit"]') : null;
+  const simple = simpleRole();
+  // Bienvenida arriba de todo y, para roles simplificados, la tarjeta grande
+  // de filtros se reemplaza por un selector compacto junto a «Tu resumen».
+  dash_renderWelcome();
+  $("periodo-form").closest(".card-panel").hidden = simple;
 
   // ── Estado de carga: esqueletos + aria-busy en las regiones dinámicas ──
   releaseCharts();
@@ -245,12 +347,13 @@ async function loadDashboard() {
 
   // ── Encabezados de sección (jerarquía visual); ocultos si no hay rol ──
   const sinRol = !!data.sin_rol;
-  const kpiTitle = dash_sectionTitle(kpis, "dash-kpis-title", "Indicadores clave");
+  const kpiTitle = dash_sectionTitle(kpis, "dash-kpis-title", simple ? "Tu resumen" : "Indicadores clave");
   kpiTitle.hidden = sinRol;
   kpis.setAttribute("aria-labelledby", "dash-kpis-title");
-  const chartTitle = dash_sectionTitle(graficas, "dash-charts-title", "Distribución y tendencias");
+  const chartTitle = dash_sectionTitle(graficas, "dash-charts-title", simple ? "Gráficas" : "Distribución y tendencias");
   chartTitle.hidden = sinRol;
   graficas.setAttribute("aria-labelledby", "dash-charts-title");
+  dash_compactPeriod(simple, sinRol);
 
   // ── Tarjetas KPI ──
   kpis.replaceChildren();
@@ -279,8 +382,24 @@ async function loadDashboard() {
     Chart.defaults.color = dash_token("--ink-muted", "#6b7280");
     Chart.defaults.plugins.legend.labels.boxWidth = 12;
   }
-  const accent = dash_token("--accent", "#005e85");
+  const palette = [
+    dash_token("--chart-1", "#27783a"),
+    dash_token("--chart-2", "#005e85"),
+    dash_token("--chart-3", "#d97706"),
+    dash_token("--chart-4", "#7c3aed"),
+    dash_token("--chart-5", "#0e9f8e"),
+    dash_token("--chart-6", "#db2777"),
+    dash_token("--chart-7", "#64748b"),
+    dash_token("--chart-8", "#84cc16"),
+  ];
+  const gridColor = dash_token("--chart-grid", "rgba(0, 0, 0, 0.08)");
+  const tickColor = dash_token("--chart-tick", "#677069");
   const surfaceColor = dash_token("--surface", "#ffffff");
+  const colorAt = (i) => palette[i % palette.length];
+  const short = (s) => {
+    s = String(s ?? "");
+    return s.length > 18 ? s.slice(0, 17) + "…" : s;
+  };
 
   graficas.replaceChildren();
   let chartIndex = 0;
@@ -307,7 +426,9 @@ async function loadDashboard() {
             variant: "ghost",
             icon: "funnel",
             onClick: () => {
-              const period = $("periodo");
+              // En roles simplificados la tarjeta de filtros está oculta.
+              const compactSel = $("periodo-compact");
+              const period = compactSel && !compactSel.hidden ? compactSel : $("periodo");
               if (!period) return;
               period.scrollIntoView({ block: "center" });
               period.focus();
@@ -360,6 +481,7 @@ async function loadDashboard() {
     graficas.append(panel);
 
     const circular = tipo === "doughnut";
+    const isLine = tipo === "line";
     charts.push(
       new Chart(canvas, {
         type: tipo,
@@ -369,31 +491,97 @@ async function loadDashboard() {
             {
               label: etiqueta,
               data: serie.data,
-              backgroundColor: circular ? serie.colors : tipo === "line" ? accent + "1f" : serie.colors,
-              borderColor: tipo === "line" ? accent : surfaceColor,
-              borderWidth: tipo === "line" ? 2 : 1,
-              fill: tipo === "line",
-              tension: 0.3,
-              pointRadius: 3,
+              ...(circular
+                ? {
+                    backgroundColor: serie.labels.map((_, i) => colorAt(i)),
+                    borderColor: surfaceColor,
+                    borderWidth: 2,
+                    hoverOffset: 6,
+                  }
+                : isLine
+                  ? {
+                      borderColor: colorAt(1),
+                      backgroundColor: colorAt(1) + "1f",
+                      borderWidth: 2,
+                      fill: true,
+                      pointRadius: 3,
+                      tension: 0.3,
+                    }
+                  : {
+                      backgroundColor: colorAt(0),
+                      borderRadius: 6,
+                      borderSkipped: false,
+                      maxBarThickness: 48,
+                      borderWidth: 0,
+                    }),
             },
           ],
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: { legend: { display: circular, position: "bottom" } },
+          ...(circular ? { cutout: "62%" } : {}),
+          plugins: {
+            legend: circular
+              ? {
+                  display: true,
+                  position: "bottom",
+                  labels: {
+                    usePointStyle: true,
+                    pointStyle: "circle",
+                    boxWidth: 8,
+                    padding: 16,
+                    font: { size: 12 },
+                    // Doughnut keeps Chart.js' per-slice label generator (Chart.overrides),
+                    // falling back to the generic per-dataset one.
+                    generateLabels: (chart) => {
+                      const base =
+                        Chart.overrides?.[chart.config.type]?.plugins?.legend?.labels?.generateLabels ||
+                        Chart.defaults.plugins.legend.labels.generateLabels;
+                      return base(chart).map((l) => ({ ...l, text: short(l.text) }));
+                    },
+                  },
+                }
+              : { display: false },
+            tooltip: {
+              callbacks: {
+                title: (items) =>
+                  items.map((it) =>
+                    String(it.chart.data.labels?.[it.dataIndex] ?? it.label ?? ""),
+                  ),
+              },
+            },
+          },
           scales: circular
             ? {}
-            : { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } },
+            : {
+                y: {
+                  beginAtZero: true,
+                  grid: { color: gridColor },
+                  ticks: { precision: 0, color: tickColor, font: { size: 12 } },
+                },
+                x: {
+                  grid: { display: false },
+                  ticks: {
+                    color: tickColor,
+                    font: { size: 12 },
+                    maxRotation: 0,
+                    autoSkip: true,
+                    callback(value) {
+                      return short(this.getLabelForValue(value));
+                    },
+                  },
+                },
+              },
         },
       }),
     );
   }
 
-  // ── Accesos rápidos ──
+  // ── Accesos rápidos (la tarjeta de bienvenida los reemplaza en roles simples) ──
   accesos.replaceChildren();
   let accesosCount = 0;
-  for (const [target, text, iconName] of sinRol ? [] : ACCESOS[data.rol]) {
+  for (const [target, text, iconName] of sinRol || simple ? [] : ACCESOS[data.rol]) {
     if (!["publicar", "reportes"].includes(target) && !resources.some((r) => r.table === target)) continue;
     const a = el("a", "btn btn--secondary btn--sm");
     a.href = "#" + target;

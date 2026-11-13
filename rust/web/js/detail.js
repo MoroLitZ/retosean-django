@@ -47,6 +47,9 @@ async function openRecord(id) {
     .filter((k) => k in record && !["id", "eliminado_en", "anio_consecutivo"].includes(k));
   for (const key of keys) {
     const value = record[key];
+    // Roles simplificados: la ficha solo muestra los campos que tienen dato
+    // (sin filas «—»); los botones de acción no se tocan.
+    if (simpleRole() && (value === null || value === undefined || value === "")) continue;
     const f = field(selected, key);
     const dt = document.createElement("dt");
     dt.textContent =

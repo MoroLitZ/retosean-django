@@ -2,23 +2,67 @@
    dashboard.css — estilos exclusivos del área Dashboard de Indicadores.
    Consume tokens (tokens.css) y las clases del design system
    (.surface, .kpi, .kpi__*, .card-panel, .chart-box, .empty, .skeleton…).
-   Sin Bootstrap. Preferimos var(--…) sobre colores literales; los dos tonos
-   decorativos sin token (violeta/rosa) quedan acotados como --kpi-*.
+   Sin Bootstrap. Todos los tonos decorativos (violeta/rosa) viven en
+   tokens.css como --kpi-violet* / --kpi-pink*.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-:root {
-  --kpi-violet: #7c3aed; /* decorativo: "Finalizados" */
-  --kpi-pink: #db2777; /* decorativo: "Docentes"/"Entregables" */
-}
-
-/* ── Encabezados de sección (jerarquía visual) ── */
+/* ── Encabezados de sección (eyebrow) ── */
 .dash-section-title {
   margin: 0 0 var(--space-3);
-  font-size: var(--text-base);
+  font-size: var(--text-xs);
   font-weight: var(--weight-semibold);
-  color: var(--ink-soft);
+  color: var(--ink-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
+}
+
+/* ── Tarjeta de bienvenida (roles simplificados) ── */
+.dash-welcome {
+  padding: calc(var(--space-6) - var(--space-1));
+  margin-bottom: var(--space-4);
+  background: linear-gradient(135deg, var(--brand-subtle), transparent 60%),
+    var(--surface);
+  border-radius: var(--radius-xl);
+}
+.dash-welcome-title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-extrabold);
+  color: var(--ink);
+}
+.dash-welcome-sub {
+  margin: 0 0 var(--space-4);
+  color: var(--ink-muted);
+}
+.dash-welcome-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-3);
+}
+.dash-welcome-actions .btn {
+  min-height: var(--control-h-lg);
+}
+.dash-welcome-hint {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+}
+
+/* ── Título de sección con control compacto a la derecha (periodo) ── */
+.dash-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+}
+.dash-section-head .dash-section-title {
+  margin: 0;
+}
+.dash-periodo {
+  width: auto;
+  min-width: 12rem;
 }
 
 /* ── Barra de filtros (formulario de periodo) ─────────────────────────────
@@ -28,7 +72,7 @@
 #dashboard-panel .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0 var(--space-4);
+  gap: var(--space-4) var(--space-4-5);
 }
 #dashboard-panel .form-grid .field--full {
   grid-column: 1 / -1;
@@ -39,25 +83,52 @@
   }
 }
 
-/* ── Cuadrícula de KPIs: 2 columnas en móvil, 4 en escritorio ── */
+/* ── Cuadrícula de KPIs: 2 columnas por defecto, 4 en escritorio ── */
 .dash-kpis {
   display: grid;
   gap: var(--space-4);
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-@media (min-width: 992px) {
-  .dash-kpis {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
 
-/* Tarjeta KPI: superficie + relleno (usa .surface y .kpi del sistema). */
+/* Tarjeta KPI: superficie + relleno (usa .surface y .kpi del sistema).
+   Icono arriba a la derecha, etiqueta/valor/nota a la izquierda. */
 .dash-kpi {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-1) var(--space-3);
   height: 100%;
-  padding: var(--space-4);
+  min-height: 112px;
+  border-radius: var(--radius-lg);
 }
 .dash-kpi-text {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
   min-width: 0;
+}
+.dash-kpi > .kpi__icon {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  width: var(--control-h);
+  height: var(--control-h);
+  border-radius: var(--radius-pill);
+}
+.dash-kpi .kpi__label {
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-caps);
+}
+.dash-kpi .kpi__value {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  font-variant-numeric: tabular-nums;
+}
+.dash-kpi .kpi__note {
+  font-size: var(--text-sm);
 }
 
 /* Movimiento sutil solo si el usuario no pidió movimiento reducido. */
@@ -95,16 +166,16 @@
   background: var(--info-bg);
 }
 .kpi__icon--accent {
-  color: var(--accent);
-  background: var(--info-bg);
+  color: var(--accent-text);
+  background: var(--accent-subtle);
 }
 .kpi__icon--violet {
   color: var(--kpi-violet);
-  background: rgba(124, 58, 237, 0.14);
+  background: var(--kpi-violet-bg);
 }
 .kpi__icon--pink {
   color: var(--kpi-pink);
-  background: rgba(219, 39, 119, 0.14);
+  background: var(--kpi-pink-bg);
 }
 
 /* ── Cuadrícula de gráficas: 12 columnas, med=5 / wide=7 en escritorio ── */
@@ -130,7 +201,8 @@
   flex: 1 1 auto;
 }
 .dash-chart-box {
-  padding: var(--space-4);
+  height: 300px;
+  padding: var(--space-4) var(--space-4-5) var(--space-4-5);
 }
 .dash-chart-title {
   font-size: var(--text-base);
@@ -142,7 +214,7 @@
 }
 .dash-chart-data {
   padding: 0 var(--space-4) var(--space-4);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--hairline);
   margin-top: var(--space-2);
   padding-top: var(--space-2);
 }
@@ -182,4 +254,43 @@
   height: 100%;
   width: 100%;
   border-radius: var(--radius-md);
+}
+
+/* ── Ajustes móviles (≤ 600) ── */
+@media (max-width: 600px) {
+  .dash-welcome {
+    padding: var(--space-4-5);
+  }
+  .dash-welcome-actions {
+    grid-template-columns: 1fr;
+  }
+  .dash-kpis {
+    gap: var(--space-3);
+  }
+  .dash-kpi > .kpi__icon {
+    width: var(--control-h-sm);
+    height: var(--control-h-sm);
+  }
+  .dash-kpi .kpi__label {
+    font-size: var(--text-2xs);
+    overflow-wrap: anywhere;
+  }
+  .dash-kpi .kpi__value {
+    font-size: var(--text-xl);
+  }
+  .dash-chart-box {
+    height: 260px;
+  }
+}
+
+/* ── Cuadrícula de KPIs en escritorio ── */
+@media (min-width: 992px) {
+  .dash-kpis {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+}
+@media (min-width: 1200px) {
+  .dash-kpis {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }

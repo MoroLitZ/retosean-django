@@ -66,26 +66,26 @@ const MENU = {
   ],
   EMPRESA: [
     ["Mi Empresa"],
-    ["dashboard", "Dashboard", "speedometer2"],
+    ["dashboard", "Inicio", "speedometer2"],
     ["publicar", "Publicar Reto", "plus-circle"],
     ["retos", "Mis Retos", "trophy"],
-    ["integraciones_academicas", "Vinculaciones", "person-plus"],
-    ["postulaciones", "Postulaciones", "person-check"],
-    ["documentos_empresas", "Documentos Legales", "file-earmark-text"],
-    ["seguimientos_reto", "Seguimiento", "activity"],
-    ["cierres_reto", "Cierre de Retos", "flag"],
-    ["cierre_encuestasatisfaccion", "Mis Encuestas", "chat-square-text"],
+    ["integraciones_academicas", "Cursos vinculados", "person-plus"],
+    ["postulaciones", "Estudiantes postulados", "person-check"],
+    ["documentos_empresas", "Mis documentos legales", "file-earmark-text"],
+    ["seguimientos_reto", "Avance de mis retos", "activity"],
+    ["cierres_reto", "Cerrar retos", "flag"],
+    ["cierre_encuestasatisfaccion", "Encuestas", "chat-square-text"],
   ],
   PROFESOR: [
     ["Docencia"],
-    ["dashboard", "Dashboard", "speedometer2"],
+    ["dashboard", "Inicio", "speedometer2"],
     ["integraciones_academicas", "Mis Cursos", "journal-text"],
     ["retos", "Integrar Reto", "diagram-3"],
     ["postulaciones", "Mis Estudiantes", "people"],
-    ["entregables", "Entregables", "folder-check"],
+    ["entregables", "Calificar entregables", "folder-check"],
     ["evaluaciones", "Evaluaciones", "clipboard2-check"],
-    ["cierres_reto", "Cierre de Retos", "flag"],
-    ["cierre_encuestasatisfaccion", "Mis Encuestas", "chat-square-text"],
+    ["cierres_reto", "Cerrar retos", "flag"],
+    ["cierre_encuestasatisfaccion", "Encuestas", "chat-square-text"],
     ["unidades_estudio", "Unidades de Estudio", "journal-bookmark-fill"],
   ],
   EXPERTO: [
@@ -94,14 +94,14 @@ const MENU = {
   ],
   ESTUDIANTE: [
     ["Mi Espacio"],
-    ["dashboard", "Dashboard", "speedometer2"],
+    ["dashboard", "Inicio", "speedometer2"],
     ["retos", "Explorar Retos", "search"],
     ["postulaciones", "Mis Postulaciones", "send"],
     ["retos_favoritos", "Mis Favoritos", "star"],
     ["entregables", "Mis Entregables", "folder2-open"],
-    ["cierre_encuestasatisfaccion", "Mis Encuestas", "chat-square-text"],
+    ["cierre_encuestasatisfaccion", "Encuestas", "chat-square-text"],
     ["certificados", "Certificados", "award"],
-    ["equipos_reto_academico", "Mis Equipos y Retos", "people"],
+    ["equipos_reto_academico", "Mis equipos", "people"],
   ],
 };
 const ROLES = {
@@ -114,6 +114,9 @@ const ROLES = {
 let navLabels = {};
 const admin = () => user.is_superuser || user.rol === "ADMIN";
 const role = () => (admin() ? "ADMIN" : user.rol);
+// Roles con interfaz simplificada: ESTUDIANTE, PROFESOR y EMPRESA.
+// ADMIN y EXPERTO (y todo superusuario) conservan la interfaz de siempre.
+const simpleRole = () => ["ESTUDIANTE", "PROFESOR", "EMPRESA"].includes(role());
 async function api(path, data) {
   const response = await fetch(path, {
     method: data === undefined ? "GET" : "POST",
@@ -314,7 +317,9 @@ async function start() {
   $("user-name").textContent = name;
   $("user-name").title = name;
   $("user-role").textContent = admin() ? "Administrador" : ROLES[user.rol] || "Administrador";
-  $("topbar-email").textContent = user.email;
+  // Roles simplificados ven su nombre completo en la barra superior;
+  // ADMIN y EXPERTO conservan el correo.
+  $("topbar-email").textContent = simpleRole() ? name : user.email;
   buildNav();
   await route();
   refreshBell().catch(() => {});
@@ -351,6 +356,17 @@ function buildNav() {
   for (const [target, text, iconName] of MENU[role()] || [])
     if (!text) section(target);
     else if (has(target)) item(target, text, iconName);
+  // Hackathones y Notificaciones: para los roles simplificados van dentro de la
+  // sección principal (antes de «Cuenta»); ADMIN y EXPERTO las conservan al
+  // final, después de «Cerrar Sesión» y el divisor, como siempre.
+  const extras = () => {
+    if (has("hackathons")) item("hackathons", "Hackathones", "lightning-charge");
+    if (has("notificaciones")) {
+      const a = item("notificaciones", "Notificaciones", "bell");
+      a.append(el("span", "nav__badge"));
+    }
+  };
+  if (simpleRole()) extras();
   if (admin()) {
     // Rust-only: every other table the admin may browse (Django admin territory).
     const shown = new Set(MENU.ADMIN.map((m) => m[0]));
@@ -373,13 +389,11 @@ function buildNav() {
   salirButton.onclick = logout;
   salir.append(salirButton);
   nav.append(salir);
-  const divider = el("li", "nav__divider");
-  divider.setAttribute("aria-hidden", "true");
-  nav.append(divider);
-  if (has("hackathons")) item("hackathons", "Hackathones", "lightning-charge");
-  if (has("notificaciones")) {
-    const a = item("notificaciones", "Notificaciones", "bell");
-    a.append(el("span", "nav__badge"));
+  if (!simpleRole()) {
+    const divider = el("li", "nav__divider");
+    divider.setAttribute("aria-hidden", "true");
+    nav.append(divider);
+    extras();
   }
 }
 async function refreshBell() {
@@ -485,7 +499,9 @@ async function route() {
     );
   const heading =
     selected === "dashboard"
-      ? "Dashboard de Indicadores"
+      ? simpleRole()
+        ? "Inicio"
+        : "Dashboard de Indicadores"
       : selected === "reportes"
         ? "Generación de Informes y Reportes"
         : navLabels[selected] || title(selected);
@@ -494,6 +510,8 @@ async function route() {
   document.title = `${heading} — Retosean`;
   const crumbs = $("breadcrumbs");
   if (crumbs) {
+    // «Inicio / Inicio» no orienta a nadie: sin migas en el inicio simplificado.
+    crumbs.hidden = simpleRole() && selected === "dashboard";
     crumbs.replaceChildren();
     const home = el("li", "breadcrumbs__item");
     const homeLink = el("a", "", "Inicio");
