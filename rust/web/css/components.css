@@ -1017,6 +1017,9 @@ dialog {
   width: min(var(--dialog-w), calc(100vw - var(--space-6)));
   max-height: calc(100dvh - var(--space-7));
   padding: 0;
+  /* The global `* { margin: 0 }` reset (base.css) removes the user-agent
+     `margin: auto` that centres a modal dialog; restore it. */
+  margin: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   background: var(--surface);
